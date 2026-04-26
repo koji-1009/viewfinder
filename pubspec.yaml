@@ -1,0 +1,20 @@
+name: viewfinder
+description: "A modern, lightweight Flutter photo viewer. Pinch/double-tap zoom, drag-to-dismiss, thumbnail strip, page indicator, adjacent-page precache, and decode-time ResizeImage — all built on standard Flutter widgets."
+version: 0.1.0
+homepage:
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  fake_async: ^1.3.3
+
+flutter:
