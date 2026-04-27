@@ -102,8 +102,8 @@ class _HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: settings,
+    return ListenableBuilder(
+      listenable: settings,
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: const Text('viewfinder — demo'),
@@ -164,8 +164,8 @@ class _SettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: settings,
+    return ListenableBuilder(
+      listenable: settings,
       builder: (context, _) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.8,
