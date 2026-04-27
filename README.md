@@ -125,6 +125,16 @@ Viewfinder(
 
 Tap the photo area: toggle chrome. Zoom in: chrome auto-hides. Page change: auto-hide timer restarts. `chromeOverlays` fade in sync with thumbnails and indicator.
 
+## Hero animation and route transitions
+
+Hero flies a widget's bounds from a fixed source rect (in the outgoing route) to a fixed destination rect (in the incoming route). It looks clean when the destination is _visually stable_ during the route transition. When the destination is itself translating during the transition, the flight aims at a moving target and the trajectory looks bent.
+
+| Route                                                 | Hero advice                                                                                                                                                                                                      |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                             |
+| `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `heroTag: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
+| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos and similar viewers use this — the route transition is just background chrome fading, the photo's flight does the rest.                                                      |
+
 ## Hero + back button
 
 The first Escape (or Android back, or iOS back swipe) on a zoomed photo resets the zoom instead of popping. The second pops. If you drive navigation from your own code, check first:
