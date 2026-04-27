@@ -96,11 +96,11 @@ For the resize hint to reach the codec, the provider must be a pure `ImageProvid
 
 The layers compose cleanly:
 
-| Layer         | Job                          | Provided by              |
-| ------------- | ---------------------------- | ------------------------ |
-| Display size  | Decode at layout × DPR       | **viewfinder**           |
-| Decoded frame | Reuse across same cache key  | Flutter `imageCache`     |
-| Bytes / HTTP  | Reuse across all decode sizes| your byte-caching provider |
+| Layer         | Job                           | Provided by                |
+| ------------- | ----------------------------- | -------------------------- |
+| Display size  | Decode at layout × DPR        | **viewfinder**             |
+| Decoded frame | Reuse across same cache key   | Flutter `imageCache`       |
+| Bytes / HTTP  | Reuse across all decode sizes | your byte-caching provider |
 
 ## Chrome controller
 

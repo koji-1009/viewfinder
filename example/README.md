@@ -7,12 +7,12 @@ gear icon in the AppBar to toggle every configurable knob without
 restarting:
 
 * Pager — `pagerAxis`, `precacheAdjacent`, `swipeDragDevices`,
-  `rotateEnabled`, `defaultInitialScale`
+`rotateEnabled`, `defaultInitialScale`
 * Thumbnails — enable / position / `safeArea` / custom selected-tile
-  builder
+builder
 * Page indicator — enable / force numeric fallback
 * Drag-to-dismiss — enable / `slideType` (live progress shown in the
-  AppBar)
+AppBar)
 * Chrome controller — enable / `autoHideAfter` / auto-hide-while-zoomed
 
 Run with `flutter run` from this directory.

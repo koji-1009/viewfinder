@@ -21,6 +21,7 @@ jobs:
       - uses: koji-1009/setup-flutter@7e963b8ba06dfc8ea08c6d16371473b4a8b32819 # v1.1.5
       - run: flutter pub get
       - run: dart format --set-exit-if-changed .
+      - run: dart run dapper --set-exit-if-changed .
 
   test:
     runs-on: ubuntu-slim
