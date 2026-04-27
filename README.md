@@ -6,19 +6,27 @@ Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryI
 
 ## Quick start
 
-### Single photo
+### Gallery from a list
 
 ```dart
-ViewfinderImage(
-  image: const NetworkImage('https://example.com/photo.jpg'),
-  initialScale: const ViewfinderInitialScale.contain(),
-  doubleTapScales: const [1, 2.5, 5],
-  minScale: 1.0,
-  maxScale: 8.0,
+Viewfinder.images(
+  photos, // List<ImageProvider>
+  dismiss: ViewfinderDismiss(onDismiss: () => Navigator.pop(context)),
+  hero: (i) => ViewfinderHero('photo-$i'),
 )
 ```
 
-### Gallery
+### Single photo, full-screen
+
+```dart
+Viewfinder.single(
+  image: const NetworkImage('https://example.com/photo.jpg'),
+  dismiss: ViewfinderDismiss(onDismiss: () => Navigator.pop(context)),
+  maxScale: 10,
+)
+```
+
+### Custom per-page (gallery builder)
 
 ```dart
 Viewfinder(
@@ -33,6 +41,20 @@ Viewfinder(
     hero: ViewfinderHero('photo-$index'),
     semanticLabel: 'Vacation photo ${index + 1}',
   ),
+)
+```
+
+### Embedded zoomable image
+
+For a single zoomable image *inside* another scrollable layout (no chrome, no dismiss), use `ViewfinderImage` directly:
+
+```dart
+ViewfinderImage(
+  image: const NetworkImage('https://example.com/photo.jpg'),
+  initialScale: const ViewfinderInitialScale.contain(),
+  doubleTapScales: const [1, 2.5, 5],
+  minScale: 1.0,
+  maxScale: 8.0,
 )
 ```
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'chrome.dart';
 import 'dismiss.dart';
+import 'hero.dart';
 import 'image.dart';
 import 'initial_scale.dart';
 import 'item.dart';
@@ -47,6 +48,143 @@ class Viewfinder extends StatefulWidget {
        assert(minScale > 0),
        assert(maxScale >= minScale),
        assert(precacheAdjacent >= 0);
+
+  /// Quick gallery from a flat list of [ImageProvider]s.
+  ///
+  /// Equivalent to passing `itemCount: images.length` and an
+  /// `itemBuilder` that wraps each provider in a [ViewfinderItem]. The
+  /// per-item callbacks ([loadingBuilder], [errorBuilder], [hero],
+  /// [semanticLabel], [thumbImage]) apply to every page; for per-page
+  /// overrides on `initialScale` / `minScale` / `maxScale` etc., use the
+  /// main constructor with a custom `itemBuilder`.
+  factory Viewfinder.images(
+    List<ImageProvider> images, {
+    Key? key,
+    ViewfinderController? controller,
+    ViewfinderThumbnails? thumbnails,
+    ViewfinderPageIndicator? indicator,
+    ViewfinderDismiss? dismiss,
+    ViewfinderInitialScale defaultInitialScale =
+        const ViewfinderInitialScale.contain(),
+    double minScale = 1.0,
+    double maxScale = 8.0,
+    List<double> doubleTapScales = const [1.0, 2.5, 5.0],
+    Color backgroundColor = Colors.black,
+    ValueChanged<int>? onPageChanged,
+    double pageSpacing = 0,
+    int precacheAdjacent = 1,
+    bool allowImplicitScrolling = true,
+    ScrollPhysics? scrollPhysics,
+    bool enableKeyboardShortcuts = true,
+    bool autofocus = true,
+    bool rotateEnabled = false,
+    double interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
+    ViewfinderChromeController? chromeController,
+    List<Widget> chromeOverlays = const <Widget>[],
+    Duration chromeFadeDuration = const Duration(milliseconds: 220),
+    Axis pagerAxis = Axis.horizontal,
+    Set<PointerDeviceKind> swipeDragDevices = kViewfinderDefaultSwipeDragDevices,
+    ImageLoadingBuilder? loadingBuilder,
+    ImageErrorWidgetBuilder? errorBuilder,
+    ViewfinderHero Function(int index)? hero,
+    String Function(int index)? semanticLabel,
+    ImageProvider Function(int index)? thumbImage,
+  }) {
+    return Viewfinder(
+      key: key,
+      itemCount: images.length,
+      itemBuilder: (context, i) => ViewfinderItem(
+        image: images[i],
+        thumbImage: thumbImage?.call(i),
+        hero: hero?.call(i),
+        loadingBuilder: loadingBuilder,
+        errorBuilder: errorBuilder,
+        semanticLabel: semanticLabel?.call(i),
+      ),
+      controller: controller,
+      thumbnails: thumbnails,
+      indicator: indicator,
+      dismiss: dismiss,
+      defaultInitialScale: defaultInitialScale,
+      minScale: minScale,
+      maxScale: maxScale,
+      doubleTapScales: doubleTapScales,
+      backgroundColor: backgroundColor,
+      onPageChanged: onPageChanged,
+      pageSpacing: pageSpacing,
+      precacheAdjacent: precacheAdjacent,
+      allowImplicitScrolling: allowImplicitScrolling,
+      scrollPhysics: scrollPhysics,
+      enableKeyboardShortcuts: enableKeyboardShortcuts,
+      autofocus: autofocus,
+      rotateEnabled: rotateEnabled,
+      interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
+      chromeController: chromeController,
+      chromeOverlays: chromeOverlays,
+      chromeFadeDuration: chromeFadeDuration,
+      pagerAxis: pagerAxis,
+      swipeDragDevices: swipeDragDevices,
+    );
+  }
+
+  /// Quick single-image viewer with optional drag-to-dismiss and chrome.
+  ///
+  /// Equivalent to a 1-item gallery. Strips out the gallery-only knobs
+  /// (`thumbnails`, `indicator`, `pagerAxis`, paging-related options)
+  /// since they have no effect with a single page; everything that still
+  /// matters — `dismiss`, `chromeController`, `chromeOverlays`,
+  /// `controller`, scale knobs — is forwarded.
+  factory Viewfinder.single({
+    Key? key,
+    required ImageProvider image,
+    ImageProvider? thumbImage,
+    ViewfinderHero? hero,
+    String? semanticLabel,
+    ImageLoadingBuilder? loadingBuilder,
+    ImageErrorWidgetBuilder? errorBuilder,
+    ViewfinderController? controller,
+    ViewfinderDismiss? dismiss,
+    ViewfinderInitialScale defaultInitialScale =
+        const ViewfinderInitialScale.contain(),
+    double minScale = 1.0,
+    double maxScale = 8.0,
+    List<double> doubleTapScales = const [1.0, 2.5, 5.0],
+    Color backgroundColor = Colors.black,
+    bool enableKeyboardShortcuts = true,
+    bool autofocus = true,
+    bool rotateEnabled = false,
+    double interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
+    ViewfinderChromeController? chromeController,
+    List<Widget> chromeOverlays = const <Widget>[],
+    Duration chromeFadeDuration = const Duration(milliseconds: 220),
+  }) {
+    return Viewfinder(
+      key: key,
+      itemCount: 1,
+      itemBuilder: (context, _) => ViewfinderItem(
+        image: image,
+        thumbImage: thumbImage,
+        hero: hero,
+        semanticLabel: semanticLabel,
+        loadingBuilder: loadingBuilder,
+        errorBuilder: errorBuilder,
+      ),
+      controller: controller,
+      dismiss: dismiss,
+      defaultInitialScale: defaultInitialScale,
+      minScale: minScale,
+      maxScale: maxScale,
+      doubleTapScales: doubleTapScales,
+      backgroundColor: backgroundColor,
+      enableKeyboardShortcuts: enableKeyboardShortcuts,
+      autofocus: autofocus,
+      rotateEnabled: rotateEnabled,
+      interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
+      chromeController: chromeController,
+      chromeOverlays: chromeOverlays,
+      chromeFadeDuration: chromeFadeDuration,
+    );
+  }
 
   final int itemCount;
   final ViewfinderItem Function(BuildContext context, int index) itemBuilder;

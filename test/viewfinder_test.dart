@@ -2207,4 +2207,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 1);
   });
+
+  testWidgets(
+    'Viewfinder.images: builds N pages from the provider list',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.images(
+              List.generate(3, (_) => _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      expect(find.bySemanticsLabel('Photo gallery, 1 of 3'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.images: hero callback wires per-page Hero',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.images(
+              List.generate(3, (_) => _memoryImage()),
+              controller: ViewfinderController(initialIndex: 1),
+              hero: (i) => ViewfinderHero('photo-$i'),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // Only the current page wears a Hero (page 1, index 1).
+      final heroes = tester.widgetList<Hero>(find.byType(Hero)).toList();
+      expect(heroes, hasLength(1));
+      expect(heroes.single.tag, 'photo-1');
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.images: forwards dismiss to the gallery',
+    (tester) async {
+      var dismissed = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.images(
+              [_memoryImage()],
+              dismiss: ViewfinderDismiss(
+                onDismiss: () => dismissed++,
+                threshold: 0.1,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      final center = tester.getCenter(find.byType(Viewfinder));
+      await tester.dragFrom(center, const Offset(0, 500));
+      await tester.pumpAndSettle();
+      expect(dismissed, 1);
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.single: shows exactly one page',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.single(image: _memoryImage()),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      expect(find.bySemanticsLabel('Photo gallery, 1 of 1'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.single: dismiss fires onDismiss on vertical drag',
+    (tester) async {
+      var dismissed = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.single(
+              image: _memoryImage(),
+              dismiss: ViewfinderDismiss(
+                onDismiss: () => dismissed++,
+                threshold: 0.1,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      final center = tester.getCenter(find.byType(Viewfinder));
+      await tester.dragFrom(center, const Offset(0, 500));
+      await tester.pumpAndSettle();
+      expect(dismissed, 1);
+    },
+  );
 }
