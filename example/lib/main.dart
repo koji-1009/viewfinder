@@ -37,6 +37,7 @@ class _Settings extends ChangeNotifier {
   _DragDevicesPreset dragDevices = .all;
   bool rotateEnabled = false;
   _InitialScalePreset initialScale = .contain;
+  bool heroEnabled = true;
 
   bool thumbnailsEnabled = true;
   ViewfinderThumbnailPosition thumbnailsPosition = .bottom;
@@ -101,46 +102,49 @@ class _HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('viewfinder — demo'),
-        actions: [
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.tune),
-            onPressed: () => _openSettings(context),
-          ),
-        ],
-      ),
-      body: GridView.builder(
-        padding: const .all(8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
+    return AnimatedBuilder(
+      animation: settings,
+      builder: (context, _) => Scaffold(
+        appBar: AppBar(
+          title: const Text('viewfinder — demo'),
+          actions: [
+            IconButton(
+              tooltip: 'Settings',
+              icon: const Icon(Icons.tune),
+              onPressed: () => _openSettings(context),
+            ),
+          ],
         ),
-        itemCount: _images.length,
-        itemBuilder: (ctx, i) {
-          // Decode at display size × DPR so high-DPR devices stay sharp
-          // — current Flutter `ResizeImage` treats width/height as
-          // physical pixels.
-          final dpr = MediaQuery.devicePixelRatioOf(ctx);
-          return InkWell(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) =>
-                    _GalleryPage(initialIndex: i, settings: settings),
+        body: GridView.builder(
+          padding: const .all(8),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+          ),
+          itemCount: _images.length,
+          itemBuilder: (ctx, i) {
+            // Decode at display size × DPR so high-DPR devices stay sharp
+            // — current Flutter `ResizeImage` treats width/height as
+            // physical pixels.
+            final dpr = MediaQuery.devicePixelRatioOf(ctx);
+            final thumb = Image(
+              image: ResizeImage(_images[i], width: (360 * dpr).round()),
+              fit: .cover,
+            );
+            return InkWell(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      _GalleryPage(initialIndex: i, settings: settings),
+                ),
               ),
-            ),
-            child: Hero(
-              tag: 'photo-$i',
-              child: Image(
-                image: ResizeImage(_images[i], width: (360 * dpr).round()),
-                fit: .cover,
-              ),
-            ),
-          );
-        },
+              child: settings.heroEnabled
+                  ? Hero(tag: 'photo-$i', child: thumb)
+                  : thumb,
+            );
+          },
+        ),
       ),
     );
   }
@@ -219,6 +223,16 @@ class _SettingsSheet extends StatelessWidget {
               value: settings.rotateEnabled,
               onChanged: (v) =>
                   settings.update(() => settings.rotateEnabled = v),
+            ),
+            SwitchListTile(
+              dense: true,
+              title: const Text('heroEnabled'),
+              subtitle: const Text(
+                'Wraps grid thumbnails and the gallery image in Hero. Off '
+                'to compare against the route transition alone.',
+              ),
+              value: settings.heroEnabled,
+              onChanged: (v) => settings.update(() => settings.heroEnabled = v),
             ),
             ListTile(
               dense: true,
@@ -500,7 +514,7 @@ class _GalleryPageState extends State<_GalleryPage> {
               ],
         itemBuilder: (context, index) => ViewfinderItem(
           image: _HomePage._images[index],
-          heroTag: 'photo-$index',
+          heroTag: s.heroEnabled ? 'photo-$index' : null,
           semanticLabel: 'Photo ${index + 1}',
           errorBuilder: (_, _, _) => const Center(
             child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
