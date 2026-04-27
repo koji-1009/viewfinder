@@ -5,61 +5,6 @@ import 'package:viewfinder/viewfinder.dart';
 
 void main() => runApp(const _ExampleApp());
 
-enum _DragDevicesPreset { all, touchOnly, noMouse }
-
-extension on _DragDevicesPreset {
-  Set<PointerDeviceKind> resolve() => switch (this) {
-    .all => kViewfinderDefaultSwipeDragDevices,
-    .touchOnly => const {.touch, .stylus, .invertedStylus},
-    .noMouse => const {.touch, .stylus, .invertedStylus, .trackpad, .unknown},
-  };
-
-  String get label => switch (this) {
-    .all => 'all kinds (default)',
-    .touchOnly => 'touch / stylus only',
-    .noMouse => 'all except mouse',
-  };
-}
-
-enum _InitialScalePreset { contain, cover, value15 }
-
-extension on _InitialScalePreset {
-  ViewfinderInitialScale resolve() => switch (this) {
-    .contain => const ViewfinderInitialScale.contain(),
-    .cover => const ViewfinderInitialScale.cover(),
-    .value15 => const ViewfinderInitialScale.value(1.5),
-  };
-}
-
-class _Settings extends ChangeNotifier {
-  Axis pagerAxis = .horizontal;
-  int precacheAdjacent = 2;
-  _DragDevicesPreset dragDevices = .all;
-  bool rotateEnabled = false;
-  _InitialScalePreset initialScale = .contain;
-  bool heroEnabled = false;
-
-  bool thumbnailsEnabled = true;
-  ViewfinderThumbnailPosition thumbnailsPosition = .bottom;
-  bool thumbnailsCustomBuilder = false;
-  bool thumbnailsSafeArea = true;
-
-  bool indicatorEnabled = true;
-  bool indicatorForceNumeric = false;
-
-  bool dismissEnabled = true;
-  ViewfinderDismissSlideType dismissSlide = .wholePage;
-
-  bool chromeEnabled = false;
-  bool chromeAutoHideWhileZoomed = true;
-  Duration? chromeAutoHideAfter = const Duration(seconds: 3);
-
-  void update(VoidCallback f) {
-    f();
-    notifyListeners();
-  }
-}
-
 class _ExampleApp extends StatefulWidget {
   const _ExampleApp();
 
@@ -158,6 +103,126 @@ class _HomePage extends StatelessWidget {
     );
   }
 }
+
+class _GalleryPage extends StatefulWidget {
+  const _GalleryPage({required this.initialIndex, required this.settings});
+
+  final int initialIndex;
+  final _Settings settings;
+
+  @override
+  State<_GalleryPage> createState() => _GalleryPageState();
+}
+
+class _GalleryPageState extends State<_GalleryPage> {
+  late final ViewfinderController _controller;
+  ViewfinderChromeController? _chrome;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ViewfinderController(initialIndex: widget.initialIndex);
+    if (widget.settings.chromeEnabled) {
+      _chrome = ViewfinderChromeController(
+        autoHideAfter: widget.settings.chromeAutoHideAfter,
+        autoHideWhileZoomed: widget.settings.chromeAutoHideWhileZoomed,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _chrome?.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  ViewfinderThumbnails? _buildThumbnails() {
+    final s = widget.settings;
+    if (!s.thumbnailsEnabled) return null;
+    if (s.thumbnailsCustomBuilder) {
+      return ViewfinderThumbnails.custom(
+        position: s.thumbnailsPosition,
+        size: 64,
+        safeArea: s.thumbnailsSafeArea,
+        itemBuilder: (context, index, selected) => Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? Colors.amber : Colors.transparent,
+              width: 3,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: .hardEdge,
+          child: Image(
+            image: _HomePage._images[index],
+            fit: .cover,
+            width: 64,
+            height: 64,
+          ),
+        ),
+      );
+    }
+    return ViewfinderThumbnails(
+      position: s.thumbnailsPosition,
+      safeArea: s.thumbnailsSafeArea,
+      size: 64,
+    );
+  }
+
+  ViewfinderPageIndicator? _buildIndicator() {
+    final s = widget.settings;
+    if (!s.indicatorEnabled) return null;
+    return ViewfinderPageIndicator(maxDots: s.indicatorForceNumeric ? 0 : 12);
+  }
+
+  ViewfinderDismiss? _buildDismiss() {
+    final s = widget.settings;
+    if (!s.dismissEnabled) return null;
+    return ViewfinderDismiss(
+      onDismiss: () => Navigator.of(context).maybePop(),
+      slideType: s.dismissSlide,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.settings;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Photo')),
+      body: Viewfinder(
+        itemCount: _HomePage._images.length,
+        controller: _controller,
+        defaultInitialScale: s.initialScale.resolve(),
+        precacheAdjacent: s.precacheAdjacent,
+        pagerAxis: s.pagerAxis,
+        rotateEnabled: s.rotateEnabled,
+        swipeDragDevices: s.dragDevices.resolve(),
+        doubleTapScales: const [1.0, 2.5, 5.0],
+        indicator: _buildIndicator(),
+        thumbnails: _buildThumbnails(),
+        dismiss: _buildDismiss(),
+        chromeController: _chrome,
+        itemBuilder: (context, index) => ViewfinderItem(
+          image: _HomePage._images[index],
+          hero: s.heroEnabled ? ViewfinderHero('photo-$index') : null,
+          semanticLabel: 'Photo ${index + 1}',
+          errorBuilder: (_, _, _) => const Center(
+            child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
+          ),
+          loadingBuilder: (_, child, progress) => progress == null
+              ? child
+              : const Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Settings UI and model — secondary boilerplate that drives the demo's tuning
+// panel. Skipped when reading top-down for the headline Viewfinder usage above.
+// -----------------------------------------------------------------------------
 
 class _SettingsSheet extends StatelessWidget {
   const _SettingsSheet({required this.settings});
@@ -389,117 +454,57 @@ class _SectionLabel extends StatelessWidget {
   );
 }
 
-class _GalleryPage extends StatefulWidget {
-  const _GalleryPage({required this.initialIndex, required this.settings});
+class _Settings extends ChangeNotifier {
+  Axis pagerAxis = .horizontal;
+  int precacheAdjacent = 2;
+  _DragDevicesPreset dragDevices = .all;
+  bool rotateEnabled = false;
+  _InitialScalePreset initialScale = .contain;
+  bool heroEnabled = false;
 
-  final int initialIndex;
-  final _Settings settings;
+  bool thumbnailsEnabled = true;
+  ViewfinderThumbnailPosition thumbnailsPosition = .bottom;
+  bool thumbnailsCustomBuilder = false;
+  bool thumbnailsSafeArea = true;
 
-  @override
-  State<_GalleryPage> createState() => _GalleryPageState();
+  bool indicatorEnabled = true;
+  bool indicatorForceNumeric = false;
+
+  bool dismissEnabled = true;
+  ViewfinderDismissSlideType dismissSlide = .wholePage;
+
+  bool chromeEnabled = false;
+  bool chromeAutoHideWhileZoomed = true;
+  Duration? chromeAutoHideAfter = const Duration(seconds: 3);
+
+  void update(VoidCallback f) {
+    f();
+    notifyListeners();
+  }
 }
 
-class _GalleryPageState extends State<_GalleryPage> {
-  late final ViewfinderController _controller;
-  ViewfinderChromeController? _chrome;
+enum _DragDevicesPreset { all, touchOnly, noMouse }
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = ViewfinderController(initialIndex: widget.initialIndex);
-    if (widget.settings.chromeEnabled) {
-      _chrome = ViewfinderChromeController(
-        autoHideAfter: widget.settings.chromeAutoHideAfter,
-        autoHideWhileZoomed: widget.settings.chromeAutoHideWhileZoomed,
-      );
-    }
-  }
+extension on _DragDevicesPreset {
+  Set<PointerDeviceKind> resolve() => switch (this) {
+    .all => kViewfinderDefaultSwipeDragDevices,
+    .touchOnly => const {.touch, .stylus, .invertedStylus},
+    .noMouse => const {.touch, .stylus, .invertedStylus, .trackpad, .unknown},
+  };
 
-  @override
-  void dispose() {
-    _chrome?.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
+  String get label => switch (this) {
+    .all => 'all kinds (default)',
+    .touchOnly => 'touch / stylus only',
+    .noMouse => 'all except mouse',
+  };
+}
 
-  ViewfinderThumbnails? _buildThumbnails() {
-    final s = widget.settings;
-    if (!s.thumbnailsEnabled) return null;
-    if (s.thumbnailsCustomBuilder) {
-      return ViewfinderThumbnails.custom(
-        position: s.thumbnailsPosition,
-        size: 64,
-        safeArea: s.thumbnailsSafeArea,
-        itemBuilder: (context, index, selected) => Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: selected ? Colors.amber : Colors.transparent,
-              width: 3,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          clipBehavior: .hardEdge,
-          child: Image(
-            image: _HomePage._images[index],
-            fit: .cover,
-            width: 64,
-            height: 64,
-          ),
-        ),
-      );
-    }
-    return ViewfinderThumbnails(
-      position: s.thumbnailsPosition,
-      safeArea: s.thumbnailsSafeArea,
-      size: 64,
-    );
-  }
+enum _InitialScalePreset { contain, cover, value15 }
 
-  ViewfinderPageIndicator? _buildIndicator() {
-    final s = widget.settings;
-    if (!s.indicatorEnabled) return null;
-    return ViewfinderPageIndicator(maxDots: s.indicatorForceNumeric ? 0 : 12);
-  }
-
-  ViewfinderDismiss? _buildDismiss() {
-    final s = widget.settings;
-    if (!s.dismissEnabled) return null;
-    return ViewfinderDismiss(
-      onDismiss: () => Navigator.of(context).maybePop(),
-      slideType: s.dismissSlide,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.settings;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Photo')),
-      body: Viewfinder(
-        itemCount: _HomePage._images.length,
-        controller: _controller,
-        defaultInitialScale: s.initialScale.resolve(),
-        precacheAdjacent: s.precacheAdjacent,
-        pagerAxis: s.pagerAxis,
-        rotateEnabled: s.rotateEnabled,
-        swipeDragDevices: s.dragDevices.resolve(),
-        doubleTapScales: const [1.0, 2.5, 5.0],
-        indicator: _buildIndicator(),
-        thumbnails: _buildThumbnails(),
-        dismiss: _buildDismiss(),
-        chromeController: _chrome,
-        itemBuilder: (context, index) => ViewfinderItem(
-          image: _HomePage._images[index],
-          hero: s.heroEnabled ? ViewfinderHero('photo-$index') : null,
-          semanticLabel: 'Photo ${index + 1}',
-          errorBuilder: (_, _, _) => const Center(
-            child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
-          ),
-          loadingBuilder: (_, child, progress) => progress == null
-              ? child
-              : const Center(child: CircularProgressIndicator()),
-        ),
-      ),
-    );
-  }
+extension on _InitialScalePreset {
+  ViewfinderInitialScale resolve() => switch (this) {
+    .contain => const ViewfinderInitialScale.contain(),
+    .cover => const ViewfinderInitialScale.cover(),
+    .value15 => const ViewfinderInitialScale.value(1.5),
+  };
 }
