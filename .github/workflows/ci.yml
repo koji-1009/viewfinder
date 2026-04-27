@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  pull_request:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: koji-1009/setup-flutter@7e963b8ba06dfc8ea08c6d16371473b4a8b32819 # v1.1.5
+      - run: flutter pub get
+      - run: dart analyze
+
+  format:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: koji-1009/setup-flutter@7e963b8ba06dfc8ea08c6d16371473b4a8b32819 # v1.1.5
+      - run: flutter pub get
+      - run: dart format --set-exit-if-changed .
+
+  test:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: koji-1009/setup-flutter@7e963b8ba06dfc8ea08c6d16371473b4a8b32819 # v1.1.5
+      - run: flutter pub get
+      - run: flutter test
