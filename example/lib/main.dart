@@ -439,28 +439,22 @@ class _GalleryPageState extends State<_GalleryPage> {
         position: s.thumbnailsPosition,
         size: 64,
         safeArea: s.thumbnailsSafeArea,
-        itemBuilder: (context, index, selected) {
-          final dpr = MediaQuery.devicePixelRatioOf(context);
-          return Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: selected ? Colors.amber : Colors.transparent,
-                width: 3,
-              ),
-              borderRadius: BorderRadius.circular(8),
+        itemBuilder: (context, index, selected) => Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? Colors.amber : Colors.transparent,
+              width: 3,
             ),
-            clipBehavior: .hardEdge,
-            child: Image(
-              image: ResizeImage(
-                _HomePage._images[index],
-                width: (64 * dpr).round(),
-              ),
-              fit: .cover,
-              width: 64,
-              height: 64,
-            ),
-          );
-        },
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: .hardEdge,
+          child: Image(
+            image: _HomePage._images[index],
+            fit: .cover,
+            width: 64,
+            height: 64,
+          ),
+        ),
       );
     }
     return ViewfinderThumbnails(
