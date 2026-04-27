@@ -12,6 +12,6 @@
 * `ViewfinderChromeController` — tap-to-toggle, auto-hide after idle, auto-hide while zoomed.
 * Keyboard (arrows, PageUp/Down, two-stage Escape), Android back-button two-stage, `PopScope`-based Hero coherence on pop.
 * Mouse wheel + trackpad pinch zoom.
-* Decode-time `ResizeImage` wiring via `ViewfinderResize`; `precacheAdjacent` warms cache at the render-time size.
+* `precacheAdjacent` warms `imageCache` for pages ±N around the current one, using the user's `ImageProvider` directly so cache keys match what `Image()` will resolve.
 * `kViewfinderDefaultFlingDrag = 0.0000135`, overridable via `interactionEndFrictionCoefficient`.
 * Semantics labels per image and at gallery level.

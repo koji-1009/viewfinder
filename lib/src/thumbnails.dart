@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'item.dart';
-import 'resize.dart';
 import 'viewfinder.dart' show Viewfinder;
 
 enum ViewfinderThumbnailPosition { top, bottom, left, right }
@@ -24,7 +23,6 @@ class ViewfinderThumbnails {
     ),
     this.unselectedOpacity = 0.55,
     this.backgroundColor = const Color(0x8A000000),
-    this.resize = const .targetSize(),
     this.itemBuilder,
   });
 
@@ -61,7 +59,6 @@ class ViewfinderThumbnails {
   final double unselectedOpacity;
 
   final Color backgroundColor;
-  final ViewfinderResize resize;
 
   /// Optional fully custom tile builder. When provided, [selectedBorder]
   /// and [unselectedOpacity] are skipped — the builder receives the
@@ -166,9 +163,13 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
 
   Widget _defaultDecoratedTile(ViewfinderItem item, double dpr, bool selected) {
     final cfg = widget.config;
+    // Thumbnails are visually constrained to `cfg.size` logical px on
+    // both axes, so we decode at that size × DPR regardless of the
+    // source resolution. The main viewer's decode size is left alone.
+    final thumbPx = (cfg.size * dpr).ceil();
     final Widget img = switch (item.image) {
       final ImageProvider image => Image(
-        image: cfg.resize.apply(image, Size(cfg.size, cfg.size), dpr),
+        image: ResizeImage(image, width: thumbPx, height: thumbPx),
         fit: .cover,
         width: cfg.size,
         height: cfg.size,

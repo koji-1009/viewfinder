@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'initial_scale.dart';
 import 'internal/matrix_utils.dart';
 import 'internal/zoomable_viewport.dart';
-import 'resize.dart';
 
 export 'internal/zoomable_viewport.dart' show kViewfinderDefaultFlingDrag;
 
@@ -21,7 +20,6 @@ class ViewfinderImage extends StatefulWidget {
     super.key,
     required ImageProvider this.image,
     this.thumbImage,
-    this.resize = const .targetSize(),
     this.initialScale = const .contain(),
     this.doubleTapScales = const [1.0, 2.5, 5.0],
     this.minScale = 1.0,
@@ -67,7 +65,6 @@ class ViewfinderImage extends StatefulWidget {
     this.semanticLabel,
   }) : image = null,
        thumbImage = null,
-       resize = .none,
        filterQuality = .medium,
        loadingBuilder = null,
        errorBuilder = null,
@@ -88,7 +85,6 @@ class ViewfinderImage extends StatefulWidget {
   /// Cross-fade duration from [thumbImage] to [image].
   final Duration thumbCrossFadeDuration;
 
-  final ViewfinderResize resize;
   final ViewfinderInitialScale initialScale;
 
   /// Ladder of scales cycled by double-tap. `[]` disables double-tap;
@@ -290,10 +286,8 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       final ImageProvider image => LayoutBuilder(
         builder: (ctx, constraints) {
           final size = Size(constraints.maxWidth, constraints.maxHeight);
-          final dpr = MediaQuery.devicePixelRatioOf(ctx);
-          final provider = widget.resize.apply(image, size, dpr);
           Widget img = Image(
-            image: provider,
+            image: image,
             fit: widget.initialScale.boxFit,
             width: size.width,
             height: size.height,
@@ -316,12 +310,11 @@ class _ViewfinderImageState extends State<ViewfinderImage>
                   },
           );
           if (widget.thumbImage case final thumb?) {
-            final thumbProvider = widget.resize.apply(thumb, size, dpr);
             img = Stack(
               fit: StackFit.expand,
               children: [
                 Image(
-                  image: thumbProvider,
+                  image: thumb,
                   fit: widget.initialScale.boxFit,
                   width: size.width,
                   height: size.height,

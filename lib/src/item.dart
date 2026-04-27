@@ -1,20 +1,18 @@
 import 'package:flutter/widgets.dart';
 
 import 'initial_scale.dart';
-import 'resize.dart';
 import 'viewfinder.dart' show Viewfinder;
 
 /// Describes a single page of a [Viewfinder] gallery.
 ///
-/// Pass either [image] *or* [child]. When [image] is given the page is
-/// built as an `Image(provider)` honoring the gallery-wide
-/// [ViewfinderResize] strategy (per-item override via [resize]).
+/// Pass either [image] *or* [child]. The provider is fed straight to
+/// `Image(provider)`; if you want to cap decode size for memory you
+/// can wrap with `ResizeImage` yourself before passing.
 @immutable
 class ViewfinderItem {
   const ViewfinderItem({
     required ImageProvider this.image,
     this.thumbImage,
-    this.resize,
     this.heroTag,
     this.loadingBuilder,
     this.errorBuilder,
@@ -33,7 +31,6 @@ class ViewfinderItem {
     this.semanticLabel,
   }) : image = null,
        thumbImage = null,
-       resize = null,
        loadingBuilder = null,
        errorBuilder = null;
 
@@ -44,7 +41,6 @@ class ViewfinderItem {
   /// Cross-faded to the main image as soon as the first frame decodes.
   final ImageProvider? thumbImage;
 
-  final ViewfinderResize? resize;
   final Object? heroTag;
   final ImageLoadingBuilder? loadingBuilder;
   final ImageErrorWidgetBuilder? errorBuilder;

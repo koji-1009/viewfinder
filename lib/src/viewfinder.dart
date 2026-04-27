@@ -8,7 +8,6 @@ import 'image.dart';
 import 'initial_scale.dart';
 import 'item.dart';
 import 'page_indicator.dart';
-import 'resize.dart';
 import 'thumbnails.dart';
 
 /// A swipeable gallery of zoomable photos — the main public widget.
@@ -25,7 +24,6 @@ class Viewfinder extends StatefulWidget {
     this.thumbnails,
     this.indicator,
     this.dismiss,
-    this.defaultResize = const .targetSize(),
     this.defaultInitialScale = const .contain(),
     this.minScale = 1.0,
     this.maxScale = 8.0,
@@ -58,7 +56,6 @@ class Viewfinder extends StatefulWidget {
   final ViewfinderPageIndicator? indicator;
   final ViewfinderDismiss? dismiss;
 
-  final ViewfinderResize defaultResize;
   final ViewfinderInitialScale defaultInitialScale;
   final double minScale;
   final double maxScale;
@@ -293,22 +290,8 @@ class _ViewfinderState extends State<Viewfinder> {
   ViewfinderItem _itemAt(int index) =>
       _itemCache.putIfAbsent(index, () => widget.itemBuilder(context, index));
 
-  Size? _viewportSize() {
-    final box = context.findRenderObject();
-    return box is RenderBox && box.hasSize ? box.size : null;
-  }
-
   void _precacheAround(int index) {
     if (widget.precacheAdjacent == 0) return;
-    final viewport = _viewportSize();
-    if (viewport == null || viewport.isEmpty) {
-      // Layout not ready yet — retry after the first frame.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _precacheAround(index);
-      });
-      return;
-    }
-    final dpr = MediaQuery.devicePixelRatioOf(context);
     for (var delta = 1; delta <= widget.precacheAdjacent; delta++) {
       for (final i in [index - delta, index + delta]) {
         if (i < 0 || i >= widget.itemCount) continue;
@@ -316,12 +299,8 @@ class _ViewfinderState extends State<Viewfinder> {
         final item = _itemAt(i);
         if (item.image case final image?) {
           _precached.add(i);
-          // Use the same ViewfinderResize the gallery will render with,
-          // so the cache key matches what the Image widget asks for.
-          final resize = item.resize ?? widget.defaultResize;
-          final provider = resize.apply(image, viewport, dpr);
           precacheImage(
-            provider,
+            image,
             context,
             onError: (_, _) {
               _precached.remove(i);
@@ -421,7 +400,6 @@ class _ViewfinderState extends State<Viewfinder> {
       final ImageProvider image => ViewfinderImage(
         image: image,
         thumbImage: item.thumbImage,
-        resize: item.resize ?? widget.defaultResize,
         initialScale: initialScale,
         doubleTapScales: widget.doubleTapScales,
         heroTag: heroTag,

@@ -1,37 +1,23 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:taro/taro.dart';
 import 'package:viewfinder/viewfinder.dart';
 
 void main() => runApp(const _ExampleApp());
-
-// ---------------------------------------------------------------------------
-// Settings model — every togglable knob the gallery exposes lives here so the
-// example app can flip combinations without rebuilding the widget tree.
-// ---------------------------------------------------------------------------
 
 enum _DragDevicesPreset { all, touchOnly, noMouse }
 
 extension on _DragDevicesPreset {
   Set<PointerDeviceKind> resolve() => switch (this) {
-    _DragDevicesPreset.all => kViewfinderDefaultSwipeDragDevices,
-    _DragDevicesPreset.touchOnly => const {
-      PointerDeviceKind.touch,
-      PointerDeviceKind.stylus,
-      PointerDeviceKind.invertedStylus,
-    },
-    _DragDevicesPreset.noMouse => const {
-      PointerDeviceKind.touch,
-      PointerDeviceKind.stylus,
-      PointerDeviceKind.invertedStylus,
-      PointerDeviceKind.trackpad,
-      PointerDeviceKind.unknown,
-    },
+    .all => kViewfinderDefaultSwipeDragDevices,
+    .touchOnly => const {.touch, .stylus, .invertedStylus},
+    .noMouse => const {.touch, .stylus, .invertedStylus, .trackpad, .unknown},
   };
 
   String get label => switch (this) {
-    _DragDevicesPreset.all => 'all kinds (default)',
-    _DragDevicesPreset.touchOnly => 'touch / stylus only',
-    _DragDevicesPreset.noMouse => 'all except mouse',
+    .all => 'all kinds (default)',
+    .touchOnly => 'touch / stylus only',
+    .noMouse => 'all except mouse',
   };
 }
 
@@ -39,37 +25,30 @@ enum _InitialScalePreset { contain, cover, value15 }
 
 extension on _InitialScalePreset {
   ViewfinderInitialScale resolve() => switch (this) {
-    _InitialScalePreset.contain => const ViewfinderInitialScale.contain(),
-    _InitialScalePreset.cover => const ViewfinderInitialScale.cover(),
-    _InitialScalePreset.value15 => const ViewfinderInitialScale.value(1.5),
+    .contain => const ViewfinderInitialScale.contain(),
+    .cover => const ViewfinderInitialScale.cover(),
+    .value15 => const ViewfinderInitialScale.value(1.5),
   };
 }
 
 class _Settings extends ChangeNotifier {
-  // Pager
-  Axis pagerAxis = Axis.horizontal;
+  Axis pagerAxis = .horizontal;
   int precacheAdjacent = 2;
-  _DragDevicesPreset dragDevices = _DragDevicesPreset.all;
+  _DragDevicesPreset dragDevices = .all;
   bool rotateEnabled = false;
-  _InitialScalePreset initialScale = _InitialScalePreset.contain;
+  _InitialScalePreset initialScale = .contain;
 
-  // Thumbnails
   bool thumbnailsEnabled = true;
-  ViewfinderThumbnailPosition thumbnailsPosition =
-      ViewfinderThumbnailPosition.bottom;
+  ViewfinderThumbnailPosition thumbnailsPosition = .bottom;
   bool thumbnailsCustomBuilder = false;
   bool thumbnailsSafeArea = true;
 
-  // Indicator
   bool indicatorEnabled = true;
   bool indicatorForceNumeric = false;
 
-  // Dismiss
   bool dismissEnabled = true;
-  ViewfinderDismissSlideType dismissSlide =
-      ViewfinderDismissSlideType.wholePage;
+  ViewfinderDismissSlideType dismissSlide = .wholePage;
 
-  // Chrome
   bool chromeEnabled = false;
   bool chromeAutoHideWhileZoomed = true;
   Duration? chromeAutoHideAfter = const Duration(seconds: 3);
@@ -79,10 +58,6 @@ class _Settings extends ChangeNotifier {
     notifyListeners();
   }
 }
-
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
 
 class _ExampleApp extends StatefulWidget {
   const _ExampleApp();
@@ -113,12 +88,15 @@ class _HomePage extends StatelessWidget {
   const _HomePage({required this.settings});
   final _Settings settings;
 
+  // TaroImage caches bytes on disk, so the grid thumbnail decode and the
+  // larger gallery decode share a single HTTP fetch — and the gallery's
+  // first-open Hero lands on a real frame instead of a loading spinner.
   static final List<ImageProvider> _images = [
-    const NetworkImage('https://picsum.photos/id/1015/4000/3000'),
-    const NetworkImage('https://picsum.photos/id/1025/3000/2000'),
-    const NetworkImage('https://picsum.photos/id/1039/4000/2500'),
-    const NetworkImage('https://picsum.photos/id/1043/2000/3000'),
-    const NetworkImage('https://picsum.photos/id/1055/3000/2000'),
+    const TaroImage('https://picsum.photos/id/1015/4000/3000'),
+    const TaroImage('https://picsum.photos/id/1025/3000/2000'),
+    const TaroImage('https://picsum.photos/id/1039/4000/2500'),
+    const TaroImage('https://picsum.photos/id/1043/2000/3000'),
+    const TaroImage('https://picsum.photos/id/1055/3000/2000'),
   ];
 
   @override
@@ -135,27 +113,34 @@ class _HomePage extends StatelessWidget {
         ],
       ),
       body: GridView.builder(
-        padding: const EdgeInsets.all(8),
+        padding: const .all(8),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
         ),
         itemCount: _images.length,
-        itemBuilder: (_, i) => InkWell(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => _GalleryPage(initialIndex: i, settings: settings),
+        itemBuilder: (ctx, i) {
+          // Decode at display size × DPR so high-DPR devices stay sharp
+          // — current Flutter `ResizeImage` treats width/height as
+          // physical pixels.
+          final dpr = MediaQuery.devicePixelRatioOf(ctx);
+          return InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    _GalleryPage(initialIndex: i, settings: settings),
+              ),
             ),
-          ),
-          child: Hero(
-            tag: 'photo-$i',
-            child: Image(
-              image: ResizeImage(_images[i], width: 360),
-              fit: BoxFit.cover,
+            child: Hero(
+              tag: 'photo-$i',
+              child: Image(
+                image: ResizeImage(_images[i], width: (360 * dpr).round()),
+                fit: .cover,
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -168,10 +153,6 @@ class _HomePage extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Settings sheet
-// ---------------------------------------------------------------------------
 
 class _SettingsSheet extends StatelessWidget {
   const _SettingsSheet({required this.settings});
@@ -187,7 +168,7 @@ class _SettingsSheet extends StatelessWidget {
         maxChildSize: 0.95,
         builder: (_, controller) => ListView(
           controller: controller,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          padding: const .fromLTRB(16, 12, 16, 32),
           children: [
             const _SectionLabel('Pager'),
             ListTile(
@@ -195,8 +176,8 @@ class _SettingsSheet extends StatelessWidget {
               title: const Text('pagerAxis'),
               trailing: SegmentedButton<Axis>(
                 segments: const [
-                  ButtonSegment(value: Axis.horizontal, label: Text('horiz')),
-                  ButtonSegment(value: Axis.vertical, label: Text('vert')),
+                  ButtonSegment(value: .horizontal, label: Text('horiz')),
+                  ButtonSegment(value: .vertical, label: Text('vert')),
                 ],
                 selected: {settings.pagerAxis},
                 onSelectionChanged: (s) =>
@@ -244,25 +225,15 @@ class _SettingsSheet extends StatelessWidget {
               title: const Text('defaultInitialScale'),
               subtitle: SegmentedButton<_InitialScalePreset>(
                 segments: const [
-                  ButtonSegment(
-                    value: _InitialScalePreset.contain,
-                    label: Text('contain'),
-                  ),
-                  ButtonSegment(
-                    value: _InitialScalePreset.cover,
-                    label: Text('cover'),
-                  ),
-                  ButtonSegment(
-                    value: _InitialScalePreset.value15,
-                    label: Text('1.5×'),
-                  ),
+                  ButtonSegment(value: .contain, label: Text('contain')),
+                  ButtonSegment(value: .cover, label: Text('cover')),
+                  ButtonSegment(value: .value15, label: Text('1.5x')),
                 ],
                 selected: {settings.initialScale},
                 onSelectionChanged: (s) =>
                     settings.update(() => settings.initialScale = s.first),
               ),
             ),
-
             const _SectionLabel('Thumbnails'),
             SwitchListTile(
               dense: true,
@@ -277,22 +248,10 @@ class _SettingsSheet extends StatelessWidget {
                 title: const Text('position'),
                 subtitle: SegmentedButton<ViewfinderThumbnailPosition>(
                   segments: const [
-                    ButtonSegment(
-                      value: ViewfinderThumbnailPosition.top,
-                      label: Text('top'),
-                    ),
-                    ButtonSegment(
-                      value: ViewfinderThumbnailPosition.bottom,
-                      label: Text('bottom'),
-                    ),
-                    ButtonSegment(
-                      value: ViewfinderThumbnailPosition.left,
-                      label: Text('left'),
-                    ),
-                    ButtonSegment(
-                      value: ViewfinderThumbnailPosition.right,
-                      label: Text('right'),
-                    ),
+                    ButtonSegment(value: .top, label: Text('top')),
+                    ButtonSegment(value: .bottom, label: Text('bottom')),
+                    ButtonSegment(value: .left, label: Text('left')),
+                    ButtonSegment(value: .right, label: Text('right')),
                   ],
                   selected: {settings.thumbnailsPosition},
                   onSelectionChanged: (s) => settings.update(
@@ -315,7 +274,6 @@ class _SettingsSheet extends StatelessWidget {
                     settings.update(() => settings.thumbnailsCustomBuilder = v),
               ),
             ],
-
             const _SectionLabel('Page indicator'),
             SwitchListTile(
               dense: true,
@@ -332,7 +290,6 @@ class _SettingsSheet extends StatelessWidget {
                 onChanged: (v) =>
                     settings.update(() => settings.indicatorForceNumeric = v),
               ),
-
             const _SectionLabel('Drag-to-dismiss'),
             SwitchListTile(
               dense: true,
@@ -347,21 +304,14 @@ class _SettingsSheet extends StatelessWidget {
                 title: const Text('slideType'),
                 subtitle: SegmentedButton<ViewfinderDismissSlideType>(
                   segments: const [
-                    ButtonSegment(
-                      value: ViewfinderDismissSlideType.wholePage,
-                      label: Text('wholePage'),
-                    ),
-                    ButtonSegment(
-                      value: ViewfinderDismissSlideType.onlyImage,
-                      label: Text('onlyImage'),
-                    ),
+                    ButtonSegment(value: .wholePage, label: Text('wholePage')),
+                    ButtonSegment(value: .onlyImage, label: Text('onlyImage')),
                   ],
                   selected: {settings.dismissSlide},
                   onSelectionChanged: (s) =>
                       settings.update(() => settings.dismissSlide = s.first),
                 ),
               ),
-
             const _SectionLabel('Chrome controller'),
             SwitchListTile(
               dense: true,
@@ -411,20 +361,10 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(0, 16, 0, 4),
-    child: Text(
-      text,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-        color: Theme.of(context).colorScheme.primary,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
+    padding: const .fromLTRB(0, 16, 0, 4),
+    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
   );
 }
-
-// ---------------------------------------------------------------------------
-// Gallery page
-// ---------------------------------------------------------------------------
 
 class _GalleryPage extends StatefulWidget {
   const _GalleryPage({required this.initialIndex, required this.settings});
@@ -437,26 +377,26 @@ class _GalleryPage extends StatefulWidget {
 }
 
 class _GalleryPageState extends State<_GalleryPage> {
+  late final ViewfinderController _controller;
   ViewfinderChromeController? _chrome;
   double _dismissProgress = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _maybeInitChrome();
-  }
-
-  void _maybeInitChrome() {
-    if (!widget.settings.chromeEnabled) return;
-    _chrome = ViewfinderChromeController(
-      autoHideAfter: widget.settings.chromeAutoHideAfter,
-      autoHideWhileZoomed: widget.settings.chromeAutoHideWhileZoomed,
-    );
+    _controller = ViewfinderController(initialIndex: widget.initialIndex);
+    if (widget.settings.chromeEnabled) {
+      _chrome = ViewfinderChromeController(
+        autoHideAfter: widget.settings.chromeAutoHideAfter,
+        autoHideWhileZoomed: widget.settings.chromeAutoHideWhileZoomed,
+      );
+    }
   }
 
   @override
   void dispose() {
     _chrome?.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -468,22 +408,28 @@ class _GalleryPageState extends State<_GalleryPage> {
         position: s.thumbnailsPosition,
         size: 64,
         safeArea: s.thumbnailsSafeArea,
-        itemBuilder: (context, index, selected) => Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: selected ? Colors.amber : Colors.transparent,
-              width: 3,
+        itemBuilder: (context, index, selected) {
+          final dpr = MediaQuery.devicePixelRatioOf(context);
+          return Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: selected ? Colors.amber : Colors.transparent,
+                width: 3,
+              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          clipBehavior: Clip.hardEdge,
-          child: Image(
-            image: ResizeImage(_HomePage._images[index], width: 128),
-            fit: BoxFit.cover,
-            width: 64,
-            height: 64,
-          ),
-        ),
+            clipBehavior: .hardEdge,
+            child: Image(
+              image: ResizeImage(
+                _HomePage._images[index],
+                width: (64 * dpr).round(),
+              ),
+              fit: .cover,
+              width: 64,
+              height: 64,
+            ),
+          );
+        },
       );
     }
     return ViewfinderThumbnails(
@@ -520,8 +466,7 @@ class _GalleryPageState extends State<_GalleryPage> {
       ),
       body: Viewfinder(
         itemCount: _HomePage._images.length,
-        controller: ViewfinderController(initialIndex: widget.initialIndex),
-        defaultResize: const ViewfinderResize.targetSize(),
+        controller: _controller,
         defaultInitialScale: s.initialScale.resolve(),
         precacheAdjacent: s.precacheAdjacent,
         pagerAxis: s.pagerAxis,
@@ -538,18 +483,17 @@ class _GalleryPageState extends State<_GalleryPage> {
                 Positioned(
                   top: MediaQuery.paddingOf(context).top + 8,
                   right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Text(
-                      'tap photo to toggle chrome',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+                  child: const ColoredBox(
+                    color: Colors.black54,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        'tap photo to toggle chrome',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
                 ),

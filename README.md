@@ -1,8 +1,8 @@
 # viewfinder
 
-A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware gesture layer that hands off edge pans to a parent `PageView`, drag-to-dismiss, a synchronized thumbnail strip, a page indicator, keyboard shortcuts, a chrome controller for tap-to-toggle UX, and decode-time `ResizeImage` wiring so 4K photos don't blow up your memory budget.
+A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware gesture layer that hands off edge pans to a parent `PageView`, drag-to-dismiss, a synchronized thumbnail strip, a page indicator, keyboard shortcuts, and a chrome controller for tap-to-toggle UX.
 
-Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …). No runtime dependencies beyond the Flutter SDK.
+Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
 
 ## Quick start
 
@@ -11,7 +11,6 @@ Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryI
 ```dart
 ViewfinderImage(
   image: const NetworkImage('https://example.com/photo.jpg'),
-  resize: const ViewfinderResize.targetSize(),
   initialScale: const ViewfinderInitialScale.contain(),
   doubleTapScales: const [1, 2.5, 5],
   minScale: 1.0,
@@ -62,29 +61,32 @@ ViewfinderImage.child(
 * **Keyboard** — Arrow Left/Right, PageUp/Down, Escape (two-stage). Matches the Android back button semantics for desktop and web.
 * **Mouse wheel & trackpad** — scroll zooms around the pointer location; trackpad pinch (macOS) via `trackpadScrollCausesScale`.
 * **Mouse-drag page swipe (web & desktop)** — `swipeDragDevices` ships with mouse / trackpad / touch / stylus enabled, so mouse-drag swipes pages out of the box. Pass a narrower set to opt out.
-* **Adjacent-page precache** — `precacheImage` warms the `PaintingBinding.imageCache` for pages ±N from the current one, wrapped with the same `ViewfinderResize` the gallery renders with so cache keys match.
+* **Adjacent-page precache** — `precacheImage` warms the `PaintingBinding.imageCache` for pages ±N from the current one. The provider you passed in is used directly, so the cache key matches what `Image()` will resolve at paint time.
 * **Semantics** — per-image labels plus a gallery-level `Photo gallery, X of N`.
 
-## Resize strategies
+## Decode size and memory
 
-`ViewfinderResize` wraps your `ImageProvider` with `ResizeImage` so images decode at the size actually displayed, not their native resolution:
+The library does **not** wrap your `ImageProvider` with `ResizeImage`. The provider you pass is the provider that decodes — at the source's native resolution. For a zoom-capable photo viewer that's usually what you want, because zoom past 1× immediately runs out of pixels otherwise.
 
-| Variant                             | Decoded size                       |
-| ----------------------------------- | ---------------------------------- |
-| `ViewfinderResize.targetSize()`     | widget layout × device pixel ratio |
-| `ViewfinderResize.fixed(width: …)`  | explicit pixel dimensions          |
-| `ViewfinderResize.custom(resolver)` | whatever your callback returns     |
-| `ViewfinderResize.none`             | no resize                          |
+If memory matters more than zoom quality, wrap on your side:
 
-All constructors accept `allowUpscaling: true` if you explicitly want to upsample small images to the viewport.
+```dart
+ViewfinderItem(
+  image: ResizeImage(
+    NetworkImage(url),
+    width: targetPx,
+    height: targetPx,
+  ),
+)
+```
+
+For thumbnail-style usage at small sizes, multiply your logical pixel size by `MediaQuery.devicePixelRatioOf(context)` — `ResizeImage.width` / `.height` are interpreted as physical pixels in current Flutter.
 
 ## Network images: pair with a byte-caching provider
 
-viewfinder's `precacheAdjacent` warms the `imageCache` for the _decoded frame_ at the right size. It does **not** cache raw bytes.
+`NetworkImage` has no persistent HTTP cache. Each distinct `ImageProvider` cache key triggers a fresh HTTP GET on remount.
 
-`NetworkImage` has no persistent HTTP cache. Each distinct `ResizeImage` cache key (different size, different page, different re-mount) triggers a fresh HTTP GET.
-
-Pair viewfinder with an `ImageProvider` that caches bytes on disk so a single HTTP fetch serves every decode size — for example [`taro`](https://pub.dev/packages/taro):
+Pair viewfinder with an `ImageProvider` that caches bytes on disk so a single HTTP fetch serves every later decode — for example [`taro`](https://pub.dev/packages/taro):
 
 ```dart
 ViewfinderItem(
@@ -92,15 +94,15 @@ ViewfinderItem(
 )
 ```
 
-For the resize hint to reach the codec, the provider must be a pure `ImageProvider` that delegates to the `ImageDecoderCallback` passed to `loadImage` — that's what lets `ResizeImage`'s `getTargetSize` flow through.
+The provider must be a pure `ImageProvider` that delegates to the `ImageDecoderCallback` passed to `loadImage`, so any `ResizeImage` you put on top of it can still flow `getTargetSize` through to the codec.
 
 The layers compose cleanly:
 
-| Layer         | Job                           | Provided by                |
-| ------------- | ----------------------------- | -------------------------- |
-| Display size  | Decode at layout × DPR        | **viewfinder**             |
-| Decoded frame | Reuse across same cache key   | Flutter `imageCache`       |
-| Bytes / HTTP  | Reuse across all decode sizes | your byte-caching provider |
+| Layer         | Job                          | Provided by                  |
+| ------------- | ---------------------------- | ---------------------------- |
+| Decode size   | Decode at the requested size | your `ResizeImage` (or none) |
+| Decoded frame | Reuse across same cache key  | Flutter `imageCache`         |
+| Bytes / HTTP  | Reuse across decode sizes    | your byte-caching provider   |
 
 ## Chrome controller
 
