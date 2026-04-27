@@ -261,11 +261,28 @@ class _SettingsSheet extends StatelessWidget {
                 dense: true,
                 title: const Text('position'),
                 subtitle: SegmentedButton<ViewfinderThumbnailPosition>(
+                  showSelectedIcon: false,
                   segments: const [
-                    ButtonSegment(value: .top, label: Text('top')),
-                    ButtonSegment(value: .bottom, label: Text('bottom')),
-                    ButtonSegment(value: .left, label: Text('left')),
-                    ButtonSegment(value: .right, label: Text('right')),
+                    ButtonSegment(
+                      value: .top,
+                      icon: Icon(Icons.keyboard_arrow_up),
+                      tooltip: 'top',
+                    ),
+                    ButtonSegment(
+                      value: .bottom,
+                      icon: Icon(Icons.keyboard_arrow_down),
+                      tooltip: 'bottom',
+                    ),
+                    ButtonSegment(
+                      value: .left,
+                      icon: Icon(Icons.keyboard_arrow_left),
+                      tooltip: 'left',
+                    ),
+                    ButtonSegment(
+                      value: .right,
+                      icon: Icon(Icons.keyboard_arrow_right),
+                      tooltip: 'right',
+                    ),
                   ],
                   selected: {settings.thumbnailsPosition},
                   onSelectionChanged: (s) => settings.update(
