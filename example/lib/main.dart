@@ -23,16 +23,15 @@ class _ExampleAppState extends State<_ExampleApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'viewfinder example',
-      home: _HomePage(settings: _settings),
+    return _SettingsScope(
+      settings: _settings,
+      child: const MaterialApp(title: 'viewfinder example', home: _HomePage()),
     );
   }
 }
 
 class _HomePage extends StatelessWidget {
-  const _HomePage({required this.settings});
-  final _Settings settings;
+  const _HomePage();
 
   // TaroImage caches bytes on disk, so the grid thumbnail decode and the
   // larger gallery decode share a single HTTP fetch — and the gallery's
@@ -47,49 +46,44 @@ class _HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: settings,
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(
-          title: const Text('viewfinder — demo'),
-          actions: [
-            IconButton(
-              tooltip: 'Settings',
-              icon: const Icon(Icons.tune),
-              onPressed: () => _openSettings(context),
-            ),
-          ],
-        ),
-        body: GridView.builder(
-          padding: const .all(8),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
+    final heroEnabled = _Settings.of(context).heroEnabled;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('viewfinder — demo'),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.tune),
+            onPressed: () => _openSettings(context),
           ),
-          itemCount: _images.length,
-          itemBuilder: (ctx, i) {
-            // Decode at display size × DPR so high-DPR devices stay sharp
-            // — current Flutter `ResizeImage` treats width/height as
-            // physical pixels.
-            final dpr = MediaQuery.devicePixelRatioOf(ctx);
-            final thumb = Image(
-              image: ResizeImage(_images[i], width: (360 * dpr).round()),
-              fit: .cover,
-            );
-            return InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      _GalleryPage(initialIndex: i, settings: settings),
-                ),
-              ),
-              child: settings.heroEnabled
-                  ? Hero(tag: 'photo-$i', child: thumb)
-                  : thumb,
-            );
-          },
+        ],
+      ),
+      body: GridView.builder(
+        padding: const .all(8),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
         ),
+        itemCount: _images.length,
+        itemBuilder: (ctx, i) {
+          // Decode at display size × DPR so high-DPR devices stay sharp
+          // — current Flutter `ResizeImage` treats width/height as
+          // physical pixels.
+          final dpr = MediaQuery.devicePixelRatioOf(ctx);
+          final thumb = Image(
+            image: ResizeImage(_images[i], width: (360 * dpr).round()),
+            fit: .cover,
+          );
+          return InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _GalleryPage(initialIndex: i),
+              ),
+            ),
+            child: heroEnabled ? Hero(tag: 'photo-$i', child: thumb) : thumb,
+          );
+        },
       ),
     );
   }
@@ -99,16 +93,15 @@ class _HomePage extends StatelessWidget {
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (_) => _SettingsSheet(settings: settings),
+      builder: (_) => const _SettingsSheet(),
     );
   }
 }
 
 class _GalleryPage extends StatefulWidget {
-  const _GalleryPage({required this.initialIndex, required this.settings});
+  const _GalleryPage({required this.initialIndex});
 
   final int initialIndex;
-  final _Settings settings;
 
   @override
   State<_GalleryPage> createState() => _GalleryPageState();
@@ -117,15 +110,28 @@ class _GalleryPage extends StatefulWidget {
 class _GalleryPageState extends State<_GalleryPage> {
   late final ViewfinderController _controller;
   ViewfinderChromeController? _chrome;
+  bool _chromeBound = false;
 
   @override
   void initState() {
     super.initState();
     _controller = ViewfinderController(initialIndex: widget.initialIndex);
-    if (widget.settings.chromeEnabled) {
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Read settings once via the InheritedNotifier, then capture the
+    // chrome controller config. Mirrors the previous behaviour where
+    // chrome setup snapshots settings at gallery-open time and ignores
+    // later changes — only the initial values matter for lifecycle.
+    if (_chromeBound) return;
+    _chromeBound = true;
+    final s = _Settings.of(context);
+    if (s.chromeEnabled) {
       _chrome = ViewfinderChromeController(
-        autoHideAfter: widget.settings.chromeAutoHideAfter,
-        autoHideWhileZoomed: widget.settings.chromeAutoHideWhileZoomed,
+        autoHideAfter: s.chromeAutoHideAfter,
+        autoHideWhileZoomed: s.chromeAutoHideWhileZoomed,
       );
     }
   }
@@ -137,8 +143,7 @@ class _GalleryPageState extends State<_GalleryPage> {
     super.dispose();
   }
 
-  ViewfinderThumbnails? _buildThumbnails() {
-    final s = widget.settings;
+  ViewfinderThumbnails? _buildThumbnails(_Settings s) {
     if (!s.thumbnailsEnabled) return null;
     if (s.thumbnailsCustomBuilder) {
       return ViewfinderThumbnails.custom(
@@ -170,14 +175,12 @@ class _GalleryPageState extends State<_GalleryPage> {
     );
   }
 
-  ViewfinderPageIndicator? _buildIndicator() {
-    final s = widget.settings;
+  ViewfinderPageIndicator? _buildIndicator(_Settings s) {
     if (!s.indicatorEnabled) return null;
     return ViewfinderPageIndicator(maxDots: s.indicatorForceNumeric ? 0 : 12);
   }
 
-  ViewfinderDismiss? _buildDismiss() {
-    final s = widget.settings;
+  ViewfinderDismiss? _buildDismiss(_Settings s) {
     if (!s.dismissEnabled) return null;
     return ViewfinderDismiss(
       onDismiss: () => Navigator.of(context).maybePop(),
@@ -187,7 +190,7 @@ class _GalleryPageState extends State<_GalleryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.settings;
+    final s = _Settings.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Photo')),
       body: Viewfinder(
@@ -199,9 +202,9 @@ class _GalleryPageState extends State<_GalleryPage> {
         rotateEnabled: s.rotateEnabled,
         swipeDragDevices: s.dragDevices.resolve(),
         doubleTapScales: const [1.0, 2.5, 5.0],
-        indicator: _buildIndicator(),
-        thumbnails: _buildThumbnails(),
-        dismiss: _buildDismiss(),
+        indicator: _buildIndicator(s),
+        thumbnails: _buildThumbnails(s),
+        dismiss: _buildDismiss(s),
         chromeController: _chrome,
         itemBuilder: (context, index) => ViewfinderItem(
           image: _HomePage._images[index],
@@ -225,220 +228,215 @@ class _GalleryPageState extends State<_GalleryPage> {
 // -----------------------------------------------------------------------------
 
 class _SettingsSheet extends StatelessWidget {
-  const _SettingsSheet({required this.settings});
-  final _Settings settings;
+  const _SettingsSheet();
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: settings,
-      builder: (context, _) => ListView(
-        padding: const .symmetric(horizontal: 16),
-        children: [
-          const _SectionLabel('Pager'),
-          ListTile(
-            dense: true,
-            title: const Text('pagerAxis'),
-            trailing: SegmentedButton<Axis>(
-              segments: const [
-                ButtonSegment(value: .horizontal, label: Text('horiz')),
-                ButtonSegment(value: .vertical, label: Text('vert')),
-              ],
-              selected: {settings.pagerAxis},
-              onSelectionChanged: (s) =>
-                  settings.update(() => settings.pagerAxis = s.first),
-            ),
+    final settings = _Settings.of(context);
+    return ListView(
+      padding: const .symmetric(horizontal: 16),
+      children: [
+        const _SectionLabel('Pager'),
+        ListTile(
+          dense: true,
+          title: const Text('pagerAxis'),
+          trailing: SegmentedButton<Axis>(
+            segments: const [
+              ButtonSegment(value: .horizontal, label: Text('horiz')),
+              ButtonSegment(value: .vertical, label: Text('vert')),
+            ],
+            selected: {settings.pagerAxis},
+            onSelectionChanged: (s) =>
+                settings.update(() => settings.pagerAxis = s.first),
           ),
-          ListTile(
-            dense: true,
-            title: const Text('precacheAdjacent'),
-            subtitle: Slider(
-              value: settings.precacheAdjacent.toDouble(),
-              min: 0,
-              max: 3,
-              divisions: 3,
-              label: '${settings.precacheAdjacent}',
-              onChanged: (v) =>
-                  settings.update(() => settings.precacheAdjacent = v.round()),
-            ),
-          ),
-          ListTile(
-            dense: true,
-            title: const Text('swipeDragDevices'),
-            subtitle: DropdownButton<_DragDevicesPreset>(
-              isExpanded: true,
-              value: settings.dragDevices,
-              items: [
-                for (final p in _DragDevicesPreset.values)
-                  DropdownMenuItem(value: p, child: Text(p.label)),
-              ],
-              onChanged: (v) => v == null
-                  ? null
-                  : settings.update(() => settings.dragDevices = v),
-            ),
-          ),
-          SwitchListTile(
-            dense: true,
-            title: const Text('rotateEnabled'),
-            value: settings.rotateEnabled,
-            onChanged: (v) => settings.update(() => settings.rotateEnabled = v),
-          ),
-          SwitchListTile(
-            dense: true,
-            title: const Text('heroEnabled'),
-            subtitle: const Text(
-              'Wraps grid thumbnails and the gallery image in Hero. Off '
-              'to compare against the route transition alone.',
-            ),
-            value: settings.heroEnabled,
-            onChanged: (v) => settings.update(() => settings.heroEnabled = v),
-          ),
-          ListTile(
-            dense: true,
-            title: const Text('defaultInitialScale'),
-            subtitle: SegmentedButton<_InitialScalePreset>(
-              segments: const [
-                ButtonSegment(value: .contain, label: Text('contain')),
-                ButtonSegment(value: .cover, label: Text('cover')),
-                ButtonSegment(value: .value15, label: Text('1.5x')),
-              ],
-              selected: {settings.initialScale},
-              onSelectionChanged: (s) =>
-                  settings.update(() => settings.initialScale = s.first),
-            ),
-          ),
-          const _SectionLabel('Thumbnails'),
-          SwitchListTile(
-            dense: true,
-            title: const Text('enabled'),
-            value: settings.thumbnailsEnabled,
+        ),
+        ListTile(
+          dense: true,
+          title: const Text('precacheAdjacent'),
+          subtitle: Slider(
+            value: settings.precacheAdjacent.toDouble(),
+            min: 0,
+            max: 3,
+            divisions: 3,
+            label: '${settings.precacheAdjacent}',
             onChanged: (v) =>
-                settings.update(() => settings.thumbnailsEnabled = v),
+                settings.update(() => settings.precacheAdjacent = v.round()),
           ),
-          if (settings.thumbnailsEnabled) ...[
-            ListTile(
-              dense: true,
-              title: const Text('position'),
-              subtitle: SegmentedButton<ViewfinderThumbnailPosition>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: .top,
-                    icon: Icon(Icons.keyboard_arrow_up),
-                    tooltip: 'top',
-                  ),
-                  ButtonSegment(
-                    value: .bottom,
-                    icon: Icon(Icons.keyboard_arrow_down),
-                    tooltip: 'bottom',
-                  ),
-                  ButtonSegment(
-                    value: .left,
-                    icon: Icon(Icons.keyboard_arrow_left),
-                    tooltip: 'left',
-                  ),
-                  ButtonSegment(
-                    value: .right,
-                    icon: Icon(Icons.keyboard_arrow_right),
-                    tooltip: 'right',
-                  ),
-                ],
-                selected: {settings.thumbnailsPosition},
-                onSelectionChanged: (s) => settings.update(
-                  () => settings.thumbnailsPosition = s.first,
+        ),
+        ListTile(
+          dense: true,
+          title: const Text('swipeDragDevices'),
+          subtitle: DropdownButton<_DragDevicesPreset>(
+            isExpanded: true,
+            value: settings.dragDevices,
+            items: [
+              for (final p in _DragDevicesPreset.values)
+                DropdownMenuItem(value: p, child: Text(p.label)),
+            ],
+            onChanged: (v) => v == null
+                ? null
+                : settings.update(() => settings.dragDevices = v),
+          ),
+        ),
+        SwitchListTile(
+          dense: true,
+          title: const Text('rotateEnabled'),
+          value: settings.rotateEnabled,
+          onChanged: (v) => settings.update(() => settings.rotateEnabled = v),
+        ),
+        SwitchListTile(
+          dense: true,
+          title: const Text('heroEnabled'),
+          subtitle: const Text(
+            'Wraps grid thumbnails and the gallery image in Hero. Off '
+            'to compare against the route transition alone.',
+          ),
+          value: settings.heroEnabled,
+          onChanged: (v) => settings.update(() => settings.heroEnabled = v),
+        ),
+        ListTile(
+          dense: true,
+          title: const Text('defaultInitialScale'),
+          subtitle: SegmentedButton<_InitialScalePreset>(
+            segments: const [
+              ButtonSegment(value: .contain, label: Text('contain')),
+              ButtonSegment(value: .cover, label: Text('cover')),
+              ButtonSegment(value: .value15, label: Text('1.5x')),
+            ],
+            selected: {settings.initialScale},
+            onSelectionChanged: (s) =>
+                settings.update(() => settings.initialScale = s.first),
+          ),
+        ),
+        const _SectionLabel('Thumbnails'),
+        SwitchListTile(
+          dense: true,
+          title: const Text('enabled'),
+          value: settings.thumbnailsEnabled,
+          onChanged: (v) =>
+              settings.update(() => settings.thumbnailsEnabled = v),
+        ),
+        if (settings.thumbnailsEnabled) ...[
+          ListTile(
+            dense: true,
+            title: const Text('position'),
+            subtitle: SegmentedButton<ViewfinderThumbnailPosition>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: .top,
+                  icon: Icon(Icons.keyboard_arrow_up),
+                  tooltip: 'top',
                 ),
-              ),
+                ButtonSegment(
+                  value: .bottom,
+                  icon: Icon(Icons.keyboard_arrow_down),
+                  tooltip: 'bottom',
+                ),
+                ButtonSegment(
+                  value: .left,
+                  icon: Icon(Icons.keyboard_arrow_left),
+                  tooltip: 'left',
+                ),
+                ButtonSegment(
+                  value: .right,
+                  icon: Icon(Icons.keyboard_arrow_right),
+                  tooltip: 'right',
+                ),
+              ],
+              selected: {settings.thumbnailsPosition},
+              onSelectionChanged: (s) =>
+                  settings.update(() => settings.thumbnailsPosition = s.first),
             ),
-            SwitchListTile(
-              dense: true,
-              title: const Text('safeArea'),
-              value: settings.thumbnailsSafeArea,
-              onChanged: (v) =>
-                  settings.update(() => settings.thumbnailsSafeArea = v),
-            ),
-            SwitchListTile(
-              dense: true,
-              title: const Text('custom builder (highlight selected)'),
-              value: settings.thumbnailsCustomBuilder,
-              onChanged: (v) =>
-                  settings.update(() => settings.thumbnailsCustomBuilder = v),
-            ),
-          ],
-          const _SectionLabel('Page indicator'),
+          ),
           SwitchListTile(
             dense: true,
-            title: const Text('enabled'),
-            value: settings.indicatorEnabled,
+            title: const Text('safeArea'),
+            value: settings.thumbnailsSafeArea,
             onChanged: (v) =>
-                settings.update(() => settings.indicatorEnabled = v),
+                settings.update(() => settings.thumbnailsSafeArea = v),
           ),
-          if (settings.indicatorEnabled)
-            SwitchListTile(
-              dense: true,
-              title: const Text('force numeric (maxDots=0)'),
-              value: settings.indicatorForceNumeric,
-              onChanged: (v) =>
-                  settings.update(() => settings.indicatorForceNumeric = v),
-            ),
-          const _SectionLabel('Drag-to-dismiss'),
           SwitchListTile(
             dense: true,
-            title: const Text('enabled'),
-            value: settings.dismissEnabled,
+            title: const Text('custom builder (highlight selected)'),
+            value: settings.thumbnailsCustomBuilder,
             onChanged: (v) =>
-                settings.update(() => settings.dismissEnabled = v),
+                settings.update(() => settings.thumbnailsCustomBuilder = v),
           ),
-          if (settings.dismissEnabled)
-            ListTile(
-              dense: true,
-              title: const Text('slideType'),
-              subtitle: SegmentedButton<ViewfinderDismissSlideType>(
-                segments: const [
-                  ButtonSegment(value: .wholePage, label: Text('wholePage')),
-                  ButtonSegment(value: .onlyImage, label: Text('onlyImage')),
-                ],
-                selected: {settings.dismissSlide},
-                onSelectionChanged: (s) =>
-                    settings.update(() => settings.dismissSlide = s.first),
-              ),
-            ),
-          const _SectionLabel('Chrome controller'),
-          SwitchListTile(
-            dense: true,
-            title: const Text('enabled (tap to toggle)'),
-            value: settings.chromeEnabled,
-            onChanged: (v) => settings.update(() => settings.chromeEnabled = v),
-          ),
-          if (settings.chromeEnabled) ...[
-            SwitchListTile(
-              dense: true,
-              title: const Text('autoHideWhileZoomed'),
-              value: settings.chromeAutoHideWhileZoomed,
-              onChanged: (v) =>
-                  settings.update(() => settings.chromeAutoHideWhileZoomed = v),
-            ),
-            ListTile(
-              dense: true,
-              title: const Text('autoHideAfter'),
-              subtitle: SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(value: -1, label: Text('off')),
-                  ButtonSegment(value: 1, label: Text('1s')),
-                  ButtonSegment(value: 3, label: Text('3s')),
-                ],
-                selected: {settings.chromeAutoHideAfter?.inSeconds ?? -1},
-                onSelectionChanged: (s) => settings.update(() {
-                  final v = s.first;
-                  settings.chromeAutoHideAfter = v < 0
-                      ? null
-                      : Duration(seconds: v);
-                }),
-              ),
-            ),
-          ],
-          SizedBox(height: MediaQuery.paddingOf(context).bottom),
         ],
-      ),
+        const _SectionLabel('Page indicator'),
+        SwitchListTile(
+          dense: true,
+          title: const Text('enabled'),
+          value: settings.indicatorEnabled,
+          onChanged: (v) =>
+              settings.update(() => settings.indicatorEnabled = v),
+        ),
+        if (settings.indicatorEnabled)
+          SwitchListTile(
+            dense: true,
+            title: const Text('force numeric (maxDots=0)'),
+            value: settings.indicatorForceNumeric,
+            onChanged: (v) =>
+                settings.update(() => settings.indicatorForceNumeric = v),
+          ),
+        const _SectionLabel('Drag-to-dismiss'),
+        SwitchListTile(
+          dense: true,
+          title: const Text('enabled'),
+          value: settings.dismissEnabled,
+          onChanged: (v) => settings.update(() => settings.dismissEnabled = v),
+        ),
+        if (settings.dismissEnabled)
+          ListTile(
+            dense: true,
+            title: const Text('slideType'),
+            subtitle: SegmentedButton<ViewfinderDismissSlideType>(
+              segments: const [
+                ButtonSegment(value: .wholePage, label: Text('wholePage')),
+                ButtonSegment(value: .onlyImage, label: Text('onlyImage')),
+              ],
+              selected: {settings.dismissSlide},
+              onSelectionChanged: (s) =>
+                  settings.update(() => settings.dismissSlide = s.first),
+            ),
+          ),
+        const _SectionLabel('Chrome controller'),
+        SwitchListTile(
+          dense: true,
+          title: const Text('enabled (tap to toggle)'),
+          value: settings.chromeEnabled,
+          onChanged: (v) => settings.update(() => settings.chromeEnabled = v),
+        ),
+        if (settings.chromeEnabled) ...[
+          SwitchListTile(
+            dense: true,
+            title: const Text('autoHideWhileZoomed'),
+            value: settings.chromeAutoHideWhileZoomed,
+            onChanged: (v) =>
+                settings.update(() => settings.chromeAutoHideWhileZoomed = v),
+          ),
+          ListTile(
+            dense: true,
+            title: const Text('autoHideAfter'),
+            subtitle: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: -1, label: Text('off')),
+                ButtonSegment(value: 1, label: Text('1s')),
+                ButtonSegment(value: 3, label: Text('3s')),
+              ],
+              selected: {settings.chromeAutoHideAfter?.inSeconds ?? -1},
+              onSelectionChanged: (s) => settings.update(() {
+                final v = s.first;
+                settings.chromeAutoHideAfter = v < 0
+                    ? null
+                    : Duration(seconds: v);
+              }),
+            ),
+          ),
+        ],
+        SizedBox(height: MediaQuery.paddingOf(context).bottom),
+      ],
     );
   }
 }
@@ -454,7 +452,15 @@ class _SectionLabel extends StatelessWidget {
   );
 }
 
+class _SettingsScope extends InheritedNotifier<_Settings> {
+  const _SettingsScope({required _Settings settings, required super.child})
+    : super(notifier: settings);
+}
+
 class _Settings extends ChangeNotifier {
+  static _Settings of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_SettingsScope>()!.notifier!;
+
   Axis pagerAxis = .horizontal;
   int precacheAdjacent = 2;
   _DragDevicesPreset dragDevices = .all;
