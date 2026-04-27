@@ -11,8 +11,7 @@ restarting:
 * Thumbnails — enable / position / `safeArea` / custom selected-tile
 builder
 * Page indicator — enable / force numeric fallback
-* Drag-to-dismiss — enable / `slideType` (live progress shown in the
-AppBar)
+* Drag-to-dismiss — enable / `slideType`
 * Chrome controller — enable / `autoHideAfter` / auto-hide-while-zoomed
 
 Run with `flutter run` from this directory.
