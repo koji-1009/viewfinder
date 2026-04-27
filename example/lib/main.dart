@@ -489,7 +489,7 @@ class _GalleryPageState extends State<_GalleryPage> {
         chromeController: _chrome,
         itemBuilder: (context, index) => ViewfinderItem(
           image: _HomePage._images[index],
-          heroTag: s.heroEnabled ? 'photo-$index' : null,
+          hero: s.heroEnabled ? ViewfinderHero('photo-$index') : null,
           semanticLabel: 'Photo ${index + 1}',
           errorBuilder: (_, _, _) => const Center(
             child: Icon(Icons.broken_image, color: Colors.white54, size: 48),

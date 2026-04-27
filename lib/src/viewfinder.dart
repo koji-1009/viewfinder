@@ -358,11 +358,10 @@ class _ViewfinderState extends State<Viewfinder> {
 
     final imageController = _imageControllerFor(index);
 
-    // Only the currently-visible page carries a Hero tag. PageView
-    // pre-builds neighbors (especially with allowImplicitScrolling), and
-    // if those carried Heroes too, every adjacent-grid thumbnail would
-    // fly on pop.
-    final heroTag = index == _currentIndex ? item.heroTag : null;
+    // Only the currently-visible page carries a Hero. PageView pre-builds
+    // neighbors (especially with allowImplicitScrolling), and if those
+    // carried Heroes too, every adjacent-grid thumbnail would fly on pop.
+    final hero = index == _currentIndex ? item.hero : null;
 
     // Gate: ask the gesture recognizer to reject single-pointer pan
     // along the pager axis when the parent [PageView] should take over.
@@ -402,7 +401,7 @@ class _ViewfinderState extends State<Viewfinder> {
         thumbImage: item.thumbImage,
         initialScale: initialScale,
         doubleTapScales: widget.doubleTapScales,
-        heroTag: heroTag,
+        hero: hero,
         loadingBuilder: item.loadingBuilder,
         errorBuilder: item.errorBuilder,
         minScale: minScale,
@@ -419,7 +418,7 @@ class _ViewfinderState extends State<Viewfinder> {
       _ => ViewfinderImage.child(
         initialScale: initialScale,
         doubleTapScales: widget.doubleTapScales,
-        heroTag: heroTag,
+        hero: hero,
         minScale: minScale,
         maxScale: maxScale,
         semanticLabel: item.semanticLabel,

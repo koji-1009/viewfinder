@@ -30,7 +30,7 @@ Viewfinder(
   itemBuilder: (context, index) => ViewfinderItem(
     image: photos[index],
     thumbImage: photosLowRes[index], // optional progressive load
-    heroTag: 'photo-$index',
+    hero: ViewfinderHero('photo-$index'),
     semanticLabel: 'Vacation photo ${index + 1}',
   ),
 )
@@ -132,8 +132,23 @@ Hero flies a widget's bounds from a fixed source rect (in the outgoing route) to
 | Route                                                 | Hero advice                                                                                                                                                                                                      |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                             |
-| `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `heroTag: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
+| `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `hero: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
 | Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos and similar viewers use this — the route transition is just background chrome fading, the photo's flight does the rest.                                                      |
+
+`ViewfinderHero` exposes Flutter's full [Hero] API, so you can override the rect tween, swap in a flight shuttle, or opt into in-flight gestures:
+
+```dart
+ViewfinderItem(
+  image: photo,
+  hero: ViewfinderHero(
+    'photo-1',
+    createRectTween: (begin, end) => MaterialRectArcTween(begin: begin, end: end),
+    flightShuttleBuilder: (ctx, anim, dir, fromCtx, toCtx) =>
+        toCtx.widget,
+    transitionOnUserGestures: true,
+  ),
+)
+```
 
 ## Hero + back button
 

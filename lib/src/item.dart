@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'hero.dart';
 import 'initial_scale.dart';
 import 'viewfinder.dart' show Viewfinder;
 
@@ -13,7 +14,7 @@ class ViewfinderItem {
   const ViewfinderItem({
     required ImageProvider this.image,
     this.thumbImage,
-    this.heroTag,
+    this.hero,
     this.loadingBuilder,
     this.errorBuilder,
     this.initialScale,
@@ -24,7 +25,7 @@ class ViewfinderItem {
 
   const ViewfinderItem.child({
     required Widget this.child,
-    this.heroTag,
+    this.hero,
     this.initialScale,
     this.minScale,
     this.maxScale,
@@ -41,7 +42,7 @@ class ViewfinderItem {
   /// Cross-faded to the main image as soon as the first frame decodes.
   final ImageProvider? thumbImage;
 
-  final Object? heroTag;
+  final ViewfinderHero? hero;
   final ImageLoadingBuilder? loadingBuilder;
   final ImageErrorWidgetBuilder? errorBuilder;
   final ViewfinderInitialScale? initialScale;

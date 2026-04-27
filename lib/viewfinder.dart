@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart' show PageView, Hero, Image;
 
 export 'src/chrome.dart';
 export 'src/dismiss.dart';
+export 'src/hero.dart';
 export 'src/image.dart';
 export 'src/initial_scale.dart';
 export 'src/item.dart';

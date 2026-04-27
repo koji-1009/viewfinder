@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'hero.dart';
 import 'initial_scale.dart';
 import 'internal/matrix_utils.dart';
 import 'internal/zoomable_viewport.dart';
@@ -25,12 +26,14 @@ class ViewfinderImage extends StatefulWidget {
     this.minScale = 1.0,
     this.maxScale = 8.0,
     this.backgroundColor = Colors.black,
-    this.heroTag,
+    this.hero,
     this.filterQuality = .medium,
     this.loadingBuilder,
     this.errorBuilder,
     this.onScaleChanged,
     this.onTap,
+    this.onTapUp,
+    this.onTapDown,
     this.controller,
     this.panEnabled = true,
     this.scaleEnabled = true,
@@ -53,9 +56,11 @@ class ViewfinderImage extends StatefulWidget {
     this.minScale = 1.0,
     this.maxScale = 8.0,
     this.backgroundColor = Colors.black,
-    this.heroTag,
+    this.hero,
     this.onScaleChanged,
     this.onTap,
+    this.onTapUp,
+    this.onTapDown,
     this.controller,
     this.panEnabled = true,
     this.scaleEnabled = true,
@@ -94,12 +99,18 @@ class ViewfinderImage extends StatefulWidget {
   final double minScale;
   final double maxScale;
   final Color backgroundColor;
-  final Object? heroTag;
+  final ViewfinderHero? hero;
   final FilterQuality filterQuality;
   final ImageLoadingBuilder? loadingBuilder;
   final ImageErrorWidgetBuilder? errorBuilder;
   final ViewfinderScaleChanged? onScaleChanged;
-  final VoidCallback? onTap;
+
+  /// Tap callbacks forwarded to the internal [GestureDetector] using
+  /// Flutter's standard typedefs, so callers can listen for taps without
+  /// stacking another [GestureDetector] on top.
+  final GestureTapCallback? onTap;
+  final GestureTapUpCallback? onTapUp;
+  final GestureTapDownCallback? onTapDown;
   final ViewfinderImageController? controller;
   final bool panEnabled;
   final bool scaleEnabled;
@@ -335,8 +346,15 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       _ => widget.child!,
     };
 
-    if (widget.heroTag case final tag?) {
-      content = Hero(tag: tag, child: content);
+    if (widget.hero case final hero?) {
+      content = Hero(
+        tag: hero.tag,
+        createRectTween: hero.createRectTween,
+        flightShuttleBuilder: hero.flightShuttleBuilder,
+        placeholderBuilder: hero.placeholderBuilder,
+        transitionOnUserGestures: hero.transitionOnUserGestures,
+        child: content,
+      );
     }
 
     return ColoredBox(
@@ -344,6 +362,8 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
+        onTapUp: widget.onTapUp,
+        onTapDown: widget.onTapDown,
         onDoubleTapDown: _handleDoubleTapDown,
         onDoubleTap: _handleDoubleTap,
         child: ZoomableViewport(

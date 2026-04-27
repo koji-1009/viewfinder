@@ -1233,7 +1233,7 @@ void main() {
                         controller: galleryController,
                         itemBuilder: (_, _) => ViewfinderItem(
                           image: _memoryImage(),
-                          heroTag: 'photo',
+                          hero: const ViewfinderHero('photo'),
                         ),
                       ),
                     ),
@@ -1323,8 +1323,10 @@ void main() {
           body: Viewfinder(
             itemCount: 5,
             controller: ViewfinderController(initialIndex: 2),
-            itemBuilder: (_, i) =>
-                ViewfinderItem(image: _memoryImage(), heroTag: 'photo-$i'),
+            itemBuilder: (_, i) => ViewfinderItem(
+              image: _memoryImage(),
+              hero: ViewfinderHero('photo-$i'),
+            ),
           ),
         ),
       ),
@@ -1343,6 +1345,75 @@ void main() {
     final afterSwipe = tester.widgetList<Hero>(find.byType(Hero)).toList();
     expect(afterSwipe, hasLength(1));
     expect(afterSwipe.single.tag, 'photo-3');
+  });
+
+  testWidgets('ViewfinderHero forwards attributes to the Hero widget', (
+    tester,
+  ) async {
+    RectTween rectTween(Rect? begin, Rect? end) =>
+        MaterialRectArcTween(begin: begin, end: end);
+    Widget shuttle(
+      BuildContext _,
+      Animation<double> _,
+      HeroFlightDirection _,
+      BuildContext _,
+      BuildContext _,
+    ) => const SizedBox.shrink();
+    Widget placeholder(BuildContext _, Size _, Widget child) => child;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            hero: ViewfinderHero(
+              'tag',
+              createRectTween: rectTween,
+              flightShuttleBuilder: shuttle,
+              placeholderBuilder: placeholder,
+              transitionOnUserGestures: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    final hero = tester.widget<Hero>(find.byType(Hero));
+    expect(hero.tag, 'tag');
+    expect(hero.createRectTween, same(rectTween));
+    expect(hero.flightShuttleBuilder, same(shuttle));
+    expect(hero.placeholderBuilder, same(placeholder));
+    expect(hero.transitionOnUserGestures, isTrue);
+  });
+
+  testWidgets('ViewfinderImage onTapUp / onTapDown carry tap details', (
+    tester,
+  ) async {
+    TapUpDetails? up;
+    TapDownDetails? down;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            onTapUp: (d) => up = d,
+            onTapDown: (d) => down = d,
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    final tapPoint = tester.getCenter(find.byType(ViewfinderImage));
+    await tester.tapAt(tapPoint);
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(down, isNotNull);
+    expect(up, isNotNull);
+    expect(down!.globalPosition, tapPoint);
+    expect(up!.globalPosition, tapPoint);
   });
 
   group('ViewfinderChromeController', () {
