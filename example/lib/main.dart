@@ -371,6 +371,7 @@ class _SettingsSheet extends StatelessWidget {
               ),
             ),
           ],
+          SizedBox(height: MediaQuery.paddingOf(context).bottom),
         ],
       ),
     );
