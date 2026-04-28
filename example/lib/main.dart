@@ -36,12 +36,25 @@ class _HomePage extends StatelessWidget {
   // TaroImage caches bytes on disk, so the grid thumbnail decode and the
   // larger gallery decode share a single HTTP fetch — and the gallery's
   // first-open Hero lands on a real frame instead of a loading spinner.
+  // 14 photos at mixed aspect ratios — enough to push the page indicator
+  // past its `maxDots` default of 12 (so the numeric `1 / N` fallback
+  // kicks in for free), and enough to make the thumbnail strip's
+  // auto-scroll visible during a swipe demo.
   static final List<ImageProvider> _images = [
     const TaroImage('https://picsum.photos/id/1015/4000/3000'),
+    const TaroImage('https://picsum.photos/id/1018/4000/2666'),
+    const TaroImage('https://picsum.photos/id/1019/4000/2666'),
     const TaroImage('https://picsum.photos/id/1025/3000/2000'),
+    const TaroImage('https://picsum.photos/id/1029/3500/2333'),
+    const TaroImage('https://picsum.photos/id/1037/4000/2666'),
     const TaroImage('https://picsum.photos/id/1039/4000/2500'),
+    const TaroImage('https://picsum.photos/id/1041/3000/4000'),
     const TaroImage('https://picsum.photos/id/1043/2000/3000'),
+    const TaroImage('https://picsum.photos/id/1050/4000/2666'),
     const TaroImage('https://picsum.photos/id/1055/3000/2000'),
+    const TaroImage('https://picsum.photos/id/1059/3000/3000'),
+    const TaroImage('https://picsum.photos/id/1074/4000/2666'),
+    const TaroImage('https://picsum.photos/id/1080/4000/2250'),
   ];
 
   @override
@@ -76,11 +89,7 @@ class _HomePage extends StatelessWidget {
             fit: .cover,
           );
           return InkWell(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => _GalleryPage(initialIndex: i),
-              ),
-            ),
+            onTap: () => Navigator.of(context).push(_galleryRoute(i)),
             child: heroEnabled ? Hero(tag: 'photo-$i', child: thumb) : thumb,
           );
         },
@@ -96,6 +105,18 @@ class _HomePage extends StatelessWidget {
       builder: (_) => const _SettingsSheet(),
     );
   }
+
+  // Fade-only route — the destination chrome (AppBar, background) fades
+  // in while Hero handles the photo's motion. Compared to
+  // MaterialPageRoute, the surrounding scaffold doesn't slide up to
+  // compete with the Hero flight, which is the look iOS Photos uses.
+  Route<void> _galleryRoute(int initialIndex) => PageRouteBuilder<void>(
+    transitionDuration: const Duration(milliseconds: 280),
+    reverseTransitionDuration: const Duration(milliseconds: 280),
+    pageBuilder: (_, _, _) => _GalleryPage(initialIndex: initialIndex),
+    transitionsBuilder: (_, animation, _, child) =>
+        FadeTransition(opacity: animation, child: child),
+  );
 }
 
 class _GalleryPage extends StatefulWidget {
