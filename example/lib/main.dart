@@ -25,7 +25,11 @@ class _ExampleAppState extends State<_ExampleApp> {
   Widget build(BuildContext context) {
     return _SettingsScope(
       settings: _settings,
-      child: const MaterialApp(title: 'viewfinder example', home: _HomePage()),
+      child: const MaterialApp(
+        title: 'viewfinder example',
+        debugShowCheckedModeBanner: false,
+        home: _HomePage(),
+      ),
     );
   }
 }
@@ -89,7 +93,11 @@ class _HomePage extends StatelessWidget {
             fit: .cover,
           );
           return InkWell(
-            onTap: () => Navigator.of(context).push(_galleryRoute(i)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _GalleryPage(initialIndex: i),
+              ),
+            ),
             child: heroEnabled ? Hero(tag: 'photo-$i', child: thumb) : thumb,
           );
         },
@@ -105,18 +113,6 @@ class _HomePage extends StatelessWidget {
       builder: (_) => const _SettingsSheet(),
     );
   }
-
-  // Fade-only route — the destination chrome (AppBar, background) fades
-  // in while Hero handles the photo's motion. Compared to
-  // MaterialPageRoute, the surrounding scaffold doesn't slide up to
-  // compete with the Hero flight, which is the look iOS Photos uses.
-  Route<void> _galleryRoute(int initialIndex) => PageRouteBuilder<void>(
-    transitionDuration: const Duration(milliseconds: 280),
-    reverseTransitionDuration: const Duration(milliseconds: 280),
-    pageBuilder: (_, _, _) => _GalleryPage(initialIndex: initialIndex),
-    transitionsBuilder: (_, animation, _, child) =>
-        FadeTransition(opacity: animation, child: child),
-  );
 }
 
 class _GalleryPage extends StatefulWidget {

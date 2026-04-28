@@ -1,5 +1,5 @@
 name: viewfinder
-description: "Modern Flutter photo viewer / gallery. Pinch / double-tap / mouse-wheel zoom with rubber-band edges and fling, drag-to-dismiss, thumbnails, indicator, Hero coherence, keyboard shortcuts."
+description: "Modern Flutter photo viewer / gallery. Pinch / double-tap / mouse-wheel zoom with rubber-band edges and fling, drag-to-dismiss, thumbnails, page indicator, and keyboard shortcuts."
 version: 0.1.0
 repository: https://github.com/koji-1009/viewfinder
 
@@ -8,7 +8,7 @@ topics:
   - gallery
   - image-viewer
   - zoom
-  - hero
+  - thumbnails
 
 environment:
   sdk: ^3.10.0

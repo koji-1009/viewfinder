@@ -4,6 +4,15 @@ A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware g
 
 Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
 
+## Highlights
+
+* **Native-feel gestures end-to-end** — pinch, pan, fling, double-tap-and-drag continuous zoom (iOS Photos style), two-finger rotation (opt-in). Rubber-band over-pan with diminishing returns at the edges, `FrictionSimulation`-driven post-release fling, both tunable per widget.
+* **Built for every input** — touch, stylus, trackpad, mouse, and hardware keyboard (Arrow / PageUp / PageDown / Esc) all wired in by default. Mouse wheel zooms around the pointer; mouse drag swipes pages on web and desktop out of the box.
+* **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis.
+* **Gallery affordances included** — `Viewfinder.images([...])` takes you from a list of `ImageProvider`s to a full gallery; thumbnail strip (4 positions or fully custom), page indicator (dots or `1 / N`), drag-to-dismiss with `wholePage` / `onlyImage` slide modes, tap-to-toggle chrome controller. All opt-in via dedicated config objects.
+* **Robust pop and back-button behavior** — pop while zoomed snaps every page back to its initial transform first, so any Hero flight starts from a sensible source rect; the first back / Esc on a zoomed photo resets the zoom, the second pops.
+* **No runtime dependencies** beyond the Flutter SDK.
+
 ## Quick start
 
 ### Gallery from a list
@@ -12,7 +21,6 @@ Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryI
 Viewfinder.images(
   photos, // List<ImageProvider>
   dismiss: ViewfinderDismiss(onDismiss: () => Navigator.pop(context)),
-  hero: (i) => ViewfinderHero('photo-$i'),
 )
 ```
 
@@ -38,7 +46,6 @@ Viewfinder(
   itemBuilder: (context, index) => ViewfinderItem(
     image: photos[index],
     thumbImage: photosLowRes[index], // optional progressive load
-    hero: ViewfinderHero('photo-$index'),
     semanticLabel: 'Vacation photo ${index + 1}',
   ),
 )
@@ -78,8 +85,8 @@ ViewfinderImage.child(
 * **Page indicator** — `ViewfinderPageIndicator()` draws dots, switches to a `1 / N` label above `maxDots`.
 * **Progressive loading** — `ViewfinderItem(thumbImage: lowRes)` shows the low-res while the full image decodes; cross-fades when the first frame lands.
 * **Chrome controller** — `ViewfinderChromeController` drives tap-to-toggle visibility of thumbnails + indicator + any `chromeOverlays` widgets you plug in. Auto-hide after idle, auto-hide while zoomed.
-* **Hero coherence** — on pop (Android back, iOS swipe, `Navigator.pop`) the current photo snaps to its initial transform _before_ the Hero flight captures its source rect, so flights never start from a visibly zoomed rect.
-* **Android back button 2-stage** — via `PopScope`. First back-press on a zoomed photo resets it; the second actually pops.
+* **Coherent pop** — on pop (Android back, iOS swipe, `Navigator.pop`) every page snaps back to its initial transform before the route exits, so any Hero flight starts from a sensible source rect.
+* **Two-stage back / Esc** — via `PopScope`. First back-press on a zoomed photo resets the zoom; the second pops. Hardware Escape mirrors this on desktop and web.
 * **Keyboard** — Arrow Left/Right, PageUp/Down, Escape (two-stage). Matches the Android back button semantics for desktop and web.
 * **Mouse wheel & trackpad** — scroll zooms around the pointer location; trackpad pinch (macOS) via `trackpadScrollCausesScale`.
 * **Mouse-drag page swipe (web & desktop)** — `swipeDragDevices` ships with mouse / trackpad / touch / stylus enabled, so mouse-drag swipes pages out of the box. Pass a narrower set to opt out.
@@ -147,17 +154,29 @@ Viewfinder(
 
 Tap the photo area: toggle chrome. Zoom in: chrome auto-hides. Page change: auto-hide timer restarts. `chromeOverlays` fade in sync with thumbnails and indicator.
 
-## Hero animation and route transitions
+## Hero
 
-Hero flies a widget's bounds from a fixed source rect (in the outgoing route) to a fixed destination rect (in the incoming route). It looks clean when the destination is _visually stable_ during the route transition. When the destination is itself translating during the transition, the flight aims at a moving target and the trajectory looks bent.
+`ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Two known Hero-with-photo-viewer pitfalls are handled internally:
+
+* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
+* **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
+
+These together let the back button stay two-stage by design: the first press on a zoomed photo resets the zoom; the second pops. If you drive navigation yourself, check the reset status first:
+
+```dart
+if (galleryController.resetCurrentImage()) return; // zoom was reset
+Navigator.of(context).pop();
+```
+
+Hero flights look cleanest when the destination route doesn't itself animate horizontally; the photo's flight has to compete with the sliding page otherwise.
 
 | Route                                                 | Hero advice                                                                                                                                                                                                   |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                          |
 | `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `hero: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
-| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos and similar viewers use this — the route transition is just background chrome fading, the photo's flight does the rest.                                                   |
+| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos uses this — the route transition is just background chrome fading, the photo's flight does the rest.                                                                      |
 
-`ViewfinderHero` exposes Flutter's full [Hero] API, so you can override the rect tween, swap in a flight shuttle, or opt into in-flight gestures:
+Custom flight options work the same as Flutter's `Hero`:
 
 ```dart
 ViewfinderItem(
@@ -165,23 +184,11 @@ ViewfinderItem(
   hero: ViewfinderHero(
     'photo-1',
     createRectTween: (begin, end) => MaterialRectArcTween(begin: begin, end: end),
-    flightShuttleBuilder: (ctx, anim, dir, fromCtx, toCtx) =>
-        toCtx.widget,
+    flightShuttleBuilder: (ctx, anim, dir, fromCtx, toCtx) => toCtx.widget,
     transitionOnUserGestures: true,
   ),
 )
 ```
-
-## Hero + back button
-
-The first Escape (or Android back, or iOS back swipe) on a zoomed photo resets the zoom instead of popping. The second pops. If you drive navigation from your own code, check first:
-
-```dart
-if (galleryController.resetCurrentImage()) return; // consumed
-Navigator.of(context).pop();
-```
-
-On actual pop, `PopScope` snaps every page to its initial transform before the Hero flight begins, so the flight source rect is correct.
 
 ## License
 
