@@ -4,18 +4,6 @@ A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware g
 
 Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
 
-## Install
-
-```sh
-flutter pub add viewfinder
-```
-
-```dart
-import 'package:viewfinder/viewfinder.dart';
-```
-
-Requires Flutter `>=3.38.0` / Dart `^3.10.0`. Runs on every Flutter target — iOS, Android, web, macOS, Windows, Linux. Mouse, trackpad, stylus, and touch are all wired in by default; no per-platform conditional code on the calling side.
-
 ## Quick start
 
 ### Gallery from a list
