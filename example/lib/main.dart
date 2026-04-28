@@ -84,14 +84,7 @@ class _HomePage extends StatelessWidget {
         ),
         itemCount: _images.length,
         itemBuilder: (ctx, i) {
-          // Decode at display size × DPR so high-DPR devices stay sharp
-          // — current Flutter `ResizeImage` treats width/height as
-          // physical pixels.
-          final dpr = MediaQuery.devicePixelRatioOf(ctx);
-          final thumb = Image(
-            image: ResizeImage(_images[i], width: (360 * dpr).round()),
-            fit: .cover,
-          );
+          final thumb = Image(image: _images[i], fit: .cover);
           return InkWell(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
