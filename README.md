@@ -4,6 +4,13 @@ A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware g
 
 Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
 
+
+<p align="center">
+  <img src="doc/screenshots/zoom.webp" alt="Pinch and double-tap zoom" width="280">
+  &nbsp;&nbsp;
+  <img src="doc/screenshots/swipe.webp" alt="Swipe between pages with thumbnail sync" width="280">
+</p>
+
 ## Highlights
 
 * **Native-feel gestures end-to-end** — pinch, pan, fling, double-tap-and-drag continuous zoom (iOS Photos style), two-finger rotation (opt-in). Rubber-band over-pan with diminishing returns at the edges, `FrictionSimulation`-driven post-release fling, both tunable per widget.

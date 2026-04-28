@@ -10,6 +10,12 @@ topics:
   - zoom
   - thumbnails
 
+screenshots:
+  - description: Pinch and double-tap zoom on a full-screen photo.
+    path: doc/screenshots/zoom.webp
+  - description: Swipe between pages with the thumbnail strip auto-scrolling and re-highlighting.
+    path: doc/screenshots/swipe.webp
+
 environment:
   sdk: ^3.10.0
   flutter: ">=3.38.0"
