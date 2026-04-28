@@ -46,7 +46,7 @@ Viewfinder(
 
 ### Embedded zoomable image
 
-For a single zoomable image *inside* another scrollable layout (no chrome, no dismiss), use `ViewfinderImage` directly:
+For a single zoomable image _inside_ another scrollable layout (no chrome, no dismiss), use `ViewfinderImage` directly:
 
 ```dart
 ViewfinderImage(
@@ -151,11 +151,11 @@ Tap the photo area: toggle chrome. Zoom in: chrome auto-hides. Page change: auto
 
 Hero flies a widget's bounds from a fixed source rect (in the outgoing route) to a fixed destination rect (in the incoming route). It looks clean when the destination is _visually stable_ during the route transition. When the destination is itself translating during the transition, the flight aims at a moving target and the trajectory looks bent.
 
-| Route                                                 | Hero advice                                                                                                                                                                                                      |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                             |
+| Route                                                 | Hero advice                                                                                                                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                          |
 | `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `hero: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
-| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos and similar viewers use this — the route transition is just background chrome fading, the photo's flight does the rest.                                                      |
+| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos and similar viewers use this — the route transition is just background chrome fading, the photo's flight does the rest.                                                   |
 
 `ViewfinderHero` exposes Flutter's full [Hero] API, so you can override the rect tween, swap in a flight shuttle, or opt into in-flight gestures:
 

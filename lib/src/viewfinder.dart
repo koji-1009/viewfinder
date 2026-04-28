@@ -83,7 +83,8 @@ class Viewfinder extends StatefulWidget {
     List<Widget> chromeOverlays = const <Widget>[],
     Duration chromeFadeDuration = const Duration(milliseconds: 220),
     Axis pagerAxis = Axis.horizontal,
-    Set<PointerDeviceKind> swipeDragDevices = kViewfinderDefaultSwipeDragDevices,
+    Set<PointerDeviceKind> swipeDragDevices =
+        kViewfinderDefaultSwipeDragDevices,
     ImageLoadingBuilder? loadingBuilder,
     ImageErrorWidgetBuilder? errorBuilder,
     ViewfinderHero Function(int index)? hero,
