@@ -4,6 +4,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import 'matrix_utils.dart';
+
 /// Callback fired when panning hits a boundary.
 ///
 /// [axis] is the axis along which the pan was clamped. [sign] is +1 when
@@ -249,7 +251,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     var next = buildDelta(scale).multiplied(_startMatrix);
 
     // Clamp scale.
-    final actualScale = next.getMaxScaleOnAxis();
+    final actualScale = xyScale(next);
     if (actualScale < widget.minScale || actualScale > widget.maxScale) {
       final target = actualScale.clamp(widget.minScale, widget.maxScale);
       next = buildDelta(scale * target / actualScale).multiplied(_startMatrix);
@@ -274,7 +276,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       return;
     }
     final m = widget.transformationController.value;
-    if (m.getMaxScaleOnAxis() <= 1.01) {
+    if (xyScale(m) <= 1.01) {
       _snapBackIfOverPan();
       return;
     }
@@ -311,7 +313,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     final dy = localPosition.dy - _dtdStartDragPoint.dy;
     // Down = zoom in, up = zoom out.
     final factor = math.pow(2.0, -dy / _kDoubleTapDragPixelsPerUnit).toDouble();
-    final currentScaleAtStart = start.getMaxScaleOnAxis();
+    final currentScaleAtStart = xyScale(start);
     final targetScale = (currentScaleAtStart * factor).clamp(
       widget.minScale,
       widget.maxScale,
@@ -347,7 +349,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     _stopSnapBack();
     final focal = event.localPosition;
     final start = widget.transformationController.value;
-    final currentScale = start.getMaxScaleOnAxis();
+    final currentScale = xyScale(start);
     final factor = math
         .pow(2.0, -event.scrollDelta.dy / _kMouseWheelPixelsPerUnit)
         .toDouble();

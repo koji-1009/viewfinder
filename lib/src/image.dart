@@ -199,7 +199,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     widget.controller?._bump();
   }
 
-  double get currentScale => _transformation.value.getMaxScaleOnAxis();
+  double get currentScale => xyScale(_transformation.value);
 
   ViewfinderScaleState get scaleState {
     const eps = 0.01;
@@ -216,7 +216,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     if (scaleState == ViewfinderScaleState.initial) return true;
     if (_viewportSize.isEmpty) return true;
     final m = _transformation.value;
-    final scale = m.getMaxScaleOnAxis();
+    final scale = xyScale(m);
     final tx = m.storage[12];
     final minTx = _viewportSize.width - scale * _viewportSize.width;
     const epsilon = 0.5;

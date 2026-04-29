@@ -104,6 +104,47 @@ void main() {
     expect(controller.scale, closeTo(2.0, 0.001));
   });
 
+  testWidgets('ViewfinderImageController.scale reports the X/Y scale, not '
+      'getMaxScaleOnAxis (which Z=1 would mask when shrunk)', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            controller: controller,
+            minScale: 0.25,
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Pinch-shrink. Without the fix, controller.scale would still
+    // return 1.0 (Matrix4.getMaxScaleOnAxis sees the Z=1 column and
+    // hides the X/Y shrink), and the lower clamp would never fire.
+    final viewer = find.byType(ZoomableViewport);
+    final center = tester.getCenter(viewer);
+    final a = await tester.startGesture(
+      center - const Offset(150, 0),
+      pointer: 1,
+    );
+    final b = await tester.startGesture(
+      center + const Offset(150, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await a.moveBy(const Offset(120, 0));
+    await b.moveBy(const Offset(-120, 0));
+    await tester.pump();
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+
+    expect(controller.scale, lessThan(0.6));
+    expect(controller.scale, greaterThanOrEqualTo(0.25));
+  });
+
   testWidgets('Viewfinder with child items renders the child', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

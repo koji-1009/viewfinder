@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,6 +113,56 @@ void main() {
 
       // Scale was clamped to maxScale (= 3), not left at ~30.
       expect(controller.value.getMaxScaleOnAxis(), closeTo(3.0, 0.01));
+    });
+
+    testWidgets('pinch shrink past minScale clamps the matrix scale', (
+      tester,
+    ) async {
+      // Regression: the prior implementation clamped on
+      // Matrix4.getMaxScaleOnAxis() which is dominated by the Z column
+      // (always 1.0 in our 2D matrices) and so silently failed to
+      // enforce the lower scale bound — pinch-shrink could drive
+      // the X/Y scale below 1.
+      final controller = TransformationController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomableViewport(
+              transformationController: controller,
+              child: Container(color: Colors.blue),
+            ),
+          ),
+        ),
+      );
+
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+      // Two fingers starting wide, pinching together — would shrink
+      // X/Y to ~0.13 without the clamp.
+      final a = await tester.startGesture(
+        center - const Offset(150, 0),
+        pointer: 1,
+      );
+      final b = await tester.startGesture(
+        center + const Offset(150, 0),
+        pointer: 2,
+      );
+      await tester.pump();
+      await a.moveBy(const Offset(130, 0));
+      await b.moveBy(const Offset(-130, 0));
+      await tester.pump();
+      await a.up();
+      await b.up();
+      await tester.pumpAndSettle();
+
+      // Read the actual X-column length so the assertion catches a
+      // regression where Z=1 hides the X/Y shrink.
+      final m = controller.value;
+      final xColLen = math.sqrt(
+        m.storage[0] * m.storage[0] +
+            m.storage[1] * m.storage[1] +
+            m.storage[2] * m.storage[2],
+      );
+      expect(xColLen, closeTo(1.0, 0.01));
     });
 
     testWidgets('new gesture mid-fling stops the fling cleanly', (
