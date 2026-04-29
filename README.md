@@ -13,7 +13,7 @@ Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryI
 
 ## Highlights
 
-* **Native-feel gestures end-to-end** — pinch, pan, fling, double-tap-and-drag continuous zoom (iOS Photos style), two-finger rotation (opt-in). Rubber-band over-pan with diminishing returns at the edges, `FrictionSimulation`-driven post-release fling, both tunable per widget.
+* **Native-feel gestures end-to-end** — pinch, pan, fling on both pan and scale, double-tap-and-drag continuous zoom (iOS Photos style), two-finger rotation (opt-in). Rubber-band over-pan with diminishing returns at the edges, `FrictionSimulation`-driven post-release inertia on translation and scale, both tunable per widget.
 * **Built for every input** — touch, stylus, trackpad, mouse, and hardware keyboard (Arrow / PageUp / PageDown / Esc) all wired in by default. Mouse wheel zooms around the pointer; mouse drag swipes pages on web and desktop out of the box.
 * **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis.
 * **Gallery affordances included** — `Viewfinder.images([...])` takes you from a list of `ImageProvider`s to a full gallery; thumbnail strip (4 positions or fully custom), page indicator (dots or `1 / N`), drag-to-dismiss with `wholePage` / `onlyImage` slide modes, tap-to-toggle chrome controller. All opt-in via dedicated config objects.
@@ -86,7 +86,7 @@ ViewfinderImage.child(
 * **Zoom & pan** — pinch, two-finger rotation (opt-in), double-tap ladder (`doubleTapScales: [1, 2.5, 5]`), double-tap-and-drag continuous zoom (iOS Photos style).
 * **Rubber-band edges** — when a zoomed photo is pulled past its boundary, the displacement diminishes elastically and snaps back on release.
 * **Arena-aware edge hand-off** — when a zoomed photo is panned against its edge, the custom gesture recognizer yields the pointer so a parent `PageView` continues the swipe without releasing. Works on `Axis.horizontal` or `Axis.vertical` via `Viewfinder.pagerAxis`.
-* **Fling** — post-release inertia via Flutter's `FrictionSimulation` with `kViewfinderDefaultFlingDrag = 0.0000135`, overridable per widget through `interactionEndFrictionCoefficient`.
+* **Fling** — post-release inertia on both pan and scale via Flutter's `FrictionSimulation` (one simulation per axis: X, Y, scale) with `kViewfinderDefaultFlingDrag = 0.0000135`, overridable per widget through `interactionEndFrictionCoefficient`. Pinch out fast and release: scale continues to grow with momentum, anchored to the focal point at release; pan momentum continues independently.
 * **Drag-to-dismiss** — `ViewfinderDismiss(onDismiss: …)`. Auto-disabled while zoomed. Background fades with drag. `slideType` picks between `wholePage` (thumbnails slide too) and `onlyImage` (thumbnails stay anchored). `onProgress` reports normalized drag progress (incl. spring-back) so callers can fade their own chrome.
 * **Thumbnail strip** — `ViewfinderThumbnails(position: …)` at top / bottom / left / right, or `.custom(itemBuilder: …)` for full control.
 * **Page indicator** — `ViewfinderPageIndicator()` draws dots, switches to a `1 / N` label above `maxDots`.

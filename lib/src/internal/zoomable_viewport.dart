@@ -36,6 +36,11 @@ const double kViewfinderDefaultFlingDrag = 0.0000135;
 /// that correspond to 1× scale change.
 const double _kDoubleTapDragPixelsPerUnit = 150.0;
 
+/// Minimum pinch scale velocity (factor / second) required to start a
+/// scale fling on release. Below this the scale snaps to where the user
+/// released. Symmetric with [kMinFlingVelocity] (50 px/sec) for pan.
+const double _kMinScaleFlingVelocity = 0.3;
+
 /// The zoom-and-pan surface that backs the photo viewer.
 ///
 /// - Focal-preserving pinch/pan/rotate via a custom
@@ -117,6 +122,10 @@ class _ZoomableViewportState extends State<ZoomableViewport>
   // Gesture-start snapshot for scale/pan/rotate.
   Matrix4 _startMatrix = Matrix4.identity();
   Offset _startFocalViewport = Offset.zero;
+  // Most recent focal during the live gesture. Captured because
+  // ScaleEndDetails carries velocity but not the final focal — and the
+  // post-release scale fling needs to know what to anchor scaling to.
+  Offset _lastGestureFocal = Offset.zero;
   bool _inGesture = false;
 
   // Double-tap-drag snapshot.
@@ -218,6 +227,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     _stopSnapBack();
     _startMatrix = widget.transformationController.value.clone();
     _startFocalViewport = d.localFocalPoint;
+    _lastGestureFocal = d.localFocalPoint;
     _inGesture = true;
   }
 
@@ -225,6 +235,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     if (!_inGesture) return;
 
     final focalCurrent = d.localFocalPoint;
+    _lastGestureFocal = focalCurrent;
     final scale = widget.scaleEnabled ? d.scale : 1.0;
     final rotation = widget.rotateEnabled ? d.rotation : 0.0;
 
@@ -271,30 +282,55 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       return;
     }
     final v = d.velocity.pixelsPerSecond;
-    if (v.distance < kMinFlingVelocity) {
-      _snapBackIfOverPan();
-      return;
-    }
+    final scaleV = d.scaleVelocity;
     final m = widget.transformationController.value;
-    if (xyScale(m) <= 1.01) {
+    final currentScale = xyScale(m);
+
+    // Pan fling only meaningful when the content actually overflows the
+    // viewport — at content == viewport size there is no over-pan room.
+    final hasPanFling = v.distance >= kMinFlingVelocity && currentScale > 1.01;
+    // Scale fling: any time the user released with meaningful pinch
+    // velocity, regardless of current scale (including when starting
+    // exactly at minScale).
+    final hasScaleFling = scaleV.abs() >= _kMinScaleFlingVelocity;
+
+    if (!hasPanFling && !hasScaleFling) {
       _snapBackIfOverPan();
       return;
     }
-    _startFling(m, v);
+
+    _startFling(
+      m,
+      hasPanFling ? v : Offset.zero,
+      hasScaleFling ? scaleV : 0.0,
+      currentScale,
+    );
   }
 
-  void _startFling(Matrix4 from, Offset velocity) {
+  void _startFling(
+    Matrix4 from,
+    Offset velocity,
+    double scaleVelocity,
+    double startScale,
+  ) {
     final start = from.clone();
     final runner = _FlingRunner(
       startMatrix: start,
       position: Offset(start.storage[12], start.storage[13]),
       velocity: velocity,
       drag: widget.interactionEndFrictionCoefficient,
+      startScale: startScale,
+      scaleVelocity: scaleVelocity,
+      focal: _lastGestureFocal,
+      minScale: widget.minScale,
+      maxScale: widget.maxScale,
     );
     _runner = runner;
     _flingController
       ..stop()
-      ..animateWith(_FlingTimeDriver(runner.simX, runner.simY));
+      ..animateWith(
+        _FlingTimeDriver(runner.simX, runner.simY, runner.simScale),
+      );
   }
 
   // ---------------- double-tap-drag ---------------- //
@@ -799,31 +835,105 @@ class _FlingRunner {
     required Offset position,
     required Offset velocity,
     required double drag,
+    required this.startScale,
+    required double scaleVelocity,
+    required this.focal,
+    required this.minScale,
+    required this.maxScale,
   }) : simX = FrictionSimulation(drag, position.dx, velocity.dx),
-       simY = FrictionSimulation(drag, position.dy, velocity.dy);
+       simY = FrictionSimulation(drag, position.dy, velocity.dy),
+       simScale = FrictionSimulation(drag, startScale, scaleVelocity);
 
   final Matrix4 startMatrix;
   final FrictionSimulation simX;
   final FrictionSimulation simY;
+  final FrictionSimulation simScale;
+  final double startScale;
+  final double minScale;
+  final double maxScale;
+  final Offset focal;
 
-  bool isDoneAt(double t) => simX.isDone(t) && simY.isDone(t);
+  bool isDoneAt(double t) =>
+      simX.isDone(t) && simY.isDone(t) && simScale.isDone(t);
 
   Matrix4 matrixAt(double t) {
-    final m = startMatrix.clone();
-    m.storage[12] = simX.x(t);
-    m.storage[13] = simY.x(t);
+    // Scale change since release, applied as a delta around the focal
+    // point captured at release.
+    final scaleNow = simScale.x(t).clamp(minScale, maxScale);
+    final scaleFactor = scaleNow / startScale;
+    final delta = Matrix4.identity()
+      ..translateByDouble(focal.dx, focal.dy, 0, 1)
+      ..scaleByDouble(scaleFactor, scaleFactor, 1, 1)
+      ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
+    final m = delta.multiplied(startMatrix);
+
+    // Pan displacement from gesture-end to t, layered on top of the
+    // scaled matrix's translation.
+    m.storage[12] += simX.x(t) - simX.x(0);
+    m.storage[13] += simY.x(t) - simY.x(0);
+
     return m;
   }
 }
 
 class _FlingTimeDriver extends Simulation {
-  _FlingTimeDriver(this.simX, this.simY);
+  _FlingTimeDriver(this.simX, this.simY, this.simScale);
   final FrictionSimulation simX;
   final FrictionSimulation simY;
+  final FrictionSimulation simScale;
   @override
   double x(double time) => time;
   @override
   double dx(double time) => 1.0;
   @override
-  bool isDone(double time) => simX.isDone(time) && simY.isDone(time);
+  bool isDone(double time) =>
+      simX.isDone(time) && simY.isDone(time) && simScale.isDone(time);
+}
+
+/// Test-only access to internals that are otherwise private. Lives in
+/// the production file so `_FlingRunner` can stay file-private; the
+/// test imports `ViewfinderTestHooks` to construct one directly. The
+/// test framework cannot drive Flutter's pinch `VelocityTracker`
+/// strongly enough to populate `ScaleEndDetails.scaleVelocity`, so the
+/// scale-fling math has to be exercised here instead of through a
+/// real gesture.
+@visibleForTesting
+abstract class ViewfinderTestHooks {
+  /// Returns an opaque object whose `matrixAt(double t)` reproduces
+  /// the fling math at simulation time `t`.
+  static FlingRunnerForTest makeFlingRunner({
+    required Matrix4 startMatrix,
+    required Offset position,
+    required Offset velocity,
+    required double drag,
+    required double startScale,
+    required double scaleVelocity,
+    required Offset focal,
+    required double minScale,
+    required double maxScale,
+  }) {
+    final r = _FlingRunner(
+      startMatrix: startMatrix,
+      position: position,
+      velocity: velocity,
+      drag: drag,
+      startScale: startScale,
+      scaleVelocity: scaleVelocity,
+      focal: focal,
+      minScale: minScale,
+      maxScale: maxScale,
+    );
+    return FlingRunnerForTest._(r);
+  }
+}
+
+/// Thin test-only handle around the internal fling runner. Keeps the
+/// runner class itself file-private.
+@visibleForTesting
+class FlingRunnerForTest {
+  FlingRunnerForTest._(this._inner);
+  final _FlingRunner _inner;
+
+  Matrix4 matrixAt(double t) => _inner.matrixAt(t);
+  bool isDoneAt(double t) => _inner.isDoneAt(t);
 }

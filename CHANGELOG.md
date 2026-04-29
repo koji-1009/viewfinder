@@ -2,7 +2,7 @@
 
 * Initial release.
 * `Viewfinder` gallery (`PageView`-backed, horizontal or vertical `pagerAxis`) and `ViewfinderImage` / `.child` single viewer.
-* Pinch, pan, double-tap ladder, double-tap-drag continuous zoom, opt-in two-finger rotation; fling via `FrictionSimulation`.
+* Pinch, pan, double-tap ladder, double-tap-drag continuous zoom, opt-in two-finger rotation; post-release fling on both pan and scale via `FrictionSimulation` (X / Y / scale axes), anchored to the focal point captured at release.
 * Rubber-band elastic edges — pulling a zoomed image past its boundary shows live elastic over-pan with diminishing returns, then animates back on release.
 * Custom `ZoomableViewport` gesture layer that yields edge pans to the parent scrollable via `canPan(Axis, int)`. Yields single-pointer drags along the pager axis when not zoomed, so mouse-drag and trackpad-drag swipe pages on web/desktop.
 * `Viewfinder.swipeDragDevices` — explicit pointer-kind set for the underlying `PageView`. Defaults to all kinds (`kViewfinderDefaultSwipeDragDevices`) — overrides Flutter's default `ScrollBehavior` which excludes mouse on web/desktop.

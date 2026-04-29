@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
 
+double _xyScaleOf(Matrix4 m) {
+  final s = m.storage;
+  return math.sqrt(s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
+}
+
 void main() {
   group('ZoomableViewport pinch-to-zoom via scale gestures', () {
     testWidgets('two-finger pinch scales around focal point', (tester) async {
@@ -77,6 +82,76 @@ void main() {
       );
       await tester.pumpAndSettle();
     });
+
+    testWidgets('FlingRunner matrixAt grows scale over time when seeded with '
+        'scaleVelocity (unit test on the fling math)', (tester) async {
+      // Direct test on the internal runner. The widget test framework
+      // does not feed Flutter's pinch VelocityTracker enough samples
+      // for ScaleEndDetails.scaleVelocity to be non-zero, so the
+      // end-to-end "real pinch" path can't exercise scale fling. This
+      // test instead verifies the math: given a non-zero scale
+      // velocity at release, FrictionSimulation drives the matrix's
+      // scale upward over time, anchored to the focal point.
+      final start = Matrix4.identity()..scaleByDouble(2, 2, 1, 1);
+      final runner = ViewfinderTestHooks.makeFlingRunner(
+        startMatrix: start,
+        position: Offset.zero,
+        velocity: Offset.zero,
+        drag: kViewfinderDefaultFlingDrag,
+        startScale: 2.0,
+        scaleVelocity: 50.0,
+        focal: const Offset(200, 200),
+        minScale: 1.0,
+        maxScale: 8.0,
+      );
+
+      final m0 = runner.matrixAt(0);
+      final m100 = runner.matrixAt(0.1);
+      final m500 = runner.matrixAt(0.5);
+
+      expect(_xyScaleOf(m0), closeTo(2.0, 0.001));
+      expect(_xyScaleOf(m100), greaterThan(_xyScaleOf(m0)));
+      expect(_xyScaleOf(m500), greaterThan(_xyScaleOf(m100)));
+    });
+
+    testWidgets('FlingRunner clamps the simulated scale to maxScale', (
+      tester,
+    ) async {
+      final start = Matrix4.identity()..scaleByDouble(2.8, 2.8, 1, 1);
+      final runner = ViewfinderTestHooks.makeFlingRunner(
+        startMatrix: start,
+        position: Offset.zero,
+        velocity: Offset.zero,
+        drag: kViewfinderDefaultFlingDrag,
+        startScale: 2.8,
+        scaleVelocity: 100.0,
+        focal: const Offset(200, 200),
+        minScale: 1.0,
+        maxScale: 3.0,
+      );
+      final m1000 = runner.matrixAt(1.0);
+      expect(_xyScaleOf(m1000), lessThanOrEqualTo(3.0 + 0.01));
+    });
+
+    testWidgets(
+      'FlingRunner with zero scaleVelocity preserves the start scale',
+      (tester) async {
+        final start = Matrix4.identity()..scaleByDouble(3, 3, 1, 1);
+        final runner = ViewfinderTestHooks.makeFlingRunner(
+          startMatrix: start,
+          position: Offset.zero,
+          velocity: Offset.zero,
+          drag: kViewfinderDefaultFlingDrag,
+          startScale: 3.0,
+          scaleVelocity: 0.0,
+          focal: const Offset(200, 200),
+          minScale: 1.0,
+          maxScale: 8.0,
+        );
+        final m500 = runner.matrixAt(0.5);
+        expect(_xyScaleOf(m500), closeTo(3.0, 0.001));
+      },
+    );
 
     testWidgets('pinch past maxScale clamps the matrix scale', (tester) async {
       final controller = TransformationController();
