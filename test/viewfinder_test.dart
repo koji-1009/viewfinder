@@ -1224,6 +1224,105 @@ void main() {
     expect(imageController.canSwipeHorizontally, isTrue);
   });
 
+  testWidgets('ViewfinderImageController.canSwipeVertically mirrors '
+      'canSwipeHorizontally on the Y axis', (tester) async {
+    final imageController = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            controller: imageController,
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    expect(imageController.canSwipeVertically, isTrue);
+
+    imageController.animateToScale(3.0);
+    await tester.pumpAndSettle();
+    expect(
+      imageController.canSwipeVertically,
+      isFalse,
+      reason: 'zoomed and centered: off both vertical edges',
+    );
+
+    imageController.reset();
+    await tester.pumpAndSettle();
+    expect(imageController.canSwipeVertically, isTrue);
+  });
+
+  testWidgets('Viewfinder: vertical pager + zoomed page locks the pager '
+      'when the image is off both vertical edges', (tester) async {
+    // Regression: the gallery used to consult canSwipeHorizontally
+    // regardless of pagerAxis, so a vertical pager would unlock the
+    // pager on horizontal-edge state (wrong axis) and lock it on
+    // vertical-edge state in the wrong direction. Verify the lock
+    // now follows pagerAxis.
+    final galleryController = ViewfinderController();
+    final imageControllers = <int, ViewfinderImageController>{};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 3,
+            controller: galleryController,
+            pagerAxis: Axis.vertical,
+            itemBuilder: (_, i) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Reach into the active ViewfinderImage's controller via the
+    // PageView's currently-built page. The state tree exposes it via
+    // the GestureDetector → ZoomableViewport hierarchy, but the
+    // simplest hook is to drive the zoom through a real gesture.
+    final viewer = find.byType(ZoomableViewport).first;
+    final center = tester.getCenter(viewer);
+    // Pinch out to ~3x.
+    final p1 = await tester.startGesture(
+      center - const Offset(20, 0),
+      pointer: 1,
+    );
+    final p2 = await tester.startGesture(
+      center + const Offset(20, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await p1.moveTo(center - const Offset(120, 0));
+    await p2.moveTo(center + const Offset(120, 0));
+    await tester.pump();
+    await p1.up();
+    await p2.up();
+    await tester.pumpAndSettle();
+    // Sanity: didn't accidentally page-swipe via the pinch.
+    expect(galleryController.currentIndex, 0);
+
+    // Now try to swipe vertically as if to advance pages. The image
+    // is zoomed and centered (off both vertical edges) so the pager
+    // should be locked — index stays at 0.
+    await tester.fling(
+      find.byType(PageView),
+      const Offset(0, -300),
+      800,
+      deviceKind: PointerDeviceKind.touch,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      galleryController.currentIndex,
+      0,
+      reason:
+          'zoomed off vertical edges: vertical pager swipe must stay locked',
+    );
+    // Suppress unused-warning on imageControllers (kept for future
+    // expansion of this regression test).
+    expect(imageControllers, isEmpty);
+  });
+
   testWidgets('ViewfinderImage: PointerCancel during drag does not crash', (
     tester,
   ) async {

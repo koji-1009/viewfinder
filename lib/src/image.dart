@@ -223,6 +223,20 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     return tx >= -epsilon || tx <= minTx + epsilon;
   }
 
+  /// Vertical-axis counterpart of [canSwipeHorizontally] — true when the
+  /// image is at its initial scale or panned against one of its vertical
+  /// edges. The gallery consults this when its `pagerAxis` is vertical.
+  bool get canSwipeVertically {
+    if (scaleState == ViewfinderScaleState.initial) return true;
+    if (_viewportSize.isEmpty) return true;
+    final m = _transformation.value;
+    final scale = xyScale(m);
+    final ty = m.storage[13];
+    final minTy = _viewportSize.height - scale * _viewportSize.height;
+    const epsilon = 0.5;
+    return ty >= -epsilon || ty <= minTy + epsilon;
+  }
+
   void _animateTo(Matrix4 target) {
     _animation = Matrix4Tween(begin: _transformation.value, end: target)
         .animate(
@@ -429,6 +443,10 @@ class ViewfinderImageController extends ChangeNotifier {
   /// True when a horizontal page swipe can reasonably take over.
   /// See [_ViewfinderImageState.canSwipeHorizontally] for the exact rule.
   bool get canSwipeHorizontally => _state?.canSwipeHorizontally ?? true;
+
+  /// Vertical counterpart of [canSwipeHorizontally]; consulted when the
+  /// gallery's `pagerAxis` is vertical.
+  bool get canSwipeVertically => _state?.canSwipeVertically ?? true;
 
   /// Animate back to the initial transform.
   void reset() => _state?.reset();

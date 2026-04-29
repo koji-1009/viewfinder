@@ -26,7 +26,10 @@ class ViewfinderDismiss {
     this.onProgress,
   });
 
-  /// Invoked after the user releases past [threshold].
+  /// Invoked after the user releases past [threshold]. The widget itself
+  /// does not pop the route or otherwise unmount — the callback owns that
+  /// step. Failing to remove the widget here will leave the gallery in
+  /// its dragged-out, partially translucent state.
   final VoidCallback onDismiss;
 
   final ViewfinderDismissDirection direction;

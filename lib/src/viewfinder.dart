@@ -329,12 +329,17 @@ class _ViewfinderState extends State<Viewfinder> {
     if (index != _currentIndex) return;
     final c = _imageControllers[index];
     if (c == null) return;
-    final lock = !c.canSwipeHorizontally;
+    final lock = !_canSwipeAlongPager(c);
     if (lock != _swipeLocked) {
       setState(() => _swipeLocked = lock);
     }
     _syncChromeWithZoom();
   }
+
+  bool _canSwipeAlongPager(ViewfinderImageController c) =>
+      widget.pagerAxis == Axis.horizontal
+      ? c.canSwipeHorizontally
+      : c.canSwipeVertically;
 
   /// Reset the current image's zoom if it's zoomed in. Returns true when
   /// a reset was performed — useful for intercepting custom back-button
@@ -455,7 +460,7 @@ class _ViewfinderState extends State<Viewfinder> {
       _currentIndex = index;
       // Re-derive swipe lock for the new page's current state.
       final c = _imageControllers[index];
-      _swipeLocked = c != null && !c.canSwipeHorizontally;
+      _swipeLocked = c != null && !_canSwipeAlongPager(c);
     });
     _controller._setIndex(index);
     widget.onPageChanged?.call(index);
@@ -526,7 +531,7 @@ class _ViewfinderState extends State<Viewfinder> {
       if (state == ViewfinderScaleState.initial) return false;
       // Zoomed and at the relevant edge: cede to PageView only if a
       // page exists in the drag direction (otherwise stay inside).
-      final atBoundary = imageController.canSwipeHorizontally;
+      final atBoundary = _canSwipeAlongPager(imageController);
       if (!atBoundary) return true;
       final targetIndex = _currentIndex + (sign > 0 ? -1 : 1);
       // sign > 0 = finger moved positive → content pulled right/down →
@@ -743,11 +748,11 @@ class _ViewfinderState extends State<Viewfinder> {
     // 2. When the pop does go through, snap all pages to identity in
     //    the callback *before* the Hero flight reads the source rect,
     //    so hero transitions stay coherent.
-    final anyZoomed =
+    final isCurrentZoomed =
         _imageControllers[_currentIndex]?.scaleState ==
         ViewfinderScaleState.zoomed;
     body = PopScope<Object?>(
-      canPop: !anyZoomed,
+      canPop: !isCurrentZoomed,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           _jumpAllImagesToInitial();
