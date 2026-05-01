@@ -18,7 +18,7 @@ enum ViewfinderDismissSlideType { wholePage, onlyImage }
 class ViewfinderDismiss {
   const ViewfinderDismiss({
     required this.onDismiss,
-    this.direction = ViewfinderDismissDirection.vertical,
+    this.direction = .vertical,
     this.threshold = 0.25,
     this.fadeBackground = true,
     this.backgroundColor = Colors.black,
@@ -83,7 +83,7 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
     _release =
         AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 180),
+          duration: const .new(milliseconds: 180),
         )..addListener(() {
           setState(() => _dragOffset *= 1 - _release.value);
           _reportProgress();
@@ -145,7 +145,7 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
     return ColoredBox(
       color: bg,
       child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+        behavior: .opaque,
         onVerticalDragUpdate: widget.enabled ? _handleDragUpdate : null,
         onVerticalDragEnd: widget.enabled ? _handleDragEnd : null,
         child: Transform.translate(

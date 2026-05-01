@@ -41,7 +41,7 @@ class ViewfinderImage extends StatefulWidget {
     this.canPan,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.semanticLabel,
-    this.thumbCrossFadeDuration = const Duration(milliseconds: 200),
+    this.thumbCrossFadeDuration = const .new(milliseconds: 200),
   }) : child = null,
        assert(minScale > 0),
        assert(maxScale >= minScale),
@@ -73,7 +73,7 @@ class ViewfinderImage extends StatefulWidget {
        filterQuality = .medium,
        loadingBuilder = null,
        errorBuilder = null,
-       thumbCrossFadeDuration = const Duration(milliseconds: 200),
+       thumbCrossFadeDuration = const .new(milliseconds: 200),
        assert(minScale > 0),
        assert(maxScale >= minScale),
        assert(interactionEndFrictionCoefficient > 0);
@@ -154,7 +154,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     _transformation = TransformationController(_initialMatrix());
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const .new(milliseconds: 220),
     )..addListener(_tickAnimation);
     _transformation.addListener(_notifyScaleChange);
     widget.controller?._attach(this);
@@ -289,78 +289,57 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (ctx, constraints) {
-        final viewport = Size(constraints.maxWidth, constraints.maxHeight);
-        if (_viewportSize != viewport) {
-          _viewportSize = viewport;
-          // Recompute derived state after layout settles so controller
-          // listeners see the fresh canSwipeHorizontally.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.controller?._bump();
-          });
-        }
-        return _buildContent(ctx, viewport);
-      },
-    );
-  }
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (ctx, constraints) {
+      final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+      if (_viewportSize != viewport) {
+        _viewportSize = viewport;
+        // Recompute derived state after layout settles so controller
+        // listeners see the fresh canSwipeHorizontally.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.controller?._bump();
+        });
+      }
+      return _ImageBody(
+        spec: widget,
+        transformation: _transformation,
+        onDoubleTapDown: _handleDoubleTapDown,
+        onDoubleTap: _handleDoubleTap,
+      );
+    },
+  );
+}
 
-  Widget _buildContent(BuildContext context, Size viewport) {
-    Widget content = switch (widget.image) {
-      final ImageProvider image => LayoutBuilder(
-        builder: (ctx, constraints) {
-          final size = Size(constraints.maxWidth, constraints.maxHeight);
-          Widget img = Image(
-            image: image,
-            fit: widget.initialScale.boxFit,
-            width: size.width,
-            height: size.height,
-            filterQuality: widget.filterQuality,
-            loadingBuilder: widget.loadingBuilder,
-            errorBuilder: widget.errorBuilder,
-            gaplessPlayback: true,
-            // When a thumb is provided, wrap the main image in a
-            // frame-aware fade-in so the thumb shows through until the
-            // main's first frame arrives.
-            frameBuilder: widget.thumbImage == null
-                ? null
-                : (context, child, frame, wasSyncLoaded) {
-                    return AnimatedOpacity(
-                      opacity: frame == null ? 0.0 : 1.0,
-                      duration: widget.thumbCrossFadeDuration,
-                      curve: Curves.easeOut,
-                      child: child,
-                    );
-                  },
-          );
-          if (widget.thumbImage case final thumb?) {
-            img = Stack(
-              fit: StackFit.expand,
-              children: [
-                Image(
-                  image: thumb,
-                  fit: widget.initialScale.boxFit,
-                  width: size.width,
-                  height: size.height,
-                  filterQuality: FilterQuality.low,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
-                img,
-              ],
-            );
-          }
-          if (widget.semanticLabel case final label?) {
-            img = Semantics(label: label, image: true, child: img);
-          }
-          return img;
-        },
+class _ImageBody extends StatelessWidget {
+  const _ImageBody({
+    required this.spec,
+    required this.transformation,
+    required this.onDoubleTapDown,
+    required this.onDoubleTap,
+  });
+
+  final ViewfinderImage spec;
+  final TransformationController transformation;
+  final GestureTapDownCallback onDoubleTapDown;
+  final GestureTapCallback onDoubleTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget content = switch (spec.image) {
+      final ImageProvider image => _ImageWithOptionalThumb(
+        image: image,
+        thumb: spec.thumbImage,
+        boxFit: spec.initialScale.boxFit,
+        filterQuality: spec.filterQuality,
+        loadingBuilder: spec.loadingBuilder,
+        errorBuilder: spec.errorBuilder,
+        thumbCrossFadeDuration: spec.thumbCrossFadeDuration,
+        semanticLabel: spec.semanticLabel,
       ),
-      _ => widget.child!,
+      _ => spec.child!,
     };
 
-    if (widget.hero case final hero?) {
+    if (spec.hero case final hero?) {
       content = Hero(
         tag: hero.tag,
         createRectTween: hero.createRectTween,
@@ -372,30 +351,101 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     }
 
     return ColoredBox(
-      color: widget.backgroundColor,
+      color: spec.backgroundColor,
       child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        onTapUp: widget.onTapUp,
-        onTapDown: widget.onTapDown,
-        onDoubleTapDown: _handleDoubleTapDown,
-        onDoubleTap: _handleDoubleTap,
+        behavior: .opaque,
+        onTap: spec.onTap,
+        onTapUp: spec.onTapUp,
+        onTapDown: spec.onTapDown,
+        onDoubleTapDown: onDoubleTapDown,
+        onDoubleTap: onDoubleTap,
         child: ZoomableViewport(
-          transformationController: _transformation,
-          minScale: widget.minScale,
-          maxScale: widget.maxScale,
-          panEnabled: widget.panEnabled,
-          scaleEnabled: widget.scaleEnabled,
-          rotateEnabled: widget.rotateEnabled,
-          clipBehavior: Clip.none,
+          transformationController: transformation,
+          minScale: spec.minScale,
+          maxScale: spec.maxScale,
+          panEnabled: spec.panEnabled,
+          scaleEnabled: spec.scaleEnabled,
+          rotateEnabled: spec.rotateEnabled,
+          clipBehavior: .none,
           interactionEndFrictionCoefficient:
-              widget.interactionEndFrictionCoefficient,
-          canPan: widget.canPan,
+              spec.interactionEndFrictionCoefficient,
+          canPan: spec.canPan,
           child: content,
         ),
       ),
     );
   }
+}
+
+class _ImageWithOptionalThumb extends StatelessWidget {
+  const _ImageWithOptionalThumb({
+    required this.image,
+    required this.thumb,
+    required this.boxFit,
+    required this.filterQuality,
+    required this.loadingBuilder,
+    required this.errorBuilder,
+    required this.thumbCrossFadeDuration,
+    required this.semanticLabel,
+  });
+
+  final ImageProvider image;
+  final ImageProvider? thumb;
+  final BoxFit boxFit;
+  final FilterQuality filterQuality;
+  final ImageLoadingBuilder? loadingBuilder;
+  final ImageErrorWidgetBuilder? errorBuilder;
+  final Duration thumbCrossFadeDuration;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (ctx, constraints) {
+      final size = Size(constraints.maxWidth, constraints.maxHeight);
+      Widget img = Image(
+        image: image,
+        fit: boxFit,
+        width: size.width,
+        height: size.height,
+        filterQuality: filterQuality,
+        loadingBuilder: loadingBuilder,
+        errorBuilder: errorBuilder,
+        gaplessPlayback: true,
+        // When a thumb is provided, wrap the main image in a
+        // frame-aware fade-in so the thumb shows through until the
+        // main's first frame arrives.
+        frameBuilder: thumb == null
+            ? null
+            : (context, child, frame, wasSyncLoaded) => AnimatedOpacity(
+                opacity: frame == null ? 0.0 : 1.0,
+                duration: thumbCrossFadeDuration,
+                curve: Curves.easeOut,
+                child: child,
+              ),
+      );
+      if (thumb case final t?) {
+        img = Stack(
+          fit: .expand,
+          children: [
+            Image(
+              image: t,
+              fit: boxFit,
+              width: size.width,
+              height: size.height,
+              filterQuality: .low,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+            img,
+          ],
+        );
+      }
+      if (semanticLabel case final label?) {
+        img = Semantics(label: label, image: true, child: img);
+      }
+      return img;
+    },
+  );
 }
 
 /// External control surface for a [ViewfinderImage].

@@ -61,7 +61,7 @@ class ZoomableViewport extends StatefulWidget {
     this.panEnabled = true,
     this.scaleEnabled = true,
     this.rotateEnabled = false,
-    this.clipBehavior = Clip.none,
+    this.clipBehavior = .none,
     this.onEdgeHit,
     this.canPan,
     this.fling = true,
@@ -151,7 +151,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       ..addListener(_onFlingTick);
     _snapBackController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const .new(milliseconds: 220),
     )..addListener(_onSnapBackTick);
   }
 
@@ -462,14 +462,14 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       if (minX > 0) {
         // Content's left has been pulled past the viewport's left.
         dx = elastic ? -minX + _rubberBand(minX, _viewport.width) : -minX;
-        if (reportEdge) widget.onEdgeHit?.call(Axis.horizontal, -1);
+        if (reportEdge) widget.onEdgeHit?.call(.horizontal, -1);
       } else if (maxX < _viewport.width) {
         // Content's right has been pulled past the viewport's right.
         final overshoot = _viewport.width - maxX;
         dx = elastic
             ? overshoot - _rubberBand(overshoot, _viewport.width)
             : overshoot;
-        if (reportEdge) widget.onEdgeHit?.call(Axis.horizontal, 1);
+        if (reportEdge) widget.onEdgeHit?.call(.horizontal, 1);
       }
     }
 
@@ -479,13 +479,13 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     } else {
       if (minY > 0) {
         dy = elastic ? -minY + _rubberBand(minY, _viewport.height) : -minY;
-        if (reportEdge) widget.onEdgeHit?.call(Axis.vertical, -1);
+        if (reportEdge) widget.onEdgeHit?.call(.vertical, -1);
       } else if (maxY < _viewport.height) {
         final overshoot = _viewport.height - maxY;
         dy = elastic
             ? overshoot - _rubberBand(overshoot, _viewport.height)
             : overshoot;
-        if (reportEdge) widget.onEdgeHit?.call(Axis.vertical, 1);
+        if (reportEdge) widget.onEdgeHit?.call(.vertical, 1);
       }
     }
 
@@ -559,12 +559,12 @@ class _ZoomableViewportState extends State<ZoomableViewport>
                 : null,
             child: RawGestureDetector(
               gestures: _buildGestures(),
-              behavior: HitTestBehavior.opaque,
+              behavior: .opaque,
               child: AnimatedBuilder(
                 animation: widget.transformationController,
                 builder: (_, child) => Transform(
                   transform: widget.transformationController.value,
-                  alignment: Alignment.topLeft,
+                  alignment: .topLeft,
                   child: child,
                 ),
                 child: SizedBox.fromSize(size: size, child: widget.child),
@@ -632,16 +632,16 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
           // consumable (image at edge, parent scroller should win).
           if (delta.dx.abs() > delta.dy.abs()) {
             final sign = delta.dx >= 0 ? 1 : -1;
-            if (!canPanAt(Axis.horizontal, sign)) {
-              resolvePointer(event.pointer, GestureDisposition.rejected);
+            if (!canPanAt(.horizontal, sign)) {
+              resolvePointer(event.pointer, .rejected);
               stopTrackingPointer(event.pointer);
               _tracked.remove(event.pointer);
               return;
             }
           } else if (delta.dy.abs() > delta.dx.abs()) {
             final sign = delta.dy >= 0 ? 1 : -1;
-            if (!canPanAt(Axis.vertical, sign)) {
-              resolvePointer(event.pointer, GestureDisposition.rejected);
+            if (!canPanAt(.vertical, sign)) {
+              resolvePointer(event.pointer, .rejected);
               stopTrackingPointer(event.pointer);
               _tracked.remove(event.pointer);
               return;
@@ -736,7 +736,7 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
       // user is actually trying to pinch, not single-finger-drag after
       // a double tap. Yield immediately so ScaleGestureRecognizer can
       // claim both pointers.
-      resolve(GestureDisposition.rejected);
+      resolve(.rejected);
       _reset();
     }
   }
@@ -752,7 +752,7 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
         final drift = (event.localPosition - _secondTapStart!).distance;
         if (drift > kTouchSlop) {
           _state = _State.dragging;
-          resolve(GestureDisposition.accepted);
+          resolve(.accepted);
           onDragStart?.call(_secondTapStart!);
           onDragUpdate?.call(event.localPosition);
         }
@@ -761,7 +761,7 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
         // If the user moved more than a touch-slop during tap 1, this
         // is a pan, not a tap. Yield so the scale recognizer can claim.
         if (drift > kTouchSlop) {
-          resolve(GestureDisposition.rejected);
+          resolve(.rejected);
           _reset();
           stopTrackingPointer(event.pointer);
         }
@@ -774,12 +774,12 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
         // can fire for a plain single tap. DTD's own state survives
         // across the gap, ready to claim a possible second tap (which
         // starts its own arena).
-        resolve(GestureDisposition.rejected);
+        resolve(.rejected);
         stopTrackingPointer(event.pointer);
       } else if (_state == _State.tap2Down) {
         // Second tap released without drag → this is a plain double-tap.
         // Back out so the parent GestureDetector's onDoubleTap can win.
-        resolve(GestureDisposition.rejected);
+        resolve(.rejected);
         _reset();
         stopTrackingPointer(event.pointer);
       } else if (_state == _State.dragging) {
@@ -791,7 +791,7 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
       }
     } else if (event is PointerCancelEvent) {
       if (_state == _State.dragging) onDragEnd?.call();
-      resolve(GestureDisposition.rejected);
+      resolve(.rejected);
       _reset();
       stopTrackingPointer(event.pointer);
     }

@@ -22,7 +22,7 @@ class ViewfinderThumbnails {
       BorderSide(color: Colors.white, width: 2),
     ),
     this.unselectedOpacity = 0.55,
-    this.backgroundColor = const Color(0x8A000000),
+    this.backgroundColor = const .new(0x8A000000),
     this.itemBuilder,
   });
 
@@ -72,12 +72,12 @@ class ViewfinderThumbnails {
 
 class _CustomThumbnails extends ViewfinderThumbnails {
   const _CustomThumbnails({
-    super.position = ViewfinderThumbnailPosition.bottom,
+    super.position = .bottom,
     super.size = 56,
     super.spacing = 4,
-    super.padding = const EdgeInsets.all(8),
+    super.padding = const .all(8),
     super.safeArea = true,
-    super.backgroundColor = const Color(0x8A000000),
+    super.backgroundColor = const .new(0x8A000000),
     required ViewfinderThumbnailItemBuilder itemBuilder,
   }) : super(itemBuilder: itemBuilder);
 }
@@ -133,61 +133,8 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     );
     _scrollController.animateTo(
       desired,
-      duration: const Duration(milliseconds: 200),
+      duration: const .new(milliseconds: 200),
       curve: Curves.easeOut,
-    );
-  }
-
-  Widget _buildTile(BuildContext context, int i, double dpr) {
-    final cfg = widget.config;
-    final selected = i == widget.currentIndex;
-    final Widget inner = switch (cfg.itemBuilder) {
-      final ViewfinderThumbnailItemBuilder builder => builder(
-        context,
-        i,
-        selected,
-      ),
-      _ => _defaultDecoratedTile(widget.itemAt(i), dpr, selected),
-    };
-    return Padding(
-      padding: cfg.isHorizontal
-          ? EdgeInsets.only(right: cfg.spacing)
-          : EdgeInsets.only(bottom: cfg.spacing),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => widget.onSelect(i),
-        child: inner,
-      ),
-    );
-  }
-
-  Widget _defaultDecoratedTile(ViewfinderItem item, double dpr, bool selected) {
-    final cfg = widget.config;
-    // Thumbnails are visually constrained to `cfg.size` logical px on
-    // both axes, so we decode at that size × DPR regardless of the
-    // source resolution. The main viewer's decode size is left alone.
-    final thumbPx = (cfg.size * dpr).ceil();
-    final Widget img = switch (item.image) {
-      final ImageProvider image => Image(
-        image: ResizeImage(image, width: thumbPx, height: thumbPx),
-        fit: .cover,
-        width: cfg.size,
-        height: cfg.size,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => Container(color: Colors.white12),
-      ),
-      _ => SizedBox(width: cfg.size, height: cfg.size, child: item.child),
-    };
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 150),
-      opacity: selected ? 1.0 : cfg.unselectedOpacity,
-      child: Container(
-        width: cfg.size,
-        height: cfg.size,
-        decoration: BoxDecoration(border: selected ? cfg.selectedBorder : null),
-        clipBehavior: .hardEdge,
-        child: img,
-      ),
     );
   }
 
@@ -198,11 +145,18 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
 
     final list = ListView.builder(
       controller: _scrollController,
-      scrollDirection: cfg.isHorizontal ? Axis.horizontal : Axis.vertical,
+      scrollDirection: cfg.isHorizontal ? .horizontal : .vertical,
       padding: cfg.padding,
       itemCount: widget.itemCount,
       itemExtent: cfg.size + cfg.spacing,
-      itemBuilder: (context, i) => _buildTile(context, i, dpr),
+      itemBuilder: (context, i) => _ThumbnailTile(
+        config: cfg,
+        item: widget.itemAt(i),
+        index: i,
+        selected: i == widget.currentIndex,
+        dpr: dpr,
+        onTap: () => widget.onSelect(i),
+      ),
     );
 
     final barH = cfg.size + cfg.padding.top + cfg.padding.bottom;
@@ -221,14 +175,106 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
         // plus the perpendicular edges get the inset — so the bar hugs
         // the main content on the inner edge but keeps clear of notches
         // and the home indicator.
-        top: pos == ViewfinderThumbnailPosition.top || !cfg.isHorizontal,
-        bottom: pos == ViewfinderThumbnailPosition.bottom || !cfg.isHorizontal,
-        left: pos == ViewfinderThumbnailPosition.left || cfg.isHorizontal,
-        right: pos == ViewfinderThumbnailPosition.right || cfg.isHorizontal,
+        top: pos == .top || !cfg.isHorizontal,
+        bottom: pos == .bottom || !cfg.isHorizontal,
+        left: pos == .left || cfg.isHorizontal,
+        right: pos == .right || cfg.isHorizontal,
         child: content,
       );
     }
 
     return ColoredBox(color: cfg.backgroundColor, child: content);
+  }
+}
+
+class _ThumbnailTile extends StatelessWidget {
+  const _ThumbnailTile({
+    required this.config,
+    required this.item,
+    required this.index,
+    required this.selected,
+    required this.dpr,
+    required this.onTap,
+  });
+
+  final ViewfinderThumbnails config;
+  final ViewfinderItem item;
+  final int index;
+  final bool selected;
+  final double dpr;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final inner = switch (config.itemBuilder) {
+      final ViewfinderThumbnailItemBuilder builder =>
+        builder(context, index, selected),
+      _ => _DefaultThumbnailTile(
+        config: config,
+        item: item,
+        selected: selected,
+        dpr: dpr,
+      ),
+    };
+    return Padding(
+      padding: config.isHorizontal
+          ? .only(right: config.spacing)
+          : .only(bottom: config.spacing),
+      child: GestureDetector(
+        behavior: .opaque,
+        onTap: onTap,
+        child: inner,
+      ),
+    );
+  }
+}
+
+class _DefaultThumbnailTile extends StatelessWidget {
+  const _DefaultThumbnailTile({
+    required this.config,
+    required this.item,
+    required this.selected,
+    required this.dpr,
+  });
+
+  final ViewfinderThumbnails config;
+  final ViewfinderItem item;
+  final bool selected;
+  final double dpr;
+
+  @override
+  Widget build(BuildContext context) {
+    // Thumbnails are visually constrained to `config.size` logical px on
+    // both axes, so we decode at that size × DPR regardless of the
+    // source resolution. The main viewer's decode size is left alone.
+    final thumbPx = (config.size * dpr).ceil();
+    final Widget img = switch (item.image) {
+      final ImageProvider image => Image(
+        image: ResizeImage(image, width: thumbPx, height: thumbPx),
+        fit: .cover,
+        width: config.size,
+        height: config.size,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => Container(color: Colors.white12),
+      ),
+      _ => SizedBox(
+        width: config.size,
+        height: config.size,
+        child: item.child,
+      ),
+    };
+    return AnimatedOpacity(
+      duration: const .new(milliseconds: 150),
+      opacity: selected ? 1.0 : config.unselectedOpacity,
+      child: Container(
+        width: config.size,
+        height: config.size,
+        decoration: BoxDecoration(
+          border: selected ? config.selectedBorder : null,
+        ),
+        clipBehavior: .hardEdge,
+        child: img,
+      ),
+    );
   }
 }

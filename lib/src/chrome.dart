@@ -16,7 +16,7 @@ import 'package:flutter/foundation.dart';
 class ViewfinderChromeController extends ChangeNotifier {
   ViewfinderChromeController({
     bool initialVisible = true,
-    this.autoHideAfter = const Duration(seconds: 3),
+    this.autoHideAfter = const .new(seconds: 3),
     this.autoHideWhileZoomed = true,
   }) : _visible = initialVisible {
     if (_visible) _restartTimer();

@@ -7,6 +7,7 @@ import 'dismiss.dart';
 import 'hero.dart';
 import 'image.dart';
 import 'initial_scale.dart';
+import 'internal/zoomable_viewport.dart';
 import 'item.dart';
 import 'page_indicator.dart';
 import 'thumbnails.dart';
@@ -41,7 +42,7 @@ class Viewfinder extends StatefulWidget {
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.chromeController,
     this.chromeOverlays = const <Widget>[],
-    this.chromeFadeDuration = const Duration(milliseconds: 220),
+    this.chromeFadeDuration = const .new(milliseconds: 220),
     this.pagerAxis = .horizontal,
     this.swipeDragDevices = kViewfinderDefaultSwipeDragDevices,
   }) : assert(itemCount >= 0),
@@ -81,8 +82,8 @@ class Viewfinder extends StatefulWidget {
     double interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     ViewfinderChromeController? chromeController,
     List<Widget> chromeOverlays = const <Widget>[],
-    Duration chromeFadeDuration = const Duration(milliseconds: 220),
-    Axis pagerAxis = Axis.horizontal,
+    Duration chromeFadeDuration = const .new(milliseconds: 220),
+    Axis pagerAxis = .horizontal,
     Set<PointerDeviceKind> swipeDragDevices =
         kViewfinderDefaultSwipeDragDevices,
     ImageLoadingBuilder? loadingBuilder,
@@ -157,7 +158,7 @@ class Viewfinder extends StatefulWidget {
     double interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     ViewfinderChromeController? chromeController,
     List<Widget> chromeOverlays = const <Widget>[],
-    Duration chromeFadeDuration = const Duration(milliseconds: 220),
+    Duration chromeFadeDuration = const .new(milliseconds: 220),
   }) {
     return Viewfinder(
       key: key,
@@ -337,7 +338,7 @@ class _ViewfinderState extends State<Viewfinder> {
   }
 
   bool _canSwipeAlongPager(ViewfinderImageController c) =>
-      widget.pagerAxis == Axis.horizontal
+      widget.pagerAxis == .horizontal
       ? c.canSwipeHorizontally
       : c.canSwipeVertically;
 
@@ -475,7 +476,7 @@ class _ViewfinderState extends State<Viewfinder> {
     if (animate) {
       _pageController.animateToPage(
         i,
-        duration: const Duration(milliseconds: 280),
+        duration: const .new(milliseconds: 280),
         curve: Curves.easeOutCubic,
       );
     } else {
@@ -494,144 +495,40 @@ class _ViewfinderState extends State<Viewfinder> {
     widget.dismiss?.onDismiss();
   }
 
-  Widget _buildPage(BuildContext context, int index) {
-    final item = _itemAt(index);
-    final initialScale = item.initialScale ?? widget.defaultInitialScale;
-    final minScale = item.minScale ?? widget.minScale;
-    final maxScale = item.maxScale ?? widget.maxScale;
-
-    final imageController = _imageControllerFor(index);
-
-    // Only the currently-visible page carries a Hero. PageView pre-builds
-    // neighbors (especially with allowImplicitScrolling), and if those
-    // carried Heroes too, every adjacent-grid thumbnail would fly on pop.
-    final hero = index == _currentIndex ? item.hero : null;
-
-    // Gate: ask the gesture recognizer to reject single-pointer pan
-    // along the pager axis when the parent [PageView] should take over.
-    // Yielding (returning false) hands the pointer to the gesture arena
-    // so the pager's drag recognizer can claim it. Pinches (two-pointer
-    // gestures) bypass this gate inside the recognizer.
-    bool canPan(Axis axis, int sign) {
-      // Only consult for the axis the PageView scrolls on; the other
-      // axis is always allowed inside the image.
-      if (axis != widget.pagerAxis) return true;
-      // Adjacent pre-built pages always allow their own pan.
-      if (index != _currentIndex) return true;
-      // Not zoomed: yield to the pager.
-      //
-      // For touch this is symmetric with the previous "let scale handle
-      // it as usual" behavior because the pager's drag recognizer wins
-      // the arena at touch-slop, well before the scale recognizer
-      // accepts at the larger pan-slop. For mouse the precise pointer
-      // pan-slop (4 px) is small enough that the scale recognizer
-      // would otherwise race and steal the gesture, blocking
-      // mouse-drag page swipes on web/desktop.
-      final state = imageController.scaleState;
-      if (state == ViewfinderScaleState.initial) return false;
-      // Zoomed and at the relevant edge: cede to PageView only if a
-      // page exists in the drag direction (otherwise stay inside).
-      final atBoundary = _canSwipeAlongPager(imageController);
-      if (!atBoundary) return true;
-      final targetIndex = _currentIndex + (sign > 0 ? -1 : 1);
-      // sign > 0 = finger moved positive → content pulled right/down →
-      // user wants previous page. Mirror for sign < 0.
-      return targetIndex < 0 || targetIndex >= widget.itemCount;
-    }
-
-    final page = switch (item.image) {
-      final ImageProvider image => ViewfinderImage(
-        image: image,
-        thumbImage: item.thumbImage,
-        initialScale: initialScale,
-        doubleTapScales: widget.doubleTapScales,
-        hero: hero,
-        loadingBuilder: item.loadingBuilder,
-        errorBuilder: item.errorBuilder,
-        minScale: minScale,
-        maxScale: maxScale,
-        semanticLabel: item.semanticLabel,
-        onScaleChanged: _onScaleChanged,
-        controller: imageController,
-        canPan: canPan,
-        rotateEnabled: widget.rotateEnabled,
-        interactionEndFrictionCoefficient:
-            widget.interactionEndFrictionCoefficient,
-        backgroundColor: Colors.transparent,
-      ),
-      _ => ViewfinderImage.child(
-        initialScale: initialScale,
-        doubleTapScales: widget.doubleTapScales,
-        hero: hero,
-        minScale: minScale,
-        maxScale: maxScale,
-        semanticLabel: item.semanticLabel,
-        onScaleChanged: _onScaleChanged,
-        controller: imageController,
-        canPan: canPan,
-        rotateEnabled: widget.rotateEnabled,
-        interactionEndFrictionCoefficient:
-            widget.interactionEndFrictionCoefficient,
-        backgroundColor: Colors.transparent,
-        child: item.child!,
-      ),
-    };
-
-    return widget.pageSpacing > 0
-        ? Padding(
-            padding: EdgeInsets.symmetric(horizontal: widget.pageSpacing / 2),
-            child: page,
-          )
-        : page;
+  /// Gate: reject single-pointer pan along the pager axis when the parent
+  /// [PageView] should take over. Returning `false` yields the gesture so
+  /// the pager's drag recognizer can claim it. Pinches (two-pointer
+  /// gestures) bypass this gate inside the recognizer.
+  bool _canPanForPage(
+    int index,
+    ViewfinderImageController c,
+    Axis axis,
+    int sign,
+  ) {
+    // Only consult for the axis the PageView scrolls on; the other
+    // axis is always allowed inside the image.
+    if (axis != widget.pagerAxis) return true;
+    // Adjacent pre-built pages always allow their own pan.
+    if (index != _currentIndex) return true;
+    // Not zoomed: yield to the pager.
+    //
+    // For touch this is symmetric with the previous "let scale handle
+    // it as usual" behavior because the pager's drag recognizer wins
+    // the arena at touch-slop, well before the scale recognizer
+    // accepts at the larger pan-slop. For mouse the precise pointer
+    // pan-slop (4 px) is small enough that the scale recognizer
+    // would otherwise race and steal the gesture, blocking
+    // mouse-drag page swipes on web/desktop.
+    if (c.scaleState == ViewfinderScaleState.initial) return false;
+    // Zoomed and at the relevant edge: cede to PageView only if a
+    // page exists in the drag direction (otherwise stay inside).
+    if (!_canSwipeAlongPager(c)) return true;
+    final targetIndex = _currentIndex + (sign > 0 ? -1 : 1);
+    // sign > 0 = finger moved positive → content pulled right/down →
+    // user wants previous page. Mirror for sign < 0.
+    return targetIndex < 0 || targetIndex >= widget.itemCount;
   }
 
-  Widget _withThumbnails(
-    Widget main,
-    Widget bar,
-    ViewfinderThumbnailPosition pos,
-  ) => switch (pos) {
-    ViewfinderThumbnailPosition.bottom => Column(
-      children: [
-        Expanded(child: main),
-        bar,
-      ],
-    ),
-    ViewfinderThumbnailPosition.top => Column(
-      children: [
-        bar,
-        Expanded(child: main),
-      ],
-    ),
-    ViewfinderThumbnailPosition.left => Row(
-      children: [
-        bar,
-        Expanded(child: main),
-      ],
-    ),
-    ViewfinderThumbnailPosition.right => Row(
-      children: [
-        Expanded(child: main),
-        bar,
-      ],
-    ),
-  };
-
-  Widget _wrapChrome(Widget child) {
-    final chrome = _chrome;
-    if (chrome == null) return child;
-    return AnimatedBuilder(
-      animation: chrome,
-      builder: (_, c) => IgnorePointer(
-        ignoring: !chrome.visible,
-        child: AnimatedOpacity(
-          opacity: chrome.visible ? 1.0 : 0.0,
-          duration: widget.chromeFadeDuration,
-          child: c,
-        ),
-      ),
-      child: child,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -650,7 +547,24 @@ class _ViewfinderState extends State<Viewfinder> {
           physics: _swipeLocked
               ? const NeverScrollableScrollPhysics()
               : widget.scrollPhysics ?? const PageScrollPhysics(),
-          itemBuilder: _buildPage,
+          itemBuilder: (context, index) {
+            final imageController = _imageControllerFor(index);
+            return _ViewfinderPage(
+              item: _itemAt(index),
+              isCurrent: index == _currentIndex,
+              defaultInitialScale: widget.defaultInitialScale,
+              minScale: widget.minScale,
+              maxScale: widget.maxScale,
+              doubleTapScales: widget.doubleTapScales,
+              rotateEnabled: widget.rotateEnabled,
+              frictionCoefficient: widget.interactionEndFrictionCoefficient,
+              pageSpacing: widget.pageSpacing,
+              imageController: imageController,
+              canPan: (axis, sign) =>
+                  _canPanForPage(index, imageController, axis, sign),
+              onScaleChanged: _onScaleChanged,
+            );
+          },
         ),
       ),
     );
@@ -658,7 +572,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // Tap anywhere on the pager area toggles chrome visibility.
     if (_chrome != null) {
       pager = GestureDetector(
-        behavior: HitTestBehavior.translucent,
+        behavior: .translucent,
         onTap: _onChromeToggleRequested,
         child: pager,
       );
@@ -689,26 +603,39 @@ class _ViewfinderState extends State<Viewfinder> {
     ];
 
     if (overlayChildren.isNotEmpty) {
+      Widget overlayStack = Stack(
+        fit: .expand,
+        children: overlayChildren,
+      );
+      if (_chrome case final chrome?) {
+        overlayStack = _ChromeFade(
+          chrome: chrome,
+          fadeDuration: widget.chromeFadeDuration,
+          child: overlayStack,
+        );
+      }
       body = Stack(
-        fit: StackFit.expand,
-        children: [
-          body,
-          _wrapChrome(Stack(fit: StackFit.expand, children: overlayChildren)),
-        ],
+        fit: .expand,
+        children: [body, overlayStack],
       );
     }
 
     if (widget.thumbnails case final thumbs?) {
-      final bar = _wrapChrome(
-        ViewfinderThumbnailBar(
-          config: thumbs,
-          itemCount: widget.itemCount,
-          currentIndex: _currentIndex,
-          itemAt: _itemAt,
-          onSelect: _goTo,
-        ),
+      Widget bar = ViewfinderThumbnailBar(
+        config: thumbs,
+        itemCount: widget.itemCount,
+        currentIndex: _currentIndex,
+        itemAt: _itemAt,
+        onSelect: _goTo,
       );
-      body = _withThumbnails(body, bar, thumbs.position);
+      if (_chrome case final chrome?) {
+        bar = _ChromeFade(
+          chrome: chrome,
+          fadeDuration: widget.chromeFadeDuration,
+          child: bar,
+        );
+      }
+      body = _ThumbnailFrame(position: thumbs.position, bar: bar, child: body);
     }
 
     // `slideType: wholePage` (default) wraps Dismissible around the
@@ -770,6 +697,136 @@ class _ViewfinderState extends State<Viewfinder> {
         : 'Photo gallery, ${_currentIndex + 1} of ${widget.itemCount}';
     return Semantics(container: true, label: semanticLabel, child: body);
   }
+}
+
+class _ViewfinderPage extends StatelessWidget {
+  const _ViewfinderPage({
+    required this.item,
+    required this.isCurrent,
+    required this.defaultInitialScale,
+    required this.minScale,
+    required this.maxScale,
+    required this.doubleTapScales,
+    required this.rotateEnabled,
+    required this.frictionCoefficient,
+    required this.pageSpacing,
+    required this.imageController,
+    required this.canPan,
+    required this.onScaleChanged,
+  });
+
+  final ViewfinderItem item;
+  final bool isCurrent;
+  final ViewfinderInitialScale defaultInitialScale;
+  final double minScale;
+  final double maxScale;
+  final List<double> doubleTapScales;
+  final bool rotateEnabled;
+  final double frictionCoefficient;
+  final double pageSpacing;
+  final ViewfinderImageController imageController;
+  final ZoomableCanPan canPan;
+  final ViewfinderScaleChanged onScaleChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final initialScale = item.initialScale ?? defaultInitialScale;
+    final effectiveMin = item.minScale ?? minScale;
+    final effectiveMax = item.maxScale ?? maxScale;
+    // Only the currently-visible page carries a Hero. PageView pre-builds
+    // neighbors (especially with allowImplicitScrolling), and if those
+    // carried Heroes too, every adjacent-grid thumbnail would fly on pop.
+    final hero = isCurrent ? item.hero : null;
+
+    final page = switch (item.image) {
+      final ImageProvider image => ViewfinderImage(
+        image: image,
+        thumbImage: item.thumbImage,
+        initialScale: initialScale,
+        doubleTapScales: doubleTapScales,
+        hero: hero,
+        loadingBuilder: item.loadingBuilder,
+        errorBuilder: item.errorBuilder,
+        minScale: effectiveMin,
+        maxScale: effectiveMax,
+        semanticLabel: item.semanticLabel,
+        onScaleChanged: onScaleChanged,
+        controller: imageController,
+        canPan: canPan,
+        rotateEnabled: rotateEnabled,
+        interactionEndFrictionCoefficient: frictionCoefficient,
+        backgroundColor: Colors.transparent,
+      ),
+      _ => ViewfinderImage.child(
+        initialScale: initialScale,
+        doubleTapScales: doubleTapScales,
+        hero: hero,
+        minScale: effectiveMin,
+        maxScale: effectiveMax,
+        semanticLabel: item.semanticLabel,
+        onScaleChanged: onScaleChanged,
+        controller: imageController,
+        canPan: canPan,
+        rotateEnabled: rotateEnabled,
+        interactionEndFrictionCoefficient: frictionCoefficient,
+        backgroundColor: Colors.transparent,
+        child: item.child!,
+      ),
+    };
+
+    return pageSpacing > 0
+        ? Padding(
+            padding: .symmetric(horizontal: pageSpacing / 2),
+            child: page,
+          )
+        : page;
+  }
+}
+
+class _ChromeFade extends StatelessWidget {
+  const _ChromeFade({
+    required this.chrome,
+    required this.fadeDuration,
+    required this.child,
+  });
+
+  final ViewfinderChromeController chrome;
+  final Duration fadeDuration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: chrome,
+    builder: (_, c) => IgnorePointer(
+      ignoring: !chrome.visible,
+      child: AnimatedOpacity(
+        opacity: chrome.visible ? 1.0 : 0.0,
+        duration: fadeDuration,
+        child: c,
+      ),
+    ),
+    child: child,
+  );
+}
+
+class _ThumbnailFrame extends StatelessWidget {
+  const _ThumbnailFrame({
+    required this.position,
+    required this.bar,
+    required this.child,
+  });
+
+  final ViewfinderThumbnailPosition position;
+  final Widget bar;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => switch (position) {
+    .bottom => Column(children: [Expanded(child: child), bar]),
+    .top => Column(children: [bar, Expanded(child: child)]),
+    .left => Row(children: [bar, Expanded(child: child)]),
+    .right => Row(children: [Expanded(child: child), bar]),
+  };
 }
 
 /// Controls a [Viewfinder] and publishes the current page index.
