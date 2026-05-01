@@ -135,4 +135,3 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   @override
   int get hashCode => Object.hash(alignment, padding, dots, label, maxDots);
 }
-

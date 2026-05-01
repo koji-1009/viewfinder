@@ -102,4 +102,3 @@ class ViewfinderThumbnails {
     itemBuilder,
   );
 }
-

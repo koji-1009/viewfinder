@@ -52,17 +52,18 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
         currentIndex: currentIndex,
         itemCount: itemCount,
       ),
-      ViewfinderPageIndicatorAdaptive() => itemCount > cfg.maxDots
-          ? _LabelView(
-              builder: cfg.label.labelBuilder,
-              currentIndex: currentIndex,
-              itemCount: itemCount,
-            )
-          : _DotsView(
-              dots: cfg.dots,
-              itemCount: itemCount,
-              currentIndex: currentIndex,
-            ),
+      ViewfinderPageIndicatorAdaptive() =>
+        itemCount > cfg.maxDots
+            ? _LabelView(
+                builder: cfg.label.labelBuilder,
+                currentIndex: currentIndex,
+                itemCount: itemCount,
+              )
+            : _DotsView(
+                dots: cfg.dots,
+                itemCount: itemCount,
+                currentIndex: currentIndex,
+              ),
     };
     return Align(
       alignment: cfg.alignment,

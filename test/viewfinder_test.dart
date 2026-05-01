@@ -608,10 +608,7 @@ void main() {
     );
     await _settleImages(tester);
 
-    expect(
-      find.byWidgetPredicate((w) => w is ViewfinderImage),
-      findsOneWidget,
-    );
+    expect(find.byWidgetPredicate((w) => w is ViewfinderImage), findsOneWidget);
     expect(find.byType(ViewfinderThumbnailBar), findsOneWidget);
 
     controller.animateTo(3);
@@ -2114,10 +2111,7 @@ void main() {
       throwsA(isA<AssertionError>()),
     );
     // Defaults match — should construct (const) without asserting.
-    expect(
-      () => const ViewfinderPageIndicatorAdaptive(),
-      returnsNormally,
-    );
+    expect(() => const ViewfinderPageIndicatorAdaptive(), returnsNormally);
   });
 
   testWidgets(

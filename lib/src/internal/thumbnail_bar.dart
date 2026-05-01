@@ -129,8 +129,11 @@ class _ThumbnailTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inner = switch (config.itemBuilder) {
-      final ViewfinderThumbnailItemBuilder builder =>
-        builder(context, index, selected),
+      final ViewfinderThumbnailItemBuilder builder => builder(
+        context,
+        index,
+        selected,
+      ),
       _ => _DefaultThumbnailTile(
         config: config,
         item: item,
@@ -142,11 +145,7 @@ class _ThumbnailTile extends StatelessWidget {
       padding: config.isHorizontal
           ? .only(right: config.spacing)
           : .only(bottom: config.spacing),
-      child: GestureDetector(
-        behavior: .opaque,
-        onTap: onTap,
-        child: inner,
-      ),
+      child: GestureDetector(behavior: .opaque, onTap: onTap, child: inner),
     );
   }
 }

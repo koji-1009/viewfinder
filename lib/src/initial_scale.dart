@@ -54,8 +54,7 @@ class _ValueScale extends ViewfinderInitialScale {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _ValueScale && scale == other.scale;
+      identical(this, other) || other is _ValueScale && scale == other.scale;
   @override
   int get hashCode => Object.hash(_ValueScale, scale);
 }

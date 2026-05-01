@@ -527,7 +527,6 @@ class _ViewfinderState extends State<Viewfinder> {
     return targetIndex < 0 || targetIndex >= widget.itemCount;
   }
 
-
   @override
   Widget build(BuildContext context) {
     Widget pager = ColoredBox(
@@ -594,10 +593,7 @@ class _ViewfinderState extends State<Viewfinder> {
     ];
 
     if (overlayChildren.isNotEmpty) {
-      Widget overlayStack = Stack(
-        fit: .expand,
-        children: overlayChildren,
-      );
+      Widget overlayStack = Stack(fit: .expand, children: overlayChildren);
       if (_chrome case final chrome?) {
         overlayStack = _ChromeFade(
           chrome: chrome,
@@ -605,10 +601,7 @@ class _ViewfinderState extends State<Viewfinder> {
           child: overlayStack,
         );
       }
-      body = Stack(
-        fit: .expand,
-        children: [body, overlayStack],
-      );
+      body = Stack(fit: .expand, children: [body, overlayStack]);
     }
 
     if (widget.thumbnails case final thumbs?) {
@@ -730,7 +723,8 @@ class _ViewfinderPage extends StatelessWidget {
         controller: imageController,
         canPan: canPan,
         rotateEnabled: spec.rotateEnabled,
-        interactionEndFrictionCoefficient: spec.interactionEndFrictionCoefficient,
+        interactionEndFrictionCoefficient:
+            spec.interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
       ),
       final ViewfinderChildItem item => ViewfinderImage.child(
@@ -743,7 +737,8 @@ class _ViewfinderPage extends StatelessWidget {
         controller: imageController,
         canPan: canPan,
         rotateEnabled: spec.rotateEnabled,
-        interactionEndFrictionCoefficient: spec.interactionEndFrictionCoefficient,
+        interactionEndFrictionCoefficient:
+            spec.interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
         child: item.child,
       ),
@@ -797,10 +792,30 @@ class _ThumbnailFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (position) {
-    .bottom => Column(children: [Expanded(child: child), bar]),
-    .top => Column(children: [bar, Expanded(child: child)]),
-    .left => Row(children: [bar, Expanded(child: child)]),
-    .right => Row(children: [Expanded(child: child), bar]),
+    .bottom => Column(
+      children: [
+        Expanded(child: child),
+        bar,
+      ],
+    ),
+    .top => Column(
+      children: [
+        bar,
+        Expanded(child: child),
+      ],
+    ),
+    .left => Row(
+      children: [
+        bar,
+        Expanded(child: child),
+      ],
+    ),
+    .right => Row(
+      children: [
+        Expanded(child: child),
+        bar,
+      ],
+    ),
   };
 }
 
