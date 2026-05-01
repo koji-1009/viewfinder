@@ -48,7 +48,7 @@ Viewfinder(
   itemCount: photos.length,
   precacheAdjacent: 2,
   thumbnails: const ViewfinderThumbnails(size: 64),
-  indicator: const ViewfinderPageIndicator(),
+  indicator: const ViewfinderPageIndicatorAdaptive(),
   dismiss: ViewfinderDismiss(onDismiss: () => Navigator.pop(context)),
   itemBuilder: (context, index) => ViewfinderItem(
     image: photos[index],
@@ -89,7 +89,7 @@ ViewfinderImage.child(
 * **Fling** — post-release inertia on both pan and scale via Flutter's `FrictionSimulation` (one simulation per axis: X, Y, scale) with `kViewfinderDefaultFlingDrag = 0.0000135`, overridable per widget through `interactionEndFrictionCoefficient`. Pinch out fast and release: scale continues to grow with momentum, anchored to the focal point at release; pan momentum continues independently.
 * **Drag-to-dismiss** — `ViewfinderDismiss(onDismiss: …)`. Auto-disabled while zoomed. Background fades with drag. `slideType` picks between `wholePage` (thumbnails slide too) and `onlyImage` (thumbnails stay anchored). `onProgress` reports normalized drag progress (incl. spring-back) so callers can fade their own chrome.
 * **Thumbnail strip** — `ViewfinderThumbnails(position: …)` at top / bottom / left / right, or `.custom(itemBuilder: …)` for full control.
-* **Page indicator** — `ViewfinderPageIndicator()` draws dots, switches to a `1 / N` label above `maxDots`.
+* **Page indicator** — sealed `ViewfinderPageIndicator` with three variants: `ViewfinderPageIndicatorDots` (one dot per page), `ViewfinderPageIndicatorLabel` (a single text label, default `"i / N"`, customizable via `labelBuilder`), and `ViewfinderPageIndicatorAdaptive` (dots up to `maxDots`, label beyond — the most common pick).
 * **Progressive loading** — `ViewfinderItem(thumbImage: lowRes)` shows the low-res while the full image decodes; cross-fades when the first frame lands.
 * **Chrome controller** — `ViewfinderChromeController` drives tap-to-toggle visibility of thumbnails + indicator + any `chromeOverlays` widgets you plug in. Auto-hide after idle, auto-hide while zoomed.
 * **Coherent pop** — on pop (Android back, iOS swipe, `Navigator.pop`) every page snaps back to its initial transform before the route exits, so any Hero flight starts from a sensible source rect.
@@ -151,7 +151,7 @@ final chrome = ViewfinderChromeController(
 Viewfinder(
   chromeController: chrome,
   thumbnails: const ViewfinderThumbnails(),
-  indicator: const ViewfinderPageIndicator(),
+  indicator: const ViewfinderPageIndicatorAdaptive(),
   chromeOverlays: [
     Positioned(top: 0, left: 0, right: 0, child: myAppBar),
   ],
