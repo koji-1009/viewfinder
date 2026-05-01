@@ -10,8 +10,8 @@ import 'viewfinder.dart' show Viewfinder;
 /// - [ViewfinderPageIndicatorAdaptive] — dots up to a threshold, label beyond.
 sealed class ViewfinderPageIndicator {
   const ViewfinderPageIndicator({
-    this.alignment = Alignment.bottomCenter,
-    this.padding = const EdgeInsets.all(16),
+    this.alignment = .bottomCenter,
+    this.padding = const .all(16),
   });
 
   /// Where the indicator sits within the viewfinder.
@@ -117,26 +117,55 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
     if (itemCount == 0) return const SizedBox.shrink();
     final cfg = config;
     final content = switch (cfg) {
-      ViewfinderPageIndicatorDots() => _buildDots(cfg),
-      ViewfinderPageIndicatorLabel() => _buildLabel(context, cfg.labelBuilder),
+      ViewfinderPageIndicatorDots() => _DotsView(
+        dots: cfg,
+        itemCount: itemCount,
+        currentIndex: currentIndex,
+      ),
+      ViewfinderPageIndicatorLabel() => _LabelView(
+        builder: cfg.labelBuilder,
+        currentIndex: currentIndex,
+        itemCount: itemCount,
+      ),
       ViewfinderPageIndicatorAdaptive() => itemCount > cfg.maxDots
-          ? _buildLabel(context, cfg.label.labelBuilder)
-          : _buildDots(cfg.dots),
+          ? _LabelView(
+              builder: cfg.label.labelBuilder,
+              currentIndex: currentIndex,
+              itemCount: itemCount,
+            )
+          : _DotsView(
+              dots: cfg.dots,
+              itemCount: itemCount,
+              currentIndex: currentIndex,
+            ),
     };
     return Align(
       alignment: cfg.alignment,
       child: Padding(padding: cfg.padding, child: content),
     );
   }
+}
 
-  Widget _buildDots(ViewfinderPageIndicatorDots dots) => Row(
+class _DotsView extends StatelessWidget {
+  const _DotsView({
+    required this.dots,
+    required this.itemCount,
+    required this.currentIndex,
+  });
+
+  final ViewfinderPageIndicatorDots dots;
+  final int itemCount;
+  final int currentIndex;
+
+  @override
+  Widget build(BuildContext context) => Row(
     mainAxisSize: .min,
     children: [
       for (var i = 0; i < itemCount; i++)
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: dots.spacing / 2),
+          padding: .symmetric(horizontal: dots.spacing / 2),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: const .new(milliseconds: 180),
             width: i == currentIndex ? dots.activeDotSize : dots.dotSize,
             height: i == currentIndex ? dots.activeDotSize : dots.dotSize,
             decoration: BoxDecoration(
@@ -147,21 +176,32 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
         ),
     ],
   );
+}
 
-  Widget _buildLabel(
-    BuildContext context,
-    ViewfinderPageIndicatorLabelBuilder? builder,
-  ) {
+class _LabelView extends StatelessWidget {
+  const _LabelView({
+    required this.builder,
+    required this.currentIndex,
+    required this.itemCount,
+  });
+
+  final ViewfinderPageIndicatorLabelBuilder? builder;
+  final int currentIndex;
+  final int itemCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final builder = this.builder;
     if (builder != null) return builder(context, currentIndex, itemCount);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const .symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.black54,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: .circular(16),
       ),
       child: Text(
         '${currentIndex + 1} / $itemCount',
-        style: const TextStyle(color: Colors.white, fontSize: 13),
+        style: const .new(color: Colors.white, fontSize: 13),
       ),
     );
   }
