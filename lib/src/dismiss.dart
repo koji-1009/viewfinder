@@ -51,6 +51,29 @@ class ViewfinderDismiss {
   /// drag update and on the post-release spring-back. Useful for
   /// fading custom chrome overlays in step with the gesture.
   final ValueChanged<double>? onProgress;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderDismiss &&
+          onDismiss == other.onDismiss &&
+          direction == other.direction &&
+          threshold == other.threshold &&
+          fadeBackground == other.fadeBackground &&
+          backgroundColor == other.backgroundColor &&
+          slideType == other.slideType &&
+          onProgress == other.onProgress;
+
+  @override
+  int get hashCode => Object.hash(
+    onDismiss,
+    direction,
+    threshold,
+    fadeBackground,
+    backgroundColor,
+    slideType,
+    onProgress,
+  );
 }
 
 /// Wraps [child] with a drag-to-dismiss gesture. [enabled] should be false

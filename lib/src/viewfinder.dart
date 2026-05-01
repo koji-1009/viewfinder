@@ -484,10 +484,6 @@ class _ViewfinderState extends State<Viewfinder> {
     }
   }
 
-  // Still exposed to users through FpvPhotoView.onScaleChanged; internal
-  // swipe-lock decisions go through the controller listener above.
-  void _onScaleChanged(double scale) {}
-
   void _handleEscape() {
     // Two-stage Esc: first collapse any zoom so the Hero transition
     // from here back out stays coherent. Only then dismiss.
@@ -562,7 +558,6 @@ class _ViewfinderState extends State<Viewfinder> {
               imageController: imageController,
               canPan: (axis, sign) =>
                   _canPanForPage(index, imageController, axis, sign),
-              onScaleChanged: _onScaleChanged,
             );
           },
         ),
@@ -712,7 +707,6 @@ class _ViewfinderPage extends StatelessWidget {
     required this.pageSpacing,
     required this.imageController,
     required this.canPan,
-    required this.onScaleChanged,
   });
 
   final ViewfinderItem item;
@@ -726,7 +720,6 @@ class _ViewfinderPage extends StatelessWidget {
   final double pageSpacing;
   final ViewfinderImageController imageController;
   final ZoomableCanPan canPan;
-  final ViewfinderScaleChanged onScaleChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -750,7 +743,6 @@ class _ViewfinderPage extends StatelessWidget {
         minScale: effectiveMin,
         maxScale: effectiveMax,
         semanticLabel: item.semanticLabel,
-        onScaleChanged: onScaleChanged,
         controller: imageController,
         canPan: canPan,
         rotateEnabled: rotateEnabled,
@@ -764,7 +756,6 @@ class _ViewfinderPage extends StatelessWidget {
         minScale: effectiveMin,
         maxScale: effectiveMax,
         semanticLabel: item.semanticLabel,
-        onScaleChanged: onScaleChanged,
         controller: imageController,
         canPan: canPan,
         rotateEnabled: rotateEnabled,

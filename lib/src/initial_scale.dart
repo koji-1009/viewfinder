@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 /// The starting scale applied to a `ViewfinderImage` before the user
 /// interacts with it.
+@immutable
 sealed class ViewfinderInitialScale {
   const ViewfinderInitialScale();
 
@@ -27,6 +29,11 @@ class _Contain extends ViewfinderInitialScale {
   BoxFit get boxFit => BoxFit.contain;
   @override
   double get baseScale => 1.0;
+
+  @override
+  bool operator ==(Object other) => other is _Contain;
+  @override
+  int get hashCode => (_Contain).hashCode;
 }
 
 class _Cover extends ViewfinderInitialScale {
@@ -35,6 +42,11 @@ class _Cover extends ViewfinderInitialScale {
   BoxFit get boxFit => BoxFit.cover;
   @override
   double get baseScale => 1.0;
+
+  @override
+  bool operator ==(Object other) => other is _Cover;
+  @override
+  int get hashCode => (_Cover).hashCode;
 }
 
 class _ValueScale extends ViewfinderInitialScale {
@@ -44,6 +56,13 @@ class _ValueScale extends ViewfinderInitialScale {
   BoxFit get boxFit => BoxFit.contain;
   @override
   double get baseScale => scale;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _ValueScale && scale == other.scale;
+  @override
+  int get hashCode => Object.hash(_ValueScale, scale);
 }
 
 /// Whether the view is at its initial scale or the user has zoomed in.

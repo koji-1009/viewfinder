@@ -26,15 +26,21 @@ class ViewfinderThumbnails {
     this.itemBuilder,
   });
 
-  const factory ViewfinderThumbnails.custom({
-    ViewfinderThumbnailPosition position,
-    double size,
-    double spacing,
-    EdgeInsets padding,
-    bool safeArea,
-    Color backgroundColor,
-    required ViewfinderThumbnailItemBuilder itemBuilder,
-  }) = _CustomThumbnails;
+  /// Convenience constructor for callers that always provide a custom
+  /// [itemBuilder]. Identical to the default constructor but makes
+  /// [itemBuilder] required at the call site.
+  const ViewfinderThumbnails.custom({
+    this.position = .bottom,
+    this.size = 56,
+    this.spacing = 4,
+    this.padding = const .all(8),
+    this.safeArea = true,
+    this.backgroundColor = const .new(0x8A000000),
+    required ViewfinderThumbnailItemBuilder this.itemBuilder,
+  }) : selectedBorder = const Border.fromBorderSide(
+         BorderSide(color: Colors.white, width: 2),
+       ),
+       unselectedOpacity = 0.55;
 
   final ViewfinderThumbnailPosition position;
   final double size;
@@ -65,21 +71,10 @@ class ViewfinderThumbnails {
   /// `selected` flag and renders the tile exactly as returned.
   final ViewfinderThumbnailItemBuilder? itemBuilder;
 
-  bool get isHorizontal =>
-      position == ViewfinderThumbnailPosition.top ||
-      position == ViewfinderThumbnailPosition.bottom;
-}
-
-class _CustomThumbnails extends ViewfinderThumbnails {
-  const _CustomThumbnails({
-    super.position = .bottom,
-    super.size = 56,
-    super.spacing = 4,
-    super.padding = const .all(8),
-    super.safeArea = true,
-    super.backgroundColor = const .new(0x8A000000),
-    required ViewfinderThumbnailItemBuilder itemBuilder,
-  }) : super(itemBuilder: itemBuilder);
+  bool get isHorizontal => switch (position) {
+    .top || .bottom => true,
+    .left || .right => false,
+  };
 }
 
 /// Thumbnail strip. Used internally by [Viewfinder].

@@ -38,4 +38,23 @@ class ViewfinderHero {
   /// Forwarded to [Hero.transitionOnUserGestures]. Defaults to `false`,
   /// matching Flutter's own default.
   final bool transitionOnUserGestures;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderHero &&
+          tag == other.tag &&
+          createRectTween == other.createRectTween &&
+          flightShuttleBuilder == other.flightShuttleBuilder &&
+          placeholderBuilder == other.placeholderBuilder &&
+          transitionOnUserGestures == other.transitionOnUserGestures;
+
+  @override
+  int get hashCode => Object.hash(
+    tag,
+    createRectTween,
+    flightShuttleBuilder,
+    placeholderBuilder,
+    transitionOnUserGestures,
+  );
 }
