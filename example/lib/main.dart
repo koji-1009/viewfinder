@@ -188,7 +188,7 @@ class _GalleryPageState extends State<_GalleryPage> {
   ViewfinderPageIndicator? _buildIndicator(_Settings s) {
     if (!s.indicatorEnabled) return null;
     if (s.indicatorForceNumeric) return const ViewfinderPageIndicatorLabel();
-    return ViewfinderPageIndicatorAdaptive();
+    return const ViewfinderPageIndicatorAdaptive();
   }
 
   ViewfinderDismiss? _buildDismiss(_Settings s) {

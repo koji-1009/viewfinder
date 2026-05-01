@@ -3,7 +3,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:viewfinder/src/dismiss.dart' show ViewfinderDismissible;
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
+import 'package:viewfinder/src/page_indicator.dart'
+    show ViewfinderPageIndicatorOverlay;
+import 'package:viewfinder/src/thumbnails.dart' show ViewfinderThumbnailBar;
 import 'package:viewfinder/viewfinder.dart';
 
 // A 1x1 ARGB PNG — decodes cleanly in the test environment.
@@ -71,14 +75,18 @@ void main() {
   group('ViewfinderItem', () {
     test('image factory builds a ViewfinderImageItem', () {
       final item = ViewfinderItem(image: MemoryImage(_pngBytes));
-      expect(item, isA<ViewfinderImageItem>());
-      expect((item as ViewfinderImageItem).image, isNotNull);
+      expect(
+        item,
+        isA<ViewfinderImageItem>().having((i) => i.image, 'image', isNotNull),
+      );
     });
 
-    test('child factory builds a ViewfinderChildItem with no image fields', () {
+    test('child factory builds a ViewfinderChildItem', () {
       const item = ViewfinderItem.child(child: SizedBox.shrink());
-      expect(item, isA<ViewfinderChildItem>());
-      expect((item as ViewfinderChildItem).child, isNotNull);
+      expect(
+        item,
+        isA<ViewfinderChildItem>().having((i) => i.child, 'child', isNotNull),
+      );
     });
   });
 
@@ -591,7 +599,7 @@ void main() {
             precacheAdjacent: 1,
             onPageChanged: pageChanges.add,
             thumbnails: const ViewfinderThumbnails(size: 40),
-            indicator: ViewfinderPageIndicatorAdaptive(),
+            indicator: const ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1626,7 +1634,7 @@ void main() {
           body: Viewfinder(
             itemCount: 1,
             chromeController: chrome,
-            indicator: ViewfinderPageIndicatorAdaptive(),
+            indicator: const ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1916,7 +1924,7 @@ void main() {
           body: Viewfinder(
             itemCount: 1,
             chromeController: chrome,
-            indicator: ViewfinderPageIndicatorAdaptive(),
+            indicator: const ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1943,7 +1951,7 @@ void main() {
         home: Scaffold(
           body: Viewfinder(
             itemCount: 20,
-            indicator: ViewfinderPageIndicatorAdaptive(maxDots: 5),
+            indicator: const ViewfinderPageIndicatorAdaptive(maxDots: 5),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -2031,7 +2039,7 @@ void main() {
         home: Scaffold(
           body: Viewfinder(
             itemCount: 4,
-            indicator: ViewfinderPageIndicatorAdaptive(maxDots: 5),
+            indicator: const ViewfinderPageIndicatorAdaptive(maxDots: 5),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -2081,7 +2089,7 @@ void main() {
           home: Scaffold(
             body: Viewfinder(
               itemCount: 0,
-              indicator: ViewfinderPageIndicatorAdaptive(),
+              indicator: const ViewfinderPageIndicatorAdaptive(),
               itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
             ),
           ),
@@ -2099,29 +2107,50 @@ void main() {
     },
   );
 
-  test('PageIndicator Adaptive: asserts on inner alignment/padding mismatch', () {
-    expect(
-      () => ViewfinderPageIndicatorAdaptive(
-        dots: const ViewfinderPageIndicatorDots(alignment: Alignment.topCenter),
-      ),
-      throwsA(isA<AssertionError>()),
-    );
-    expect(
-      () => ViewfinderPageIndicatorAdaptive(
-        label: const ViewfinderPageIndicatorLabel(
-          padding: EdgeInsets.zero,
-        ),
-      ),
-      throwsA(isA<AssertionError>()),
-    );
-    // Negative maxDots is rejected too.
+  test('PageIndicator Adaptive: rejects negative maxDots at construction', () {
     expect(
       () => ViewfinderPageIndicatorAdaptive(maxDots: -1),
       throwsA(isA<AssertionError>()),
     );
-    // Defaults match — should construct without asserting.
-    expect(ViewfinderPageIndicatorAdaptive.new, returnsNormally);
+    // Defaults match — should construct (const) without asserting.
+    expect(
+      () => const ViewfinderPageIndicatorAdaptive(),
+      returnsNormally,
+    );
   });
+
+  testWidgets(
+    'PageIndicator Adaptive: build flags inner alignment/padding mismatch',
+    (tester) async {
+      Future<void> pumpWith(ViewfinderPageIndicator indicator) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Viewfinder(
+                itemCount: 3,
+                indicator: indicator,
+                itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              ),
+            ),
+          ),
+        );
+      }
+
+      await pumpWith(
+        const ViewfinderPageIndicatorAdaptive(
+          dots: ViewfinderPageIndicatorDots(alignment: Alignment.topCenter),
+        ),
+      );
+      expect(tester.takeException(), isA<FlutterError>());
+
+      await pumpWith(
+        const ViewfinderPageIndicatorAdaptive(
+          label: ViewfinderPageIndicatorLabel(padding: EdgeInsets.zero),
+        ),
+      );
+      expect(tester.takeException(), isA<FlutterError>());
+    },
+  );
 
   testWidgets('Viewfinder: out-of-range initialIndex clamps to last page', (
     tester,
@@ -2197,7 +2226,7 @@ void main() {
           body: Viewfinder(
             itemCount: 0,
             thumbnails: const ViewfinderThumbnails(size: 40),
-            indicator: ViewfinderPageIndicatorAdaptive(),
+            indicator: const ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),

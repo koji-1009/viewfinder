@@ -75,6 +75,33 @@ class ViewfinderThumbnails {
     .top || .bottom => true,
     .left || .right => false,
   };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderThumbnails &&
+          position == other.position &&
+          size == other.size &&
+          spacing == other.spacing &&
+          padding == other.padding &&
+          safeArea == other.safeArea &&
+          selectedBorder == other.selectedBorder &&
+          unselectedOpacity == other.unselectedOpacity &&
+          backgroundColor == other.backgroundColor &&
+          itemBuilder == other.itemBuilder;
+
+  @override
+  int get hashCode => Object.hash(
+    position,
+    size,
+    spacing,
+    padding,
+    safeArea,
+    selectedBorder,
+    unselectedOpacity,
+    backgroundColor,
+    itemBuilder,
+  );
 }
 
 /// Thumbnail strip. Used internally by [Viewfinder].

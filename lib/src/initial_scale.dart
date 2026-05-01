@@ -3,18 +3,23 @@ import 'package:flutter/painting.dart';
 
 /// The starting scale applied to a `ViewfinderImage` before the user
 /// interacts with it.
+///
+/// Sealed: pattern-match on the variant ([ViewfinderInitialScaleContain],
+/// [ViewfinderInitialScaleCover], [ViewfinderInitialScaleValue]) when you
+/// need to discriminate between presets and explicit scales.
 @immutable
 sealed class ViewfinderInitialScale {
   const ViewfinderInitialScale();
 
   /// Fit the content entirely inside the viewport (letter-boxing). Default.
-  const factory ViewfinderInitialScale.contain() = _Contain;
+  const factory ViewfinderInitialScale.contain() = ViewfinderInitialScaleContain;
 
   /// Fill the viewport, cropping overflow.
-  const factory ViewfinderInitialScale.cover() = _Cover;
+  const factory ViewfinderInitialScale.cover() = ViewfinderInitialScaleCover;
 
   /// Explicit scale. 1.0 = fit, 2.0 = 2× fit, …
-  const factory ViewfinderInitialScale.value(double scale) = _ValueScale;
+  const factory ViewfinderInitialScale.value(double scale) =
+      ViewfinderInitialScaleValue;
 
   /// BoxFit used for the initial layout of the underlying `Image`.
   BoxFit get boxFit;
@@ -23,34 +28,27 @@ sealed class ViewfinderInitialScale {
   double get baseScale;
 }
 
-class _Contain extends ViewfinderInitialScale {
-  const _Contain();
+/// Letter-box variant. Canonical const singleton.
+final class ViewfinderInitialScaleContain extends ViewfinderInitialScale {
+  const ViewfinderInitialScaleContain();
   @override
   BoxFit get boxFit => BoxFit.contain;
   @override
   double get baseScale => 1.0;
-
-  @override
-  bool operator ==(Object other) => other is _Contain;
-  @override
-  int get hashCode => (_Contain).hashCode;
 }
 
-class _Cover extends ViewfinderInitialScale {
-  const _Cover();
+/// Crop-to-fill variant. Canonical const singleton.
+final class ViewfinderInitialScaleCover extends ViewfinderInitialScale {
+  const ViewfinderInitialScaleCover();
   @override
   BoxFit get boxFit => BoxFit.cover;
   @override
   double get baseScale => 1.0;
-
-  @override
-  bool operator ==(Object other) => other is _Cover;
-  @override
-  int get hashCode => (_Cover).hashCode;
 }
 
-class _ValueScale extends ViewfinderInitialScale {
-  const _ValueScale(this.scale) : assert(scale > 0);
+/// Explicit-scale variant.
+final class ViewfinderInitialScaleValue extends ViewfinderInitialScale {
+  const ViewfinderInitialScaleValue(this.scale) : assert(scale > 0);
   final double scale;
   @override
   BoxFit get boxFit => BoxFit.contain;
@@ -60,9 +58,9 @@ class _ValueScale extends ViewfinderInitialScale {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _ValueScale && scale == other.scale;
+      other is ViewfinderInitialScaleValue && scale == other.scale;
   @override
-  int get hashCode => Object.hash(_ValueScale, scale);
+  int get hashCode => Object.hash(ViewfinderInitialScaleValue, scale);
 }
 
 /// Whether the view is at its initial scale or the user has zoomed in.

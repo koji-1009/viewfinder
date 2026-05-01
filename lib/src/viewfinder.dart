@@ -545,15 +545,9 @@ class _ViewfinderState extends State<Viewfinder> {
           itemBuilder: (context, index) {
             final imageController = _imageControllerFor(index);
             return _ViewfinderPage(
+              spec: widget,
               item: _itemAt(index),
               isCurrent: index == _currentIndex,
-              defaultInitialScale: widget.defaultInitialScale,
-              minScale: widget.minScale,
-              maxScale: widget.maxScale,
-              doubleTapScales: widget.doubleTapScales,
-              rotateEnabled: widget.rotateEnabled,
-              frictionCoefficient: widget.interactionEndFrictionCoefficient,
-              pageSpacing: widget.pageSpacing,
               imageController: imageController,
               canPan: (axis, sign) =>
                   _canPanForPage(index, imageController, axis, sign),
@@ -695,36 +689,24 @@ class _ViewfinderState extends State<Viewfinder> {
 
 class _ViewfinderPage extends StatelessWidget {
   const _ViewfinderPage({
+    required this.spec,
     required this.item,
     required this.isCurrent,
-    required this.defaultInitialScale,
-    required this.minScale,
-    required this.maxScale,
-    required this.doubleTapScales,
-    required this.rotateEnabled,
-    required this.frictionCoefficient,
-    required this.pageSpacing,
     required this.imageController,
     required this.canPan,
   });
 
+  final Viewfinder spec;
   final ViewfinderItem item;
   final bool isCurrent;
-  final ViewfinderInitialScale defaultInitialScale;
-  final double minScale;
-  final double maxScale;
-  final List<double> doubleTapScales;
-  final bool rotateEnabled;
-  final double frictionCoefficient;
-  final double pageSpacing;
   final ViewfinderImageController imageController;
   final ZoomableCanPan canPan;
 
   @override
   Widget build(BuildContext context) {
-    final initialScale = item.initialScale ?? defaultInitialScale;
-    final effectiveMin = item.minScale ?? minScale;
-    final effectiveMax = item.maxScale ?? maxScale;
+    final initialScale = item.initialScale ?? spec.defaultInitialScale;
+    final effectiveMin = item.minScale ?? spec.minScale;
+    final effectiveMax = item.maxScale ?? spec.maxScale;
     // Only the currently-visible page carries a Hero. PageView pre-builds
     // neighbors (especially with allowImplicitScrolling), and if those
     // carried Heroes too, every adjacent-grid thumbnail would fly on pop.
@@ -735,7 +717,7 @@ class _ViewfinderPage extends StatelessWidget {
         image: item.image,
         thumbImage: item.thumbImage,
         initialScale: initialScale,
-        doubleTapScales: doubleTapScales,
+        doubleTapScales: spec.doubleTapScales,
         hero: hero,
         loadingBuilder: item.loadingBuilder,
         errorBuilder: item.errorBuilder,
@@ -744,29 +726,29 @@ class _ViewfinderPage extends StatelessWidget {
         semanticLabel: item.semanticLabel,
         controller: imageController,
         canPan: canPan,
-        rotateEnabled: rotateEnabled,
-        interactionEndFrictionCoefficient: frictionCoefficient,
+        rotateEnabled: spec.rotateEnabled,
+        interactionEndFrictionCoefficient: spec.interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
       ),
       final ViewfinderChildItem item => ViewfinderImage.child(
         initialScale: initialScale,
-        doubleTapScales: doubleTapScales,
+        doubleTapScales: spec.doubleTapScales,
         hero: hero,
         minScale: effectiveMin,
         maxScale: effectiveMax,
         semanticLabel: item.semanticLabel,
         controller: imageController,
         canPan: canPan,
-        rotateEnabled: rotateEnabled,
-        interactionEndFrictionCoefficient: frictionCoefficient,
+        rotateEnabled: spec.rotateEnabled,
+        interactionEndFrictionCoefficient: spec.interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
         child: item.child,
       ),
     };
 
-    return pageSpacing > 0
+    return spec.pageSpacing > 0
         ? Padding(
-            padding: .symmetric(horizontal: pageSpacing / 2),
+            padding: .symmetric(horizontal: spec.pageSpacing / 2),
             child: page,
           )
         : page;

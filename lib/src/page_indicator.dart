@@ -8,6 +8,7 @@ import 'viewfinder.dart' show Viewfinder;
 /// - [ViewfinderPageIndicatorDots] — one dot per item.
 /// - [ViewfinderPageIndicatorLabel] — a single text label (default: `"i / N"`).
 /// - [ViewfinderPageIndicatorAdaptive] — dots up to a threshold, label beyond.
+@immutable
 sealed class ViewfinderPageIndicator {
   const ViewfinderPageIndicator({
     this.alignment = .bottomCenter,
@@ -44,6 +45,29 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
 
   final Color color;
   final Color activeColor;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderPageIndicatorDots &&
+          alignment == other.alignment &&
+          padding == other.padding &&
+          dotSize == other.dotSize &&
+          activeDotSize == other.activeDotSize &&
+          spacing == other.spacing &&
+          color == other.color &&
+          activeColor == other.activeColor;
+
+  @override
+  int get hashCode => Object.hash(
+    alignment,
+    padding,
+    dotSize,
+    activeDotSize,
+    spacing,
+    color,
+    activeColor,
+  );
 }
 
 /// Signature for [ViewfinderPageIndicatorLabel.labelBuilder] and the label
@@ -63,33 +87,33 @@ final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
   });
 
   final ViewfinderPageIndicatorLabelBuilder? labelBuilder;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderPageIndicatorLabel &&
+          alignment == other.alignment &&
+          padding == other.padding &&
+          labelBuilder == other.labelBuilder;
+
+  @override
+  int get hashCode => Object.hash(alignment, padding, labelBuilder);
 }
 
 /// Renders [dots] when `itemCount <= maxDots`; switches to [label] beyond it.
 ///
 /// The [alignment] and [padding] on the inner [dots] / [label] are ignored —
 /// the outer values on the [ViewfinderPageIndicatorAdaptive] are the source of
-/// truth. A debug-mode assert catches accidental customization of the inner
-/// values.
+/// truth. A debug-mode assert in the overlay catches accidental customization
+/// of the inner values.
 final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
-  ViewfinderPageIndicatorAdaptive({
+  const ViewfinderPageIndicatorAdaptive({
     super.alignment,
     super.padding,
     this.dots = const ViewfinderPageIndicatorDots(),
     this.label = const ViewfinderPageIndicatorLabel(),
     this.maxDots = 12,
-  }) : assert(maxDots >= 0, 'maxDots must be non-negative') {
-    assert(
-      dots.alignment == alignment && dots.padding == padding,
-      'Inner dots alignment/padding are ignored — set them on '
-      'ViewfinderPageIndicatorAdaptive instead.',
-    );
-    assert(
-      label.alignment == alignment && label.padding == padding,
-      'Inner label alignment/padding are ignored — set them on '
-      'ViewfinderPageIndicatorAdaptive instead.',
-    );
-  }
+  }) : assert(maxDots >= 0, 'maxDots must be non-negative');
 
   final ViewfinderPageIndicatorDots dots;
   final ViewfinderPageIndicatorLabel label;
@@ -97,6 +121,19 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   /// Maximum item count for which dots are rendered. Beyond this, the label
   /// variant takes over.
   final int maxDots;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderPageIndicatorAdaptive &&
+          alignment == other.alignment &&
+          padding == other.padding &&
+          dots == other.dots &&
+          label == other.label &&
+          maxDots == other.maxDots;
+
+  @override
+  int get hashCode => Object.hash(alignment, padding, dots, label, maxDots);
 }
 
 /// Internal widget that renders the configured indicator.
@@ -116,6 +153,25 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (itemCount == 0) return const SizedBox.shrink();
     final cfg = config;
+    assert(() {
+      if (cfg is ViewfinderPageIndicatorAdaptive) {
+        if (cfg.dots.alignment != cfg.alignment ||
+            cfg.dots.padding != cfg.padding) {
+          throw FlutterError(
+            'Inner dots alignment/padding on a ViewfinderPageIndicatorAdaptive '
+            'are ignored — set them on the Adaptive instance instead.',
+          );
+        }
+        if (cfg.label.alignment != cfg.alignment ||
+            cfg.label.padding != cfg.padding) {
+          throw FlutterError(
+            'Inner label alignment/padding on a ViewfinderPageIndicatorAdaptive '
+            'are ignored — set them on the Adaptive instance instead.',
+          );
+        }
+      }
+      return true;
+    }());
     final content = switch (cfg) {
       ViewfinderPageIndicatorDots() => _DotsView(
         dots: cfg,
