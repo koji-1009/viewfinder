@@ -337,9 +337,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     _runner = runner;
     _flingController
       ..stop()
-      ..animateWith(
-        FlingTimeDriver(runner.simX, runner.simY, runner.simScale),
-      );
+      ..animateWith(FlingTimeDriver(runner.simX, runner.simY, runner.simScale));
   }
 
   // ---------------- double-tap-drag ---------------- //
@@ -900,4 +898,3 @@ class FlingTimeDriver extends Simulation {
   bool isDone(double time) =>
       simX.isDone(time) && simY.isDone(time) && simScale.isDone(time);
 }
-

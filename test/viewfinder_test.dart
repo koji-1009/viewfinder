@@ -798,10 +798,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ViewfinderImage(
-            image: _memoryImage(),
-            gaplessPlayback: false,
-          ),
+          body: ViewfinderImage(image: _memoryImage(), gaplessPlayback: false),
         ),
       ),
     );
@@ -820,10 +817,8 @@ void main() {
           home: Scaffold(
             body: Viewfinder(
               itemCount: 1,
-              itemBuilder: (_, _) => ViewfinderItem(
-                image: _memoryImage(),
-                gaplessPlayback: false,
-              ),
+              itemBuilder: (_, _) =>
+                  ViewfinderItem(image: _memoryImage(), gaplessPlayback: false),
             ),
           ),
         ),
@@ -976,11 +971,7 @@ void main() {
 
       // No zoom. Fling the pager — should swipe normally, because the
       // handoff knob only governs the zoomed-edge gesture path.
-      await tester.fling(
-        find.byType(PageView),
-        const Offset(-400, 0),
-        1000,
-      );
+      await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
       await tester.pumpAndSettle();
       expect(ctrl.currentIndex, 1);
     },

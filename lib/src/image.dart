@@ -717,6 +717,5 @@ class ViewfinderImageController extends ChangeNotifier {
 
   /// Animate to [target] using the same easing/duration as
   /// [animateToScale] / [reset]. No-op when not attached.
-  void animateToTransform(Matrix4 target) =>
-      _state?.animateToTransform(target);
+  void animateToTransform(Matrix4 target) => _state?.animateToTransform(target);
 }

@@ -1019,25 +1019,13 @@ void main() {
 
     test('isDone is true only when all three sub-simulations are done', () {
       // All three at rest -> done.
-      expect(
-        FlingTimeDriver(atRest(), atRest(), atRest()).isDone(0),
-        isTrue,
-      );
+      expect(FlingTimeDriver(atRest(), atRest(), atRest()).isDone(0), isTrue);
       // Any single sub-simulation still moving -> not done. Verifies the
       // AND combination (an OR-typo would pass the all-rest case but
       // fail these).
-      expect(
-        FlingTimeDriver(moving(), atRest(), atRest()).isDone(0),
-        isFalse,
-      );
-      expect(
-        FlingTimeDriver(atRest(), moving(), atRest()).isDone(0),
-        isFalse,
-      );
-      expect(
-        FlingTimeDriver(atRest(), atRest(), moving()).isDone(0),
-        isFalse,
-      );
+      expect(FlingTimeDriver(moving(), atRest(), atRest()).isDone(0), isFalse);
+      expect(FlingTimeDriver(atRest(), moving(), atRest()).isDone(0), isFalse);
+      expect(FlingTimeDriver(atRest(), atRest(), moving()).isDone(0), isFalse);
     });
   });
 
@@ -1062,13 +1050,21 @@ void main() {
       // First tap: down then up.
       const at = Offset(100, 100);
       r.addPointer(
-        const PointerDownEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+        const PointerDownEvent(
+          pointer: 1,
+          position: at,
+          kind: PointerDeviceKind.touch,
+        ),
       );
       GestureBinding.instance.gestureArena.close(1);
       GestureBinding.instance.gestureArena.sweep(1);
       await tester.pump();
       r.handleEvent(
-        const PointerUpEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+        const PointerUpEvent(
+          pointer: 1,
+          position: at,
+          kind: PointerDeviceKind.touch,
+        ),
       );
 
       // Second tap: down within the double-tap window, then drag.
@@ -1119,13 +1115,21 @@ void main() {
 
       const at = Offset(100, 100);
       r.addPointer(
-        const PointerDownEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+        const PointerDownEvent(
+          pointer: 1,
+          position: at,
+          kind: PointerDeviceKind.touch,
+        ),
       );
       GestureBinding.instance.gestureArena.close(1);
       GestureBinding.instance.gestureArena.sweep(1);
       await tester.pump();
       r.handleEvent(
-        const PointerUpEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+        const PointerUpEvent(
+          pointer: 1,
+          position: at,
+          kind: PointerDeviceKind.touch,
+        ),
       );
       r.addPointer(
         const PointerDownEvent(
@@ -1140,7 +1144,11 @@ void main() {
       await tester.pump();
       // Release without moving past slop.
       r.handleEvent(
-        const PointerUpEvent(pointer: 2, position: at, kind: PointerDeviceKind.touch),
+        const PointerUpEvent(
+          pointer: 2,
+          position: at,
+          kind: PointerDeviceKind.touch,
+        ),
       );
 
       expect(startCount, 0);
