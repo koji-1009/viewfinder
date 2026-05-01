@@ -306,7 +306,6 @@ void main() {
     final g2 = await tester.startGesture(center);
     await g2.up();
     await tester.pumpAndSettle();
-    expect(galleryController.resetCurrentImage, isA<Function>());
 
     // Try to pop via Navigator. Because scale > 1, PopScope should
     // swallow the pop and reset the zoom instead.
@@ -1500,7 +1499,6 @@ void main() {
     tester,
   ) async {
     final galleryController = ViewfinderController();
-    final imageController = ViewfinderImageController();
     var dismissed = 0;
 
     await tester.pumpWidget(
@@ -1510,12 +1508,7 @@ void main() {
             itemCount: 2,
             controller: galleryController,
             dismiss: ViewfinderDismiss(onDismiss: () => dismissed++),
-            itemBuilder: (_, i) => ViewfinderItem(
-              image: _memoryImage(),
-              // Attach a separate controller on page 0 so the test can
-              // drive zoom. Viewfinder's own per-page controller still
-              // tracks state via onScaleChanged.
-            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
       ),
@@ -1546,9 +1539,6 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(dismissed, 1);
-
-    // Silence the unused-local warning.
-    imageController.reset();
   });
 
   testWidgets('ViewfinderController.resetCurrentImage returns true only '
@@ -1682,7 +1672,6 @@ void main() {
     // vertical-edge state in the wrong direction. Verify the lock
     // now follows pagerAxis.
     final galleryController = ViewfinderController();
-    final imageControllers = <int, ViewfinderImageController>{};
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1690,7 +1679,7 @@ void main() {
             itemCount: 3,
             controller: galleryController,
             pagerAxis: Axis.vertical,
-            itemBuilder: (_, i) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
       ),
@@ -1738,9 +1727,6 @@ void main() {
       reason:
           'zoomed off vertical edges: vertical pager swipe must stay locked',
     );
-    // Suppress unused-warning on imageControllers (kept for future
-    // expansion of this regression test).
-    expect(imageControllers, isEmpty);
   });
 
   testWidgets('ViewfinderImage: PointerCancel during drag does not crash', (
@@ -2997,9 +2983,12 @@ void main() {
         ),
       );
       await _settleImages(tester);
-      // Both callbacks fire while the gallery's itemBuilder runs.
-      expect(thumbCalls, isNotEmpty);
-      expect(labelCalls, isNotEmpty);
+      // Both callbacks fire with the page index while the gallery's
+      // itemBuilder runs. Page 0 is current; page 1 is pre-built by
+      // PageView. Use containsAll so we don't depend on call order or
+      // the exact viewport-cache strategy.
+      expect(thumbCalls, containsAll([0, 1]));
+      expect(labelCalls, containsAll([0, 1]));
     },
   );
 
