@@ -44,15 +44,26 @@ sealed class ViewfinderItem {
     String? semanticLabel,
   }) = ViewfinderChildItem;
 
+  /// Per-item Hero configuration. Null opts out.
   final ViewfinderHero? hero;
+
+  /// Per-item override of the gallery's `defaultInitialScale`.
   final ViewfinderInitialScale? initialScale;
+
+  /// Per-item override of the gallery's `minScale`.
   final double? minScale;
+
+  /// Per-item override of the gallery's `maxScale`.
   final double? maxScale;
+
+  /// Semantic label for screen readers.
   final String? semanticLabel;
 }
 
 /// `ImageProvider`-backed [ViewfinderItem] variant.
 final class ViewfinderImageItem extends ViewfinderItem {
+  /// Creates an image-backed item. [image] is the only required field;
+  /// every other parameter is optional and forwards to the gallery.
   const ViewfinderImageItem({
     required this.image,
     this.thumbImage,
@@ -65,18 +76,24 @@ final class ViewfinderImageItem extends ViewfinderItem {
     super.semanticLabel,
   }) : super._();
 
+  /// The provider rendered as the main image.
   final ImageProvider image;
 
   /// Low-resolution image shown while [image] is still loading.
   /// Cross-faded to the main image as soon as the first frame decodes.
   final ImageProvider? thumbImage;
 
+  /// Builder rendered while [image] is loading. See [Image.loadingBuilder].
   final ImageLoadingBuilder? loadingBuilder;
+
+  /// Builder rendered when [image] fails to load. See [Image.errorBuilder].
   final ImageErrorWidgetBuilder? errorBuilder;
 }
 
 /// Custom-widget [ViewfinderItem] variant.
 final class ViewfinderChildItem extends ViewfinderItem {
+  /// Creates a child-widget item. [child] is rendered with the same
+  /// zoom + pan + dismiss machinery as image-backed pages.
   const ViewfinderChildItem({
     required this.child,
     super.hero,
@@ -86,5 +103,6 @@ final class ViewfinderChildItem extends ViewfinderItem {
     super.semanticLabel,
   }) : super._();
 
+  /// The widget rendered for this page.
   final Widget child;
 }

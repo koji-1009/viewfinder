@@ -14,6 +14,8 @@ import 'package:flutter/foundation.dart';
 /// Extends [ChangeNotifier] so widgets can rebuild on visibility change
 /// via `AnimatedBuilder`.
 class ViewfinderChromeController extends ChangeNotifier {
+  /// Creates a chrome controller. Chrome starts visible by default
+  /// ([initialVisible] = `true`); set `false` to start hidden.
   ViewfinderChromeController({
     bool initialVisible = true,
     this.autoHideAfter = const .new(seconds: 3),

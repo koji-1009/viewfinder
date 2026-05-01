@@ -96,26 +96,47 @@ sealed class ViewfinderImage extends StatefulWidget {
     String? semanticLabel,
   }) = ViewfinderChildImage;
 
+  /// Initial scale applied before any user interaction.
   final ViewfinderInitialScale initialScale;
 
   /// Ladder of scales cycled by double-tap. `[]` disables double-tap;
   /// a two-element list behaves as a toggle; three or more cycle.
   final List<double> doubleTapScales;
 
+  /// Smallest allowed scale.
   final double minScale;
+
+  /// Largest allowed scale.
   final double maxScale;
+
+  /// Color painted behind the image.
   final Color backgroundColor;
+
+  /// Optional Hero animation config.
   final ViewfinderHero? hero;
+
+  /// Per-frame scale callback. See [ViewfinderScaleChanged].
   final ViewfinderScaleChanged? onScaleChanged;
 
   /// Tap callbacks forwarded to the internal [GestureDetector] using
   /// Flutter's standard typedefs, so callers can listen for taps without
   /// stacking another [GestureDetector] on top.
   final GestureTapCallback? onTap;
+
+  /// See [onTap].
   final GestureTapUpCallback? onTapUp;
+
+  /// See [onTap].
   final GestureTapDownCallback? onTapDown;
+
+  /// Optional [ViewfinderImageController] for state-level observation
+  /// and programmatic transform changes.
   final ViewfinderImageController? controller;
+
+  /// Whether single-pointer panning is honored.
   final bool panEnabled;
+
+  /// Whether pinch / wheel scaling is honored.
   final bool scaleEnabled;
 
   /// When true, two-finger rotation is honored. Default false to keep
@@ -137,6 +158,7 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// for an Android-scroll-style snap).
   final double interactionEndFrictionCoefficient;
 
+  /// Semantic label used by screen readers when this image is image-backed.
   final String? semanticLabel;
 
   @override
@@ -145,6 +167,8 @@ sealed class ViewfinderImage extends StatefulWidget {
 
 /// `ImageProvider`-backed [ViewfinderImage] variant.
 final class ViewfinderProviderImage extends ViewfinderImage {
+  /// Creates a provider-backed [ViewfinderImage]. Most callers go
+  /// through the [ViewfinderImage.new] factory instead.
   const ViewfinderProviderImage({
     super.key,
     required this.image,
@@ -172,6 +196,7 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     this.thumbCrossFadeDuration = const .new(milliseconds: 200),
   }) : super._();
 
+  /// Provider rendered as the main image.
   final ImageProvider image;
 
   /// Optional low-resolution image displayed while [image] is loading.
@@ -180,8 +205,16 @@ final class ViewfinderProviderImage extends ViewfinderImage {
   /// usual [errorBuilder] still fires for the main image.
   final ImageProvider? thumbImage;
 
+  /// Filter quality forwarded to the underlying [Image]. See
+  /// [Image.filterQuality].
   final FilterQuality filterQuality;
+
+  /// Loading builder forwarded to the underlying [Image]. See
+  /// [Image.loadingBuilder].
   final ImageLoadingBuilder? loadingBuilder;
+
+  /// Error builder forwarded to the underlying [Image]. See
+  /// [Image.errorBuilder].
   final ImageErrorWidgetBuilder? errorBuilder;
 
   /// Cross-fade duration from [thumbImage] to [image].
@@ -190,6 +223,8 @@ final class ViewfinderProviderImage extends ViewfinderImage {
 
 /// Custom-widget [ViewfinderImage] variant.
 final class ViewfinderChildImage extends ViewfinderImage {
+  /// Creates a child-widget [ViewfinderImage]. Most callers go through
+  /// the [ViewfinderImage.child] factory instead.
   const ViewfinderChildImage({
     super.key,
     required this.child,
@@ -212,6 +247,7 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.semanticLabel,
   }) : super._();
 
+  /// Widget rendered for this view.
   final Widget child;
 }
 
@@ -540,6 +576,10 @@ class _ImageWithOptionalThumb extends StatelessWidget {
 /// frame. For per-frame scale callbacks, use
 /// [ViewfinderImage.onScaleChanged].
 class ViewfinderImageController extends ChangeNotifier {
+  /// Creates a detached controller. Pass it to a [ViewfinderImage] to
+  /// observe and drive that image's transform.
+  ViewfinderImageController();
+
   _ViewfinderImageState? _state;
   bool _disposed = false;
   ({ViewfinderScaleState scale, bool h, bool v})? _lastSignal;

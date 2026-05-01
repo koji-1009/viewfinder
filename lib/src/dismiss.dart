@@ -3,7 +3,16 @@ import 'package:flutter/material.dart';
 import 'viewfinder.dart' show Viewfinder;
 
 /// Which axis a drag-to-dismiss gesture is accepted on.
-enum ViewfinderDismissDirection { vertical, down, up }
+enum ViewfinderDismissDirection {
+  /// Accept either upward or downward drags.
+  vertical,
+
+  /// Accept only downward drags.
+  down,
+
+  /// Accept only upward drags.
+  up,
+}
 
 /// What moves during a drag-to-dismiss gesture.
 ///
@@ -11,11 +20,20 @@ enum ViewfinderDismissDirection { vertical, down, up }
 ///   together with the drag, and the background fades uniformly.
 /// - [onlyImage]: only the paging photo area translates; thumbnails,
 ///   page indicator, and any chromeOverlays remain in place.
-enum ViewfinderDismissSlideType { wholePage, onlyImage }
+enum ViewfinderDismissSlideType {
+  /// Translate the whole gallery (thumbnails + indicator + overlays)
+  /// in step with the drag.
+  wholePage,
+
+  /// Translate only the paging photo area; chrome stays anchored.
+  onlyImage,
+}
 
 /// Configures drag-to-dismiss for a [Viewfinder].
 @immutable
 class ViewfinderDismiss {
+  /// Creates a drag-to-dismiss config. [onDismiss] is required and is
+  /// invoked once the user releases a drag past [threshold].
   const ViewfinderDismiss({
     required this.onDismiss,
     this.direction = .vertical,
@@ -32,6 +50,7 @@ class ViewfinderDismiss {
   /// its dragged-out, partially translucent state.
   final VoidCallback onDismiss;
 
+  /// Axis on which the drag-to-dismiss gesture is accepted.
   final ViewfinderDismissDirection direction;
 
   /// Fraction of the viewport height that triggers dismissal when released.
@@ -40,6 +59,9 @@ class ViewfinderDismiss {
   /// If true, the [backgroundColor] fades as the user drags.
   final bool fadeBackground;
 
+  /// The color shown behind the photo while it is being dragged. When
+  /// [fadeBackground] is true, this color's alpha decreases as the user
+  /// drags further from rest.
   final Color backgroundColor;
 
   /// Controls what moves during the drag.

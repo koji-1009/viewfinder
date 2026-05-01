@@ -60,7 +60,14 @@ class _ValueScale extends ViewfinderInitialScale {
 }
 
 /// Whether the view is at its initial scale or the user has zoomed in.
-enum ViewfinderScaleState { initial, zoomed }
+enum ViewfinderScaleState {
+  /// At the initial scale supplied via [ViewfinderInitialScale].
+  initial,
+
+  /// Past the initial scale — the user has pinched / double-tapped /
+  /// double-tap-dragged / mouse-wheel-zoomed in.
+  zoomed,
+}
 
 /// Pick the next scale for a double-tap given a ladder of [scales].
 ///

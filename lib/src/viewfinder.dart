@@ -21,6 +21,8 @@ import 'thumbnails.dart';
 /// thumbnails, page indicator, drag-to-dismiss, adjacent-page precache —
 /// is opt-in via a dedicated config object.
 class Viewfinder extends StatefulWidget {
+  /// Creates a swipeable photo gallery. [itemCount] and [itemBuilder]
+  /// are required; every other parameter is opt-in.
   const Viewfinder({
     super.key,
     required this.itemCount,
@@ -189,23 +191,46 @@ class Viewfinder extends StatefulWidget {
     );
   }
 
+  /// Number of pages in the gallery.
   final int itemCount;
+
+  /// Builds the [ViewfinderItem] shown at the given page index.
   final ViewfinderItem Function(BuildContext context, int index) itemBuilder;
 
+  /// Optional [ViewfinderController] for programmatic page changes
+  /// (`jumpTo` / `animateTo`) and zoom reset.
   final ViewfinderController? controller;
+
+  /// Optional thumbnail strip — see [ViewfinderThumbnails].
   final ViewfinderThumbnails? thumbnails;
+
+  /// Optional page indicator — see [ViewfinderPageIndicator].
   final ViewfinderPageIndicator? indicator;
+
+  /// Optional drag-to-dismiss configuration.
   final ViewfinderDismiss? dismiss;
 
+  /// Initial scale applied to every page unless overridden by the item's
+  /// own [ViewfinderItem.initialScale].
   final ViewfinderInitialScale defaultInitialScale;
+
+  /// Smallest allowed scale (relative to the initial-scale baseline).
   final double minScale;
+
+  /// Largest allowed scale (relative to the initial-scale baseline).
   final double maxScale;
 
   /// Ladder of scales cycled by double-tap. `[]` disables double-tap;
   /// a two-element list behaves as a toggle; three or more cycle.
   final List<double> doubleTapScales;
+
+  /// Color painted behind every page.
   final Color backgroundColor;
+
+  /// Fired with the new index whenever the displayed page changes.
   final ValueChanged<int>? onPageChanged;
+
+  /// Spacing in logical pixels between adjacent pages within the pager.
   final double pageSpacing;
 
   /// Number of pages to `precacheImage` on each side of the current page.
@@ -827,11 +852,13 @@ class _ThumbnailFrame extends StatelessWidget {
 
 /// Controls a [Viewfinder] and publishes the current page index.
 class ViewfinderController extends ChangeNotifier {
+  /// Creates a controller starting at [initialIndex].
   ViewfinderController({int initialIndex = 0}) : _currentIndex = initialIndex;
 
   _ViewfinderState? _state;
   int _currentIndex;
 
+  /// Index of the page currently shown by the attached [Viewfinder].
   int get currentIndex => _currentIndex;
 
   void _attach(_ViewfinderState s) => _state = s;
@@ -845,7 +872,10 @@ class ViewfinderController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Jump to [index] without animation. No-op if not attached.
   void jumpTo(int index) => _state?._goTo(index, animate: false);
+
+  /// Animate to [index]. No-op if not attached.
   void animateTo(int index) => _state?._goTo(index, animate: true);
 
   /// Reset the current page's zoom if it is zoomed in.

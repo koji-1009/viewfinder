@@ -24,6 +24,7 @@ sealed class ViewfinderPageIndicator {
 
 /// Renders one dot per item, highlighting the current page.
 final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
+  /// Creates a dots indicator.
   const ViewfinderPageIndicatorDots({
     super.alignment,
     super.padding,
@@ -43,7 +44,10 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   /// Spacing between dots.
   final double spacing;
 
+  /// Color of inactive dots.
   final Color color;
+
+  /// Color of the dot for the current page.
   final Color activeColor;
 
   @override
@@ -80,12 +84,15 @@ typedef ViewfinderPageIndicatorLabelBuilder =
 /// Provide [labelBuilder] to fully customize the rendered widget; pass `null`
 /// to use the default styling.
 final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
+  /// Creates a text-label indicator. Pass [labelBuilder] to customize
+  /// the rendered widget; default styling is a pill with `"i / N"`.
   const ViewfinderPageIndicatorLabel({
     super.alignment,
     super.padding,
     this.labelBuilder,
   });
 
+  /// Builds the rendered label. When `null`, a default pill is used.
   final ViewfinderPageIndicatorLabelBuilder? labelBuilder;
 
   @override
@@ -107,6 +114,8 @@ final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
 /// truth. A debug-mode assert in the overlay catches accidental customization
 /// of the inner values.
 final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
+  /// Creates an adaptive indicator. The default values match standard
+  /// photo-viewer behaviour: dots up to 12 items, then `"i / N"` label.
   const ViewfinderPageIndicatorAdaptive({
     super.alignment,
     super.padding,
@@ -115,7 +124,10 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
     this.maxDots = 12,
   }) : assert(maxDots >= 0, 'maxDots must be non-negative');
 
+  /// Configuration used while rendering dots (`itemCount <= maxDots`).
   final ViewfinderPageIndicatorDots dots;
+
+  /// Configuration used once `itemCount` exceeds [maxDots].
   final ViewfinderPageIndicatorLabel label;
 
   /// Maximum item count for which dots are rendered. Beyond this, the label

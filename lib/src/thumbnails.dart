@@ -2,7 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'viewfinder.dart' show Viewfinder;
 
-enum ViewfinderThumbnailPosition { top, bottom, left, right }
+/// Where the thumbnail strip sits relative to the main viewer.
+enum ViewfinderThumbnailPosition {
+  /// Above the main viewer, horizontal strip.
+  top,
+
+  /// Below the main viewer, horizontal strip.
+  bottom,
+
+  /// Left of the main viewer, vertical strip.
+  left,
+
+  /// Right of the main viewer, vertical strip.
+  right,
+}
 
 /// Signature for fully custom thumbnail builders.
 typedef ViewfinderThumbnailItemBuilder =
@@ -11,6 +24,8 @@ typedef ViewfinderThumbnailItemBuilder =
 /// Configures the optional thumbnail strip shown alongside a [Viewfinder].
 @immutable
 class ViewfinderThumbnails {
+  /// Creates a thumbnail strip config with library defaults
+  /// (bottom, 56-pt tiles, white selected border).
   const ViewfinderThumbnails({
     this.position = .bottom,
     this.size = 56,
@@ -41,8 +56,13 @@ class ViewfinderThumbnails {
        ),
        unselectedOpacity = 0.55;
 
+  /// Where the strip is anchored relative to the main viewer.
   final ViewfinderThumbnailPosition position;
+
+  /// Tile edge length in logical pixels (square tiles).
   final double size;
+
+  /// Gap between adjacent tiles in logical pixels.
   final double spacing;
 
   /// Internal content padding for the thumbnail strip. Combined with
@@ -63,6 +83,8 @@ class ViewfinderThumbnails {
   /// Applied to the default tile only. See [selectedBorder].
   final double unselectedOpacity;
 
+  /// Background painted edge-to-edge behind the strip (including the
+  /// safe-area inset when [safeArea] is true).
   final Color backgroundColor;
 
   /// Optional fully custom tile builder. When provided, [selectedBorder]
@@ -70,6 +92,7 @@ class ViewfinderThumbnails {
   /// `selected` flag and renders the tile exactly as returned.
   final ViewfinderThumbnailItemBuilder? itemBuilder;
 
+  /// True when the strip lays out horizontally (top or bottom).
   bool get isHorizontal => switch (position) {
     .top || .bottom => true,
     .left || .right => false,

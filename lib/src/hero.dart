@@ -13,6 +13,9 @@ import 'package:flutter/widgets.dart';
 /// Pass `null` for the parent's `hero` field to opt out entirely.
 @immutable
 class ViewfinderHero {
+  /// Creates a Hero configuration. [tag] is the only required argument
+  /// — it identifies this hero in the standard [Hero] flight (matching
+  /// the source side's `Hero.tag`).
   const ViewfinderHero(
     this.tag, {
     this.createRectTween,
