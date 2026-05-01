@@ -71,6 +71,42 @@ void main() {
       expect(s.boxFit, BoxFit.contain);
       expect(s.baseScale, 2.5);
     });
+
+    test('contain(factor): scales the contain fit', () {
+      const s = ViewfinderInitialScale.contain(0.8);
+      expect(s.boxFit, BoxFit.contain);
+      expect(s.baseScale, 0.8);
+    });
+
+    test('cover(factor): scales the cover fit', () {
+      const s = ViewfinderInitialScale.cover(1.5);
+      expect(s.boxFit, BoxFit.cover);
+      expect(s.baseScale, 1.5);
+    });
+
+    test('value(x) and contain(x) compare equal (same canonical variant)', () {
+      const a = ViewfinderInitialScale.value(2.0);
+      const b = ViewfinderInitialScale.contain(2.0);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+    });
+
+    test('contain and cover with same factor are not equal', () {
+      const a = ViewfinderInitialScale.contain(1.5);
+      const b = ViewfinderInitialScale.cover(1.5);
+      expect(a, isNot(equals(b)));
+    });
+
+    test('factor must be positive', () {
+      expect(
+        () => ViewfinderInitialScale.contain(0),
+        throwsA(isA<AssertionError>()),
+      );
+      expect(
+        () => ViewfinderInitialScale.cover(-1),
+        throwsA(isA<AssertionError>()),
+      );
+    });
   });
 
   group('ViewfinderItem', () {

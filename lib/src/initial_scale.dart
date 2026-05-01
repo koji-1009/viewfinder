@@ -6,20 +6,29 @@ import 'package:flutter/painting.dart';
 ///
 /// Construct via the [ViewfinderInitialScale.contain],
 /// [ViewfinderInitialScale.cover], or [ViewfinderInitialScale.value]
-/// factories. Consumers read [boxFit] and [baseScale] — the variant
-/// type itself is not part of the public surface.
+/// factories. Each fit-based factory accepts an optional `factor`
+/// multiplier — `contain(0.8)` shows the photo at 80% of the
+/// fit-in-viewport size (leaving margin), `cover(1.2)` zooms to 120%
+/// of the fill-viewport size. Consumers read [boxFit] and [baseScale];
+/// the variant type itself is not part of the public surface.
 @immutable
 sealed class ViewfinderInitialScale {
   const ViewfinderInitialScale();
 
   /// Fit the content entirely inside the viewport (letter-boxing). Default.
-  const factory ViewfinderInitialScale.contain() = _Contain;
+  /// Optional [factor] multiplies the resulting scale: `contain(0.8)`
+  /// shows the photo at 80% of fit, leaving margin around it.
+  const factory ViewfinderInitialScale.contain([double factor]) = _Contain;
 
-  /// Fill the viewport, cropping overflow.
-  const factory ViewfinderInitialScale.cover() = _Cover;
+  /// Fill the viewport, cropping overflow. Optional [factor] multiplies
+  /// the resulting scale: `cover(1.5)` zooms to 1.5× fill.
+  const factory ViewfinderInitialScale.cover([double factor]) = _Cover;
 
-  /// Explicit scale. 1.0 = fit, 2.0 = 2× fit, …
-  const factory ViewfinderInitialScale.value(double scale) = _ValueScale;
+  /// Explicit absolute scale relative to `BoxFit.contain`. Equivalent to
+  /// [ViewfinderInitialScale.contain] with the same `factor`; kept as a
+  /// shortcut for callers who want an absolute-multiplier reading
+  /// (`value(2.0)` reads as "always 2×").
+  const factory ViewfinderInitialScale.value(double scale) = _Contain;
 
   /// BoxFit used for the initial layout of the underlying `Image`.
   BoxFit get boxFit;
@@ -29,34 +38,33 @@ sealed class ViewfinderInitialScale {
 }
 
 class _Contain extends ViewfinderInitialScale {
-  const _Contain();
+  const _Contain([this.factor = 1.0]) : assert(factor > 0);
+  final double factor;
   @override
   BoxFit get boxFit => BoxFit.contain;
   @override
-  double get baseScale => 1.0;
-}
-
-class _Cover extends ViewfinderInitialScale {
-  const _Cover();
-  @override
-  BoxFit get boxFit => BoxFit.cover;
-  @override
-  double get baseScale => 1.0;
-}
-
-class _ValueScale extends ViewfinderInitialScale {
-  const _ValueScale(this.scale) : assert(scale > 0);
-  final double scale;
-  @override
-  BoxFit get boxFit => BoxFit.contain;
-  @override
-  double get baseScale => scale;
+  double get baseScale => factor;
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is _ValueScale && scale == other.scale;
+      identical(this, other) || other is _Contain && factor == other.factor;
   @override
-  int get hashCode => Object.hash(_ValueScale, scale);
+  int get hashCode => Object.hash(_Contain, factor);
+}
+
+class _Cover extends ViewfinderInitialScale {
+  const _Cover([this.factor = 1.0]) : assert(factor > 0);
+  final double factor;
+  @override
+  BoxFit get boxFit => BoxFit.cover;
+  @override
+  double get baseScale => factor;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is _Cover && factor == other.factor;
+  @override
+  int get hashCode => Object.hash(_Cover, factor);
 }
 
 /// Whether the view is at its initial scale or the user has zoomed in.

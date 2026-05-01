@@ -2,6 +2,7 @@
 
 * Initial release.
 * `Viewfinder` gallery (`PageView`-backed, horizontal or vertical `pagerAxis`) and `ViewfinderImage` / `.child` single viewer.
+* `ViewfinderInitialScale.contain([factor])` / `.cover([factor])` accept an optional multiplier — `contain(0.8)` shows the photo at 80% of fit, `cover(1.2)` zooms to 120% of fill. `.value(scale)` remains as an absolute-multiplier shortcut.
 * Pinch, pan, double-tap ladder, double-tap-drag continuous zoom, opt-in two-finger rotation; post-release fling on both pan and scale via `FrictionSimulation` (X / Y / scale axes), anchored to the focal point captured at release.
 * Rubber-band elastic edges — pulling a zoomed image past its boundary shows live elastic over-pan with diminishing returns, then animates back on release.
 * Custom `ZoomableViewport` gesture layer that yields edge pans to the parent scrollable via `canPan(Axis, int)`. Yields single-pointer drags along the pager axis when not zoomed, so mouse-drag and trackpad-drag swipe pages on web/desktop.

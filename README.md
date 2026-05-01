@@ -81,6 +81,18 @@ ViewfinderImage.child(
 )
 ```
 
+### Initial scale
+
+Three flavors:
+
+```dart
+const ViewfinderInitialScale.contain()      // fit-in-viewport (default)
+const ViewfinderInitialScale.contain(0.8)   // 80% of fit, leaves margin
+const ViewfinderInitialScale.cover()        // fill-viewport, crop overflow
+const ViewfinderInitialScale.cover(1.2)     // 120% of fill
+const ViewfinderInitialScale.value(2.0)     // absolute 2× over `contain`
+```
+
 ## Features
 
 * **Zoom & pan** — pinch, two-finger rotation (opt-in), double-tap ladder (`doubleTapScales: [1, 2.5, 5]`), double-tap-and-drag continuous zoom (iOS Photos style).
