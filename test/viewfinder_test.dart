@@ -599,7 +599,10 @@ void main() {
     );
     await _settleImages(tester);
 
-    expect(find.byType(ViewfinderImage), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) => w is ViewfinderImage),
+      findsOneWidget,
+    );
     expect(find.byType(ViewfinderThumbnailBar), findsOneWidget);
 
     controller.animateTo(3);
@@ -1544,7 +1547,9 @@ void main() {
     );
     await _settleImages(tester);
 
-    final tapPoint = tester.getCenter(find.byType(ViewfinderImage));
+    final tapPoint = tester.getCenter(
+      find.byWidgetPredicate((w) => w is ViewfinderImage),
+    );
     await tester.tapAt(tapPoint);
     await tester.pump(const Duration(milliseconds: 350));
 
@@ -1720,7 +1725,9 @@ void main() {
     // Invoke the frameBuilder for both the pre-frame (frame=null,
     // opacity 0) and post-frame (frame=0, opacity 1) cases. This both
     // exercises the closure body and asserts the cross-fade contract.
-    final ctx = tester.element(find.byType(ViewfinderImage));
+    final ctx = tester.element(
+      find.byWidgetPredicate((w) => w is ViewfinderImage),
+    );
     final beforeFirstFrame =
         main.frameBuilder!(ctx, const SizedBox(), null, false)
             as AnimatedOpacity;

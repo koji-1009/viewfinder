@@ -15,21 +15,21 @@ typedef ViewfinderScaleChanged = void Function(double scale);
 /// Pinch zoom, pan, and double-tap zoom are delegated to
 /// [InteractiveViewer] + a light custom double-tap handler. Suitable as a
 /// standalone viewer or as a page inside `Viewfinder`.
-class ViewfinderImage extends StatefulWidget {
-  /// Displays an [ImageProvider]. The most common constructor.
-  const ViewfinderImage({
+///
+/// Sealed: the public ctors are factories returning private final
+/// subclasses ([ViewfinderProviderImage] / [ViewfinderChildImage]).
+/// External code can pattern-match on the variant where useful, but
+/// `find.byType(ViewfinderImage)` will not match — use
+/// `find.byWidgetPredicate((w) => w is ViewfinderImage)` instead.
+sealed class ViewfinderImage extends StatefulWidget {
+  const ViewfinderImage._({
     super.key,
-    required ImageProvider this.image,
-    this.thumbImage,
     this.initialScale = const .contain(),
     this.doubleTapScales = const [1.0, 2.5, 5.0],
     this.minScale = 1.0,
     this.maxScale = 8.0,
     this.backgroundColor = Colors.black,
     this.hero,
-    this.filterQuality = .medium,
-    this.loadingBuilder,
-    this.errorBuilder,
     this.onScaleChanged,
     this.onTap,
     this.onTapUp,
@@ -41,54 +41,60 @@ class ViewfinderImage extends StatefulWidget {
     this.canPan,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.semanticLabel,
-    this.thumbCrossFadeDuration = const .new(milliseconds: 200),
-  }) : child = null,
-       assert(minScale > 0),
+  }) : assert(minScale > 0),
        assert(maxScale >= minScale),
        assert(interactionEndFrictionCoefficient > 0);
+
+  /// Displays an [ImageProvider]. The most common constructor.
+  const factory ViewfinderImage({
+    Key? key,
+    required ImageProvider image,
+    ImageProvider? thumbImage,
+    ViewfinderInitialScale initialScale,
+    List<double> doubleTapScales,
+    double minScale,
+    double maxScale,
+    Color backgroundColor,
+    ViewfinderHero? hero,
+    FilterQuality filterQuality,
+    ImageLoadingBuilder? loadingBuilder,
+    ImageErrorWidgetBuilder? errorBuilder,
+    ViewfinderScaleChanged? onScaleChanged,
+    GestureTapCallback? onTap,
+    GestureTapUpCallback? onTapUp,
+    GestureTapDownCallback? onTapDown,
+    ViewfinderImageController? controller,
+    bool panEnabled,
+    bool scaleEnabled,
+    bool rotateEnabled,
+    ZoomableCanPan? canPan,
+    double interactionEndFrictionCoefficient,
+    String? semanticLabel,
+    Duration thumbCrossFadeDuration,
+  }) = ViewfinderProviderImage;
 
   /// Displays an arbitrary [child] widget instead of an image.
-  const ViewfinderImage.child({
-    super.key,
-    required Widget this.child,
-    this.initialScale = const .contain(),
-    this.doubleTapScales = const [1.0, 2.5, 5.0],
-    this.minScale = 1.0,
-    this.maxScale = 8.0,
-    this.backgroundColor = Colors.black,
-    this.hero,
-    this.onScaleChanged,
-    this.onTap,
-    this.onTapUp,
-    this.onTapDown,
-    this.controller,
-    this.panEnabled = true,
-    this.scaleEnabled = true,
-    this.rotateEnabled = false,
-    this.canPan,
-    this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
-    this.semanticLabel,
-  }) : image = null,
-       thumbImage = null,
-       filterQuality = .medium,
-       loadingBuilder = null,
-       errorBuilder = null,
-       thumbCrossFadeDuration = const .new(milliseconds: 200),
-       assert(minScale > 0),
-       assert(maxScale >= minScale),
-       assert(interactionEndFrictionCoefficient > 0);
-
-  final ImageProvider? image;
-  final Widget? child;
-
-  /// Optional low-resolution image displayed while [image] is loading.
-  /// As soon as the main image's first frame decodes, we cross-fade to
-  /// it. Nothing is shown if both thumb and main fail to load — the
-  /// usual [errorBuilder] still fires for the main image.
-  final ImageProvider? thumbImage;
-
-  /// Cross-fade duration from [thumbImage] to [image].
-  final Duration thumbCrossFadeDuration;
+  const factory ViewfinderImage.child({
+    Key? key,
+    required Widget child,
+    ViewfinderInitialScale initialScale,
+    List<double> doubleTapScales,
+    double minScale,
+    double maxScale,
+    Color backgroundColor,
+    ViewfinderHero? hero,
+    ViewfinderScaleChanged? onScaleChanged,
+    GestureTapCallback? onTap,
+    GestureTapUpCallback? onTapUp,
+    GestureTapDownCallback? onTapDown,
+    ViewfinderImageController? controller,
+    bool panEnabled,
+    bool scaleEnabled,
+    bool rotateEnabled,
+    ZoomableCanPan? canPan,
+    double interactionEndFrictionCoefficient,
+    String? semanticLabel,
+  }) = ViewfinderChildImage;
 
   final ViewfinderInitialScale initialScale;
 
@@ -100,9 +106,6 @@ class ViewfinderImage extends StatefulWidget {
   final double maxScale;
   final Color backgroundColor;
   final ViewfinderHero? hero;
-  final FilterQuality filterQuality;
-  final ImageLoadingBuilder? loadingBuilder;
-  final ImageErrorWidgetBuilder? errorBuilder;
   final ViewfinderScaleChanged? onScaleChanged;
 
   /// Tap callbacks forwarded to the internal [GestureDetector] using
@@ -138,6 +141,78 @@ class ViewfinderImage extends StatefulWidget {
 
   @override
   State<ViewfinderImage> createState() => _ViewfinderImageState();
+}
+
+/// `ImageProvider`-backed [ViewfinderImage] variant.
+final class ViewfinderProviderImage extends ViewfinderImage {
+  const ViewfinderProviderImage({
+    super.key,
+    required this.image,
+    this.thumbImage,
+    super.initialScale,
+    super.doubleTapScales,
+    super.minScale,
+    super.maxScale,
+    super.backgroundColor,
+    super.hero,
+    this.filterQuality = .medium,
+    this.loadingBuilder,
+    this.errorBuilder,
+    super.onScaleChanged,
+    super.onTap,
+    super.onTapUp,
+    super.onTapDown,
+    super.controller,
+    super.panEnabled,
+    super.scaleEnabled,
+    super.rotateEnabled,
+    super.canPan,
+    super.interactionEndFrictionCoefficient,
+    super.semanticLabel,
+    this.thumbCrossFadeDuration = const .new(milliseconds: 200),
+  }) : super._();
+
+  final ImageProvider image;
+
+  /// Optional low-resolution image displayed while [image] is loading.
+  /// As soon as the main image's first frame decodes, we cross-fade to
+  /// it. Nothing is shown if both thumb and main fail to load — the
+  /// usual [errorBuilder] still fires for the main image.
+  final ImageProvider? thumbImage;
+
+  final FilterQuality filterQuality;
+  final ImageLoadingBuilder? loadingBuilder;
+  final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Cross-fade duration from [thumbImage] to [image].
+  final Duration thumbCrossFadeDuration;
+}
+
+/// Custom-widget [ViewfinderImage] variant.
+final class ViewfinderChildImage extends ViewfinderImage {
+  const ViewfinderChildImage({
+    super.key,
+    required this.child,
+    super.initialScale,
+    super.doubleTapScales,
+    super.minScale,
+    super.maxScale,
+    super.backgroundColor,
+    super.hero,
+    super.onScaleChanged,
+    super.onTap,
+    super.onTapUp,
+    super.onTapDown,
+    super.controller,
+    super.panEnabled,
+    super.scaleEnabled,
+    super.rotateEnabled,
+    super.canPan,
+    super.interactionEndFrictionCoefficient,
+    super.semanticLabel,
+  }) : super._();
+
+  final Widget child;
 }
 
 class _ViewfinderImageState extends State<ViewfinderImage>
@@ -325,18 +400,26 @@ class _ImageBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget content = switch (spec.image) {
-      final ImageProvider image => _ImageWithOptionalThumb(
-        image: image,
-        thumb: spec.thumbImage,
-        boxFit: spec.initialScale.boxFit,
-        filterQuality: spec.filterQuality,
-        loadingBuilder: spec.loadingBuilder,
-        errorBuilder: spec.errorBuilder,
-        thumbCrossFadeDuration: spec.thumbCrossFadeDuration,
-        semanticLabel: spec.semanticLabel,
-      ),
-      _ => spec.child!,
+    Widget content = switch (spec) {
+      ViewfinderProviderImage(
+        :final image,
+        :final thumbImage,
+        :final filterQuality,
+        :final loadingBuilder,
+        :final errorBuilder,
+        :final thumbCrossFadeDuration,
+      ) =>
+        _ImageWithOptionalThumb(
+          image: image,
+          thumb: thumbImage,
+          boxFit: spec.initialScale.boxFit,
+          filterQuality: filterQuality,
+          loadingBuilder: loadingBuilder,
+          errorBuilder: errorBuilder,
+          thumbCrossFadeDuration: thumbCrossFadeDuration,
+          semanticLabel: spec.semanticLabel,
+        ),
+      ViewfinderChildImage(:final child) => child,
     };
 
     if (spec.hero case final hero?) {
