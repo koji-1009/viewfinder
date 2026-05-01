@@ -999,28 +999,45 @@ void main() {
   });
 
   group('FlingTimeDriver', () {
-    final driver = FlingTimeDriver(
-      FrictionSimulation(0.1, 0, 0),
-      FrictionSimulation(0.1, 0, 0),
-      FrictionSimulation(0.1, 0, 0),
-    );
+    // A simulation at rest (zero velocity, zero position) is immediately done;
+    // a simulation with high velocity and low drag is not.
+    FrictionSimulation atRest() => FrictionSimulation(0.1, 0, 0);
+    FrictionSimulation moving() => FrictionSimulation(0.001, 0, 1000);
 
     test('x(time) returns the time argument unchanged', () {
-      expect(driver.x(0), 0);
-      expect(driver.x(0.5), 0.5);
-      expect(driver.x(1.7), 1.7);
+      final d = FlingTimeDriver(atRest(), atRest(), atRest());
+      expect(d.x(0), 0);
+      expect(d.x(0.5), 0.5);
+      expect(d.x(1.7), 1.7);
     });
 
     test('dx(time) is constant 1.0', () {
-      expect(driver.dx(0), 1.0);
-      expect(driver.dx(100), 1.0);
+      final d = FlingTimeDriver(atRest(), atRest(), atRest());
+      expect(d.dx(0), 1.0);
+      expect(d.dx(100), 1.0);
     });
 
-    test('isDone is the AND of the three sub-simulations', () {
-      // Three FrictionSimulations starting at zero with zero velocity are
-      // all immediately done. AND short-circuits to true.
-      expect(driver.isDone(0), isTrue);
-      expect(driver.isDone(10), isTrue);
+    test('isDone is true only when all three sub-simulations are done', () {
+      // All three at rest -> done.
+      expect(
+        FlingTimeDriver(atRest(), atRest(), atRest()).isDone(0),
+        isTrue,
+      );
+      // Any single sub-simulation still moving -> not done. Verifies the
+      // AND combination (an OR-typo would pass the all-rest case but
+      // fail these).
+      expect(
+        FlingTimeDriver(moving(), atRest(), atRest()).isDone(0),
+        isFalse,
+      );
+      expect(
+        FlingTimeDriver(atRest(), moving(), atRest()).isDone(0),
+        isFalse,
+      );
+      expect(
+        FlingTimeDriver(atRest(), atRest(), moving()).isDone(0),
+        isFalse,
+      );
     });
   });
 
