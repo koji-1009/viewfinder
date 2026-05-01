@@ -48,7 +48,7 @@ const double _kMinScaleFlingVelocity = 0.3;
 ///   the gesture arena (so a parent [PageView] can take over) when the
 ///   image is already against the relevant edge.
 /// - Double-tap-drag continuous zoom (iOS Photos style) via
-///   [_DoubleTapDragRecognizer].
+///   [DoubleTapDragRecognizer].
 /// - Rotated-bbox-aware translation clamping.
 /// - Post-release fling driven by Flutter's [FrictionSimulation].
 class ZoomableViewport extends StatefulWidget {
@@ -149,7 +149,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
 
   // Fling.
   late final AnimationController _flingController;
-  _FlingRunner? _runner;
+  FlingRunner? _runner;
 
   // Rubber-band snap-back.
   late final AnimationController _snapBackController;
@@ -323,7 +323,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     double startScale,
   ) {
     final start = from.clone();
-    final runner = _FlingRunner(
+    final runner = FlingRunner(
       startMatrix: start,
       position: Offset(start.storage[12], start.storage[13]),
       velocity: velocity,
@@ -338,7 +338,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     _flingController
       ..stop()
       ..animateWith(
-        _FlingTimeDriver(runner.simX, runner.simY, runner.simScale),
+        FlingTimeDriver(runner.simX, runner.simY, runner.simScale),
       );
   }
 
@@ -528,9 +528,9 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     // ScaleGestureRecognizer.
     return <Type, GestureRecognizerFactory>{
       if (widget.doubleTapDragZoom && widget.scaleEnabled)
-        _DoubleTapDragRecognizer:
-            GestureRecognizerFactoryWithHandlers<_DoubleTapDragRecognizer>(
-              () => _DoubleTapDragRecognizer(debugOwner: this),
+        DoubleTapDragRecognizer:
+            GestureRecognizerFactoryWithHandlers<DoubleTapDragRecognizer>(
+              () => DoubleTapDragRecognizer(debugOwner: this),
               (r) {
                 r
                   ..onDragStart = _onDoubleTapDragStart
@@ -693,19 +693,20 @@ class _TrackedPointer {
 // up or down to zoom continuously.
 // ---------------------------------------------------------------------------
 
-typedef _DoubleTapDragStart = void Function(Offset localPosition);
-typedef _DoubleTapDragUpdate = void Function(Offset localPosition);
-typedef _DoubleTapDragEnd = void Function();
+typedef DoubleTapDragStart = void Function(Offset localPosition);
+typedef DoubleTapDragUpdate = void Function(Offset localPosition);
+typedef DoubleTapDragEnd = void Function();
 
 const _kDoubleTapSlop = 100.0;
 const _kDoubleTapWindow = Duration(milliseconds: 300);
 
-class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
-  _DoubleTapDragRecognizer({super.debugOwner});
+@visibleForTesting
+class DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
+  DoubleTapDragRecognizer({super.debugOwner});
 
-  _DoubleTapDragStart? onDragStart;
-  _DoubleTapDragUpdate? onDragUpdate;
-  _DoubleTapDragEnd? onDragEnd;
+  DoubleTapDragStart? onDragStart;
+  DoubleTapDragUpdate? onDragUpdate;
+  DoubleTapDragEnd? onDragEnd;
 
   _State _state = _State.idle;
   Offset? _firstTapPosition;
@@ -837,8 +838,9 @@ enum _State { idle, tap1Down, tap1Up, tap2Down, dragging }
 // AnimationController through a time-driver Simulation.
 // ---------------------------------------------------------------------------
 
-class _FlingRunner {
-  _FlingRunner({
+@visibleForTesting
+class FlingRunner {
+  FlingRunner({
     required this.startMatrix,
     required Offset position,
     required Offset velocity,
@@ -884,8 +886,9 @@ class _FlingRunner {
   }
 }
 
-class _FlingTimeDriver extends Simulation {
-  _FlingTimeDriver(this.simX, this.simY, this.simScale);
+@visibleForTesting
+class FlingTimeDriver extends Simulation {
+  FlingTimeDriver(this.simX, this.simY, this.simScale);
   final FrictionSimulation simX;
   final FrictionSimulation simY;
   final FrictionSimulation simScale;
@@ -898,49 +901,3 @@ class _FlingTimeDriver extends Simulation {
       simX.isDone(time) && simY.isDone(time) && simScale.isDone(time);
 }
 
-/// Test-only access to internals that are otherwise private. Lives in
-/// the production file so `_FlingRunner` can stay file-private; the
-/// test imports `ViewfinderTestHooks` to construct one directly. The
-/// test framework cannot drive Flutter's pinch `VelocityTracker`
-/// strongly enough to populate `ScaleEndDetails.scaleVelocity`, so the
-/// scale-fling math has to be exercised here instead of through a
-/// real gesture.
-@visibleForTesting
-abstract class ViewfinderTestHooks {
-  /// Returns an opaque object whose `matrixAt(double t)` reproduces
-  /// the fling math at simulation time `t`.
-  static FlingRunnerForTest makeFlingRunner({
-    required Matrix4 startMatrix,
-    required Offset position,
-    required Offset velocity,
-    required double drag,
-    required double startScale,
-    required double scaleVelocity,
-    required Offset focal,
-    required double minScale,
-    required double maxScale,
-  }) {
-    final r = _FlingRunner(
-      startMatrix: startMatrix,
-      position: position,
-      velocity: velocity,
-      drag: drag,
-      startScale: startScale,
-      scaleVelocity: scaleVelocity,
-      focal: focal,
-      minScale: minScale,
-      maxScale: maxScale,
-    );
-    return FlingRunnerForTest._(r);
-  }
-}
-
-/// Thin test-only handle around the internal fling runner. Keeps the
-/// runner class itself file-private.
-@visibleForTesting
-class FlingRunnerForTest {
-  FlingRunnerForTest._(this._inner);
-  final _FlingRunner _inner;
-
-  Matrix4 matrixAt(double t) => _inner.matrixAt(t);
-}

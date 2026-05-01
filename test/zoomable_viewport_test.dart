@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
 
@@ -93,7 +94,7 @@ void main() {
       // velocity at release, FrictionSimulation drives the matrix's
       // scale upward over time, anchored to the focal point.
       final start = Matrix4.identity()..scaleByDouble(2, 2, 1, 1);
-      final runner = ViewfinderTestHooks.makeFlingRunner(
+      final runner = FlingRunner(
         startMatrix: start,
         position: Offset.zero,
         velocity: Offset.zero,
@@ -118,7 +119,7 @@ void main() {
       tester,
     ) async {
       final start = Matrix4.identity()..scaleByDouble(2.8, 2.8, 1, 1);
-      final runner = ViewfinderTestHooks.makeFlingRunner(
+      final runner = FlingRunner(
         startMatrix: start,
         position: Offset.zero,
         velocity: Offset.zero,
@@ -137,7 +138,7 @@ void main() {
       'FlingRunner with zero scaleVelocity preserves the start scale',
       (tester) async {
         final start = Matrix4.identity()..scaleByDouble(3, 3, 1, 1);
-        final runner = ViewfinderTestHooks.makeFlingRunner(
+        final runner = FlingRunner(
           startMatrix: start,
           position: Offset.zero,
           velocity: Offset.zero,
@@ -994,6 +995,136 @@ void main() {
         lessThanOrEqualTo(0.5),
         reason: 'translation.x cannot exceed right-edge bound',
       );
+    });
+  });
+
+  group('FlingTimeDriver', () {
+    final driver = FlingTimeDriver(
+      FrictionSimulation(0.1, 0, 0),
+      FrictionSimulation(0.1, 0, 0),
+      FrictionSimulation(0.1, 0, 0),
+    );
+
+    test('x(time) returns the time argument unchanged', () {
+      expect(driver.x(0), 0);
+      expect(driver.x(0.5), 0.5);
+      expect(driver.x(1.7), 1.7);
+    });
+
+    test('dx(time) is constant 1.0', () {
+      expect(driver.dx(0), 1.0);
+      expect(driver.dx(100), 1.0);
+    });
+
+    test('isDone is the AND of the three sub-simulations', () {
+      // Three FrictionSimulations starting at zero with zero velocity are
+      // all immediately done. AND short-circuits to true.
+      expect(driver.isDone(0), isTrue);
+      expect(driver.isDone(10), isTrue);
+    });
+  });
+
+  group('DoubleTapDragRecognizer', () {
+    test('debugDescription is "doubleTapDrag"', () {
+      final r = DoubleTapDragRecognizer();
+      expect(r.debugDescription, 'doubleTapDrag');
+      r.dispose();
+    });
+
+    testWidgets('emits onDragStart/Update/End on double-tap-and-drag', (
+      tester,
+    ) async {
+      final r = DoubleTapDragRecognizer();
+      Offset? startAt;
+      final updates = <Offset>[];
+      var endCount = 0;
+      r.onDragStart = (p) => startAt = p;
+      r.onDragUpdate = updates.add;
+      r.onDragEnd = () => endCount++;
+
+      // First tap: down then up.
+      const at = Offset(100, 100);
+      r.addPointer(
+        const PointerDownEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+      );
+      GestureBinding.instance.gestureArena.close(1);
+      GestureBinding.instance.gestureArena.sweep(1);
+      await tester.pump();
+      r.handleEvent(
+        const PointerUpEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+      );
+
+      // Second tap: down within the double-tap window, then drag.
+      const at2 = Offset(102, 101);
+      r.addPointer(
+        const PointerDownEvent(
+          pointer: 2,
+          position: at2,
+          timeStamp: Duration(milliseconds: 100),
+          kind: PointerDeviceKind.touch,
+        ),
+      );
+      GestureBinding.instance.gestureArena.close(2);
+      GestureBinding.instance.gestureArena.sweep(2);
+      await tester.pump();
+      // Move past touch slop to enter dragging.
+      r.handleEvent(
+        PointerMoveEvent(
+          pointer: 2,
+          position: at2 + const Offset(0, 40),
+          delta: const Offset(0, 40),
+          kind: PointerDeviceKind.touch,
+        ),
+      );
+      r.handleEvent(
+        PointerUpEvent(
+          pointer: 2,
+          position: at2 + const Offset(0, 40),
+          kind: PointerDeviceKind.touch,
+        ),
+      );
+
+      expect(startAt, isNotNull);
+      expect(updates, isNotEmpty);
+      expect(endCount, 1);
+      r.dispose();
+    });
+
+    testWidgets('second tap released without drag → no onDragStart', (
+      tester,
+    ) async {
+      final r = DoubleTapDragRecognizer();
+      var startCount = 0;
+      r.onDragStart = (_) => startCount++;
+
+      const at = Offset(100, 100);
+      r.addPointer(
+        const PointerDownEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+      );
+      GestureBinding.instance.gestureArena.close(1);
+      GestureBinding.instance.gestureArena.sweep(1);
+      await tester.pump();
+      r.handleEvent(
+        const PointerUpEvent(pointer: 1, position: at, kind: PointerDeviceKind.touch),
+      );
+      r.addPointer(
+        const PointerDownEvent(
+          pointer: 2,
+          position: at,
+          timeStamp: Duration(milliseconds: 100),
+          kind: PointerDeviceKind.touch,
+        ),
+      );
+      GestureBinding.instance.gestureArena.close(2);
+      GestureBinding.instance.gestureArena.sweep(2);
+      await tester.pump();
+      // Release without moving past slop.
+      r.handleEvent(
+        const PointerUpEvent(pointer: 2, position: at, kind: PointerDeviceKind.touch),
+      );
+
+      expect(startCount, 0);
+      r.dispose();
     });
   });
 }
