@@ -3,11 +3,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:viewfinder/src/dismiss.dart' show ViewfinderDismissible;
+import 'package:viewfinder/src/internal/dismissible.dart';
+import 'package:viewfinder/src/internal/page_indicator_overlay.dart';
+import 'package:viewfinder/src/internal/thumbnail_bar.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
-import 'package:viewfinder/src/page_indicator.dart'
-    show ViewfinderPageIndicatorOverlay;
-import 'package:viewfinder/src/thumbnails.dart' show ViewfinderThumbnailBar;
 import 'package:viewfinder/viewfinder.dart';
 
 // A 1x1 ARGB PNG — decodes cleanly in the test environment.

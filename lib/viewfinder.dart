@@ -9,17 +9,11 @@ library;
 import 'package:flutter/widgets.dart' show PageView, Hero, Image;
 
 export 'src/chrome.dart';
-// ViewfinderDismissible is an internal wrapper used by Viewfinder; users
-// configure drag-to-dismiss via the public ViewfinderDismiss config.
-export 'src/dismiss.dart' hide ViewfinderDismissible;
+export 'src/dismiss.dart';
 export 'src/hero.dart';
 export 'src/image.dart';
 export 'src/initial_scale.dart';
 export 'src/item.dart';
-// ViewfinderPageIndicatorOverlay is an internal renderer; users configure
-// the indicator via the sealed ViewfinderPageIndicator hierarchy.
-export 'src/page_indicator.dart' hide ViewfinderPageIndicatorOverlay;
-// ViewfinderThumbnailBar is an internal renderer; users configure
-// thumbnails via the public ViewfinderThumbnails config.
-export 'src/thumbnails.dart' hide ViewfinderThumbnailBar;
+export 'src/page_indicator.dart';
+export 'src/thumbnails.dart';
 export 'src/viewfinder.dart';
