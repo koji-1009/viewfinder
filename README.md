@@ -13,11 +13,11 @@ Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryI
 
 ## Highlights
 
-* **Native-feel gestures end-to-end** — pinch, pan, fling on both pan and scale, double-tap-and-drag continuous zoom (iOS Photos style), two-finger rotation (opt-in). Rubber-band over-pan with diminishing returns at the edges, `FrictionSimulation`-driven post-release inertia on translation and scale, both tunable per widget.
-* **Built for every input** — touch, stylus, trackpad, mouse, and hardware keyboard (Arrow / PageUp / PageDown / Esc) all wired in by default. Mouse wheel zooms around the pointer; mouse drag swipes pages on web and desktop out of the box.
+* **Native-feel gestures** — pinch, pan, fling on translation and scale, double-tap ladder, double-tap-and-drag continuous zoom (iOS Photos style), opt-in two-finger rotation, rubber-band over-pan with snap-back on release.
+* **Built for every input** — touch, stylus, trackpad, mouse, mouse wheel, hardware keyboard. Mouse-drag swipes pages on web and desktop out of the box.
 * **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis.
-* **Gallery affordances included** — `Viewfinder.images([...])` takes you from a list of `ImageProvider`s to a full gallery; thumbnail strip (4 positions or fully custom), page indicator (dots or `1 / N`), drag-to-dismiss with `wholePage` / `onlyImage` slide modes, tap-to-toggle chrome controller. All opt-in via dedicated config objects.
-* **Robust pop and back-button behavior** — pop while zoomed snaps every page back to its initial transform first, so any Hero flight starts from a sensible source rect; the first back / Esc on a zoomed photo resets the zoom, the second pops.
+* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss, tap-to-toggle chrome controller. All opt-in.
+* **Robust pop / back-button** — pop while zoomed snaps every page back to its initial transform first, so any Hero flight starts from a sensible source rect; the first back / Esc on a zoomed photo resets the zoom, the second pops.
 * **No runtime dependencies** beyond the Flutter SDK.
 
 ## Quick start
@@ -67,23 +67,15 @@ ViewfinderImage(
   image: const NetworkImage('https://example.com/photo.jpg'),
   initialScale: const ViewfinderInitialScale.contain(),
   doubleTapScales: const [1, 2.5, 5],
-  minScale: 1.0,
   maxScale: 8.0,
 )
 ```
 
-### Non-image content
+For non-image content, `ViewfinderImage.child(child: …)` zooms any widget.
 
-```dart
-ViewfinderImage.child(
-  child: CustomPaint(painter: MyPainter()),
-  initialScale: const ViewfinderInitialScale.cover(),
-)
-```
+## Initial scale
 
-### Initial scale
-
-Three flavors:
+Three flavors, each accepting an optional multiplier:
 
 ```dart
 const ViewfinderInitialScale.contain()      // fit-in-viewport (default)
@@ -93,24 +85,166 @@ const ViewfinderInitialScale.cover(1.2)     // 120% of fill
 const ViewfinderInitialScale.value(2.0)     // absolute 2× over `contain`
 ```
 
-## Features
+## Zoom & pan
 
-* **Zoom & pan** — pinch, two-finger rotation (opt-in), double-tap ladder (`doubleTapScales: [1, 2.5, 5]`), double-tap-and-drag continuous zoom (iOS Photos style).
-* **Rubber-band edges** — when a zoomed photo is pulled past its boundary, the displacement diminishes elastically and snaps back on release.
-* **Arena-aware edge hand-off** — when a zoomed photo is panned against its edge, the custom gesture recognizer yields the pointer so a parent `PageView` continues the swipe without releasing. Works on `Axis.horizontal` or `Axis.vertical` via `Viewfinder.pagerAxis`.
-* **Fling** — post-release inertia on both pan and scale via Flutter's `FrictionSimulation` (one simulation per axis: X, Y, scale) with `kViewfinderDefaultFlingDrag = 0.0000135`, overridable per widget through `interactionEndFrictionCoefficient`. Pinch out fast and release: scale continues to grow with momentum, anchored to the focal point at release; pan momentum continues independently.
-* **Drag-to-dismiss** — `ViewfinderDismiss(onDismiss: …)`. Auto-disabled while zoomed. Background fades with drag. `slideType` picks between `wholePage` (thumbnails slide too) and `onlyImage` (thumbnails stay anchored). `onProgress` reports normalized drag progress (incl. spring-back) so callers can fade their own chrome.
-* **Thumbnail strip** — `ViewfinderThumbnails(position: …)` at top / bottom / left / right, or `.custom(itemBuilder: …)` for full control.
-* **Page indicator** — sealed `ViewfinderPageIndicator` with three variants: `ViewfinderPageIndicatorDots` (one dot per page), `ViewfinderPageIndicatorLabel` (a single text label, default `"i / N"`, customizable via `labelBuilder`), and `ViewfinderPageIndicatorAdaptive` (dots up to `maxDots`, label beyond — the most common pick).
-* **Progressive loading** — `ViewfinderItem(thumbImage: lowRes)` shows the low-res while the full image decodes; cross-fades when the first frame lands.
-* **Chrome controller** — `ViewfinderChromeController` drives tap-to-toggle visibility of thumbnails + indicator + any `chromeOverlays` widgets you plug in. Auto-hide after idle, auto-hide while zoomed.
-* **Coherent pop** — on pop (Android back, iOS swipe, `Navigator.pop`) every page snaps back to its initial transform before the route exits, so any Hero flight starts from a sensible source rect.
-* **Two-stage back / Esc** — via `PopScope`. First back-press on a zoomed photo resets the zoom; the second pops. Hardware Escape mirrors this on desktop and web.
-* **Keyboard** — Arrow Left/Right, PageUp/Down, Escape (two-stage). Matches the Android back button semantics for desktop and web.
-* **Mouse wheel & trackpad** — scroll zooms around the pointer location; trackpad pinch (macOS) via `trackpadScrollCausesScale`.
-* **Mouse-drag page swipe (web & desktop)** — `swipeDragDevices` ships with mouse / trackpad / touch / stylus enabled, so mouse-drag swipes pages out of the box. Pass a narrower set to opt out.
-* **Adjacent-page precache** — `precacheImage` warms the `PaintingBinding.imageCache` for pages ±N from the current one. The provider you passed in is used directly, so the cache key matches what `Image()` will resolve at paint time.
-* **Semantics** — per-image labels plus a gallery-level `Photo gallery, X of N`.
+Knobs on `ViewfinderImage` that control how a single image responds to gestures. `Viewfinder` forwards the same knobs (`defaultInitialScale` / `minScale` / `maxScale` / `doubleTapScales` / `rotateEnabled` / `rubberBandPan` / `interactionEndFrictionCoefficient`) to every page.
+
+| Knob                                | Default                       | What it does                                                                                                                                 |
+| ----------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `minScale` / `maxScale`             | `1.0` / `8.0`                 | Hard zoom bounds. Pinch past either is rubber-banded toward the limit.                                                                       |
+| `doubleTapScales`                   | `[1.0, 2.5, 5.0]`             | Cycle through these on each double-tap. Pass `[]` to disable double-tap zoom.                                                                |
+| `rubberBandPan`                     | `true`                        | When zoomed and panned past an edge, the displacement diminishes elastically and snaps back on release. Pass `false` for hard edge clamping. |
+| `rotateEnabled`                     | `false`                       | Two-finger rotation. Off by default because Flutter's `ScaleGestureRecognizer` reports rotation only when explicitly enabled.                |
+| `interactionEndFrictionCoefficient` | `kViewfinderDefaultFlingDrag` | Friction for post-release fling on translation and scale. Lower = longer glide. Defaults to `0.0000135`.                                     |
+| `panEnabled` / `scaleEnabled`       | `true` / `true`               | Disable pan or scale individually. Useful for embedded read-only zoom.                                                                       |
+| `onScaleStart` / `onScaleEnd`       | —                             | Gesture lifecycle callbacks. Useful for haptics and analytics.                                                                               |
+| `onScaleChanged`                    | —                             | Fires on every scale update with the current state.                                                                                          |
+| `onTap` / `onTapUp` / `onTapDown`   | —                             | Tap callbacks; `onTap` waits for double-tap disambiguation.                                                                                  |
+
+## Gallery & paging
+
+Knobs on `Viewfinder` that control how pages flow.
+
+| Knob                      | Default                              | What it does                                                                                                                                                        |
+| ------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pagerAxis`               | `Axis.horizontal`                    | Page direction. Vertical galleries also work, with the edge-handoff axis flipped accordingly.                                                                       |
+| `reverse`                 | `false`                              | Forwarded to `PageView.reverse`. Use `true` for right-to-left galleries.                                                                                            |
+| `pageSpacing`             | `0`                                  | Pixels between pages.                                                                                                                                               |
+| `precacheAdjacent`        | `1`                                  | Warm the `imageCache` for ±N pages around the current one. Uses the user's `ImageProvider` directly, so cache keys match what `Image()` will resolve at paint time. |
+| `allowEdgeHandoff`        | `true`                               | When zoomed and panned to the edge, yields to the parent `PageView` so the user can swipe to the next page without lifting. `false` clamps inside the current page. |
+| `swipeDragDevices`        | `kViewfinderDefaultSwipeDragDevices` | Pointer kinds allowed to swipe the underlying `PageView`. Default includes mouse / trackpad / touch / stylus. Pass a narrower set to opt out.                       |
+| `enableKeyboardShortcuts` | `true`                               | Arrow Left/Right, PageUp/Down, Esc (two-stage). Disable to take over the keyboard.                                                                                  |
+| `allowImplicitScrolling`  | `true`                               | Forwarded to `PageView.allowImplicitScrolling` for accessible focus traversal.                                                                                      |
+
+## Image loading
+
+| Knob                                    | Default    | What it does                                                                                         |
+| --------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
+| `thumbImage` / `thumbCrossFadeDuration` | — / 200 ms | Low-res preview that cross-fades into the main image once the first frame lands.                     |
+| `gaplessPlayback`                       | `true`     | Forwarded to `Image.gaplessPlayback`. Keeps the previous frame visible while a new provider decodes. |
+| `loadingBuilder` / `errorBuilder`       | —          | Forwarded straight to `Image()`.                                                                     |
+| `filterQuality`                         | `medium`   | Image filter quality.                                                                                |
+
+## Drag-to-dismiss
+
+`ViewfinderDismiss(onDismiss: …)`. Auto-disabled while zoomed. Background fades with drag.
+
+| Knob             | Default      | What it does                                                                                     |
+| ---------------- | ------------ | ------------------------------------------------------------------------------------------------ |
+| `direction`      | `.vertical`  | `.vertical` accepts both, or restrict to `.up` / `.down`.                                        |
+| `threshold`      | `0.25`       | Fraction of viewport height past which release triggers dismissal.                               |
+| `slideType`      | `.wholePage` | `wholePage` slides thumbnails too; `onlyImage` keeps thumbnails / indicator / overlays anchored. |
+| `fadeBackground` | `true`       | Fade the background color in step with the drag.                                                 |
+| `onProgress`     | —            | Reports normalized drag progress (incl. spring-back). Useful for fading external chrome in sync. |
+
+## Page indicator
+
+Sealed `ViewfinderPageIndicator`, three variants:
+
+* `ViewfinderPageIndicatorDots` — one dot per page.
+* `ViewfinderPageIndicatorLabel` — single text label, default `"i / N"`. Pass `labelBuilder` for full control.
+* `ViewfinderPageIndicatorAdaptive` — dots up to `maxDots`, then falls back to the label. The most common pick.
+
+## Inputs
+
+* **Touch / stylus / trackpad / mouse** — wired by default.
+* **Mouse wheel** — zooms around the pointer location.
+* **Trackpad pinch (macOS)** — wired in.
+* **Mouse drag on web/desktop** — swipes pages out of the box (`swipeDragDevices` includes mouse).
+* **Hardware keyboard** — Arrow Left/Right, PageUp/Down, Escape. Escape and Android back are two-stage: first press resets zoom on a zoomed photo, second press pops / dismisses.
+
+## Imperative control
+
+### `ViewfinderController` — page navigation
+
+```dart
+final controller = ViewfinderController(initialIndex: 0);
+
+controller.jumpTo(3);
+controller.animateTo(3);
+controller.currentIndex;          // int
+controller.resetCurrentImage();   // returns true if a zoom was reset
+```
+
+`resetCurrentImage()` is the hook for two-stage back behavior — call it before your own `Navigator.pop` to reset zoom on the first press and pop on the second.
+
+### `ViewfinderImageController` — per-image transform
+
+```dart
+final controller = ViewfinderImageController();
+
+// Zoom.
+controller.animateToScale(3.0);
+controller.animateToScale(2.0, focal: tapPosition);
+controller.reset();
+
+// Direct matrix control.
+final m = controller.currentTransform;
+controller.jumpToTransform(m..translate(20.0, 0.0));
+controller.animateToTransform(targetMatrix);
+
+// Edge-state introspection.
+controller.canSwipeHorizontally; // bool
+controller.canSwipeVertically;   // bool
+controller.scaleState;           // ViewfinderScaleState
+```
+
+### `ViewfinderChromeController` — chrome visibility
+
+```dart
+final chrome = ViewfinderChromeController(
+  autoHideAfter: const Duration(seconds: 3),
+  autoHideWhileZoomed: true,
+);
+
+Viewfinder(
+  chromeController: chrome,
+  thumbnails: const ViewfinderThumbnails(),
+  indicator: const ViewfinderPageIndicatorAdaptive(),
+  chromeOverlays: [
+    Positioned(top: 0, left: 0, right: 0, child: myAppBar),
+  ],
+  // …
+)
+```
+
+Tap the photo: toggle. Zoom in: auto-hide. Page change: auto-hide timer restarts. `chromeOverlays` fade in sync with thumbnails and indicator.
+
+## Hero
+
+`ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Two known Hero-with-photo-viewer pitfalls are handled internally:
+
+* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
+* **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
+
+These together let the back button stay two-stage by design: the first press on a zoomed photo resets the zoom; the second pops. If you drive navigation yourself, check the reset status first:
+
+```dart
+if (galleryController.resetCurrentImage()) return; // zoom was reset
+Navigator.of(context).pop();
+```
+
+Hero flights look cleanest when the destination route doesn't itself animate horizontally; the photo's flight has to compete with the sliding page otherwise.
+
+| Route                                                 | Hero advice                                                                                                                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                          |
+| `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `hero: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
+| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos uses this — the route transition is just background chrome fading, the photo's flight does the rest.                                                                      |
+
+Custom flight options work the same as Flutter's `Hero`:
+
+```dart
+ViewfinderItem(
+  image: photo,
+  hero: ViewfinderHero(
+    'photo-1',
+    createRectTween: (begin, end) => MaterialRectArcTween(begin: begin, end: end),
+    flightShuttleBuilder: (ctx, anim, dir, fromCtx, toCtx) => toCtx.widget,
+    transitionOnUserGestures: true,
+  ),
+)
+```
 
 ## Decode size and memory
 
@@ -151,63 +285,6 @@ The layers compose cleanly:
 | Decode size   | Decode at the requested size | your `ResizeImage` (or none) |
 | Decoded frame | Reuse across same cache key  | Flutter `imageCache`         |
 | Bytes / HTTP  | Reuse across decode sizes    | your byte-caching provider   |
-
-## Chrome controller
-
-```dart
-final chrome = ViewfinderChromeController(
-  autoHideAfter: const Duration(seconds: 3),
-  autoHideWhileZoomed: true,
-);
-
-Viewfinder(
-  chromeController: chrome,
-  thumbnails: const ViewfinderThumbnails(),
-  indicator: const ViewfinderPageIndicatorAdaptive(),
-  chromeOverlays: [
-    Positioned(top: 0, left: 0, right: 0, child: myAppBar),
-  ],
-  // …
-)
-```
-
-Tap the photo area: toggle chrome. Zoom in: chrome auto-hides. Page change: auto-hide timer restarts. `chromeOverlays` fade in sync with thumbnails and indicator.
-
-## Hero
-
-`ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Two known Hero-with-photo-viewer pitfalls are handled internally:
-
-* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
-* **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
-
-These together let the back button stay two-stage by design: the first press on a zoomed photo resets the zoom; the second pops. If you drive navigation yourself, check the reset status first:
-
-```dart
-if (galleryController.resetCurrentImage()) return; // zoom was reset
-Navigator.of(context).pop();
-```
-
-Hero flights look cleanest when the destination route doesn't itself animate horizontally; the photo's flight has to compete with the sliding page otherwise.
-
-| Route                                                 | Hero advice                                                                                                                                                                                                   |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MaterialPageRoute` (Android fade-up)                 | Hero is fine — destination stays roughly centered while it fades in.                                                                                                                                          |
-| `CupertinoPageRoute` (right-to-left slide)            | Skip Hero. The slide already animates the destination horizontally for the entire transition; adding a Hero on top fights with it. Pass `hero: null` to `ViewfinderItem` and don't wrap the source thumbnail. |
-| Custom `PageRouteBuilder` with a fade-only transition | Hero is the main motion. iOS Photos uses this — the route transition is just background chrome fading, the photo's flight does the rest.                                                                      |
-
-Custom flight options work the same as Flutter's `Hero`:
-
-```dart
-ViewfinderItem(
-  image: photo,
-  hero: ViewfinderHero(
-    'photo-1',
-    createRectTween: (begin, end) => MaterialRectArcTween(begin: begin, end: end),
-    flightShuttleBuilder: (ctx, anim, dir, fromCtx, toCtx) => toCtx.widget,
-    transitionOnUserGestures: true,
-  ),
-)
-```
 
 ## License
 
