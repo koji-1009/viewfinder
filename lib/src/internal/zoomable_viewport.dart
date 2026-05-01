@@ -68,6 +68,9 @@ class ZoomableViewport extends StatefulWidget {
     this.doubleTapDragZoom = true,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.enableMouseWheelZoom = true,
+    this.rubberBandPan = true,
+    this.onScaleStart,
+    this.onScaleEnd,
   }) : assert(interactionEndFrictionCoefficient > 0);
 
   final Widget child;
@@ -112,6 +115,19 @@ class ZoomableViewport extends StatefulWidget {
   /// [ZoomableViewport] in a scrollable page can disable it to let
   /// wheel events bubble.
   final bool enableMouseWheelZoom;
+
+  /// When `true` (default), pulling a zoomed image past its boundary
+  /// shows live elastic over-pan that diminishes with distance, then
+  /// snaps back on release. When `false`, the image hard-clamps at the
+  /// boundary with no elastic give.
+  final bool rubberBandPan;
+
+  /// Fired when a pinch / pan / rotate gesture begins.
+  final GestureScaleStartCallback? onScaleStart;
+
+  /// Fired when a pinch / pan / rotate gesture ends. Carries the
+  /// release velocity (used internally to drive the fling simulation).
+  final GestureScaleEndCallback? onScaleEnd;
 
   @override
   State<ZoomableViewport> createState() => _ZoomableViewportState();
@@ -173,7 +189,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     // simulation's raw position keeps decelerating; once it's done,
     // [_snapBackIfOverPan] springs whatever over-pan remains back to
     // the strict-clamp position.
-    final m = _clampMatrix(runner.matrixAt(t), elastic: true);
+    final m = _clampMatrix(runner.matrixAt(t), elastic: widget.rubberBandPan);
     widget.transformationController.value = m;
     if (runner.isDoneAt(t)) {
       _flingController.stop();
@@ -229,6 +245,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     _startFocalViewport = d.localFocalPoint;
     _lastGestureFocal = d.localFocalPoint;
     _inGesture = true;
+    widget.onScaleStart?.call(d);
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
@@ -271,12 +288,13 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     widget.transformationController.value = _clampMatrix(
       next,
       reportEdge: true,
-      elastic: true,
+      elastic: widget.rubberBandPan,
     );
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
     _inGesture = false;
+    widget.onScaleEnd?.call(d);
     if (!widget.fling) {
       _snapBackIfOverPan();
       return;

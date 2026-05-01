@@ -31,6 +31,7 @@ sealed class ViewfinderItem {
     double? minScale,
     double? maxScale,
     String? semanticLabel,
+    bool gaplessPlayback,
   }) = ViewfinderImageItem;
 
   /// Custom-widget page. The [child] is wrapped with the same zoom +
@@ -74,6 +75,7 @@ final class ViewfinderImageItem extends ViewfinderItem {
     super.minScale,
     super.maxScale,
     super.semanticLabel,
+    this.gaplessPlayback = true,
   }) : super._();
 
   /// The provider rendered as the main image.
@@ -88,6 +90,10 @@ final class ViewfinderImageItem extends ViewfinderItem {
 
   /// Builder rendered when [image] fails to load. See [Image.errorBuilder].
   final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Forwarded to [Image.gaplessPlayback]. When `true` (default), keeps
+  /// showing the previous frame while [image] decodes.
+  final bool gaplessPlayback;
 }
 
 /// Custom-widget [ViewfinderItem] variant.

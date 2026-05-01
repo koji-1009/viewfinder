@@ -697,6 +697,184 @@ void main() {
     },
   );
 
+  testWidgets('Viewfinder: reverse forwards to PageView.reverse', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 3,
+            reverse: true,
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    final pv = tester.widget<PageView>(find.byType(PageView));
+    expect(pv.reverse, isTrue);
+  });
+
+  testWidgets(
+    'ViewfinderImage.gaplessPlayback default forwards true to underlying Image',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ViewfinderImage(image: _memoryImage())),
+        ),
+      );
+      await _settleImages(tester);
+      final img = tester.widget<Image>(find.byType(Image).first);
+      expect(img.gaplessPlayback, isTrue);
+    },
+  );
+
+  testWidgets('ViewfinderImage.gaplessPlayback false flows through', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            gaplessPlayback: false,
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    final img = tester.widget<Image>(find.byType(Image).first);
+    expect(img.gaplessPlayback, isFalse);
+  });
+
+  testWidgets('ViewfinderImage onScaleStart / onScaleEnd fire on pinch', (
+    tester,
+  ) async {
+    var startCount = 0;
+    var endCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: _memoryImage(),
+              onScaleStart: (_) => startCount++,
+              onScaleEnd: (_) => endCount++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Simulate a single-pointer pan — fires the same scale recognizer.
+    final center = tester.getCenter(find.byType(ZoomableViewport));
+    final g = await tester.startGesture(center);
+    await g.moveBy(const Offset(20, 0));
+    await g.up();
+    await tester.pumpAndSettle();
+
+    expect(startCount, greaterThanOrEqualTo(1));
+    expect(endCount, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets(
+    'ViewfinderImageController.jumpToTransform sets the matrix instantly',
+    (tester) async {
+      final c = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ViewfinderImage(image: _memoryImage(), controller: c),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      final target = Matrix4.identity()..scaleByDouble(2.0, 2.0, 1, 1);
+      c.jumpToTransform(target);
+      await tester.pump();
+      expect(c.currentTransform, equals(target));
+      expect(c.scale, closeTo(2.0, 1e-6));
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.allowEdgeHandoff: false still allows unzoomed swipe',
+    (tester) async {
+      final ctrl = ViewfinderController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 3,
+              controller: ctrl,
+              allowEdgeHandoff: false,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // No zoom. Fling the pager — should swipe normally, because the
+      // handoff knob only governs the zoomed-edge gesture path.
+      await tester.fling(
+        find.byType(PageView),
+        const Offset(-400, 0),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(ctrl.currentIndex, 1);
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.allowEdgeHandoff: false keeps swipe locked while zoomed',
+    (tester) async {
+      final ctrl = ViewfinderController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 3,
+              controller: ctrl,
+              allowEdgeHandoff: false,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // Zoom page 0 via double-tap.
+      final viewer = find.byType(ZoomableViewport);
+      final center = tester.getCenter(viewer);
+      final g1 = await tester.startGesture(center);
+      await g1.up();
+      await tester.pump(const Duration(milliseconds: 50));
+      final g2 = await tester.startGesture(center);
+      await g2.up();
+      await tester.pumpAndSettle();
+
+      // Pan all the way left (would normally trigger handoff to PageView
+      // at the edge). With handoff off, image consumes everything; pager
+      // stays put.
+      final g3 = await tester.startGesture(center);
+      for (var i = 0; i < 30; i++) {
+        await g3.moveBy(const Offset(-50, 0));
+        await tester.pump();
+      }
+      await g3.up();
+      await tester.pumpAndSettle();
+
+      expect(ctrl.currentIndex, 0);
+    },
+  );
+
   testWidgets('ViewfinderThumbnails: tapping a thumbnail jumps the page', (
     tester,
   ) async {

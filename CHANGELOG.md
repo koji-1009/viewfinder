@@ -16,3 +16,9 @@
 * `precacheAdjacent` warms `imageCache` for pages ±N around the current one, using the user's `ImageProvider` directly so cache keys match what `Image()` will resolve.
 * `kViewfinderDefaultFlingDrag = 0.0000135`, overridable via `interactionEndFrictionCoefficient`.
 * Semantics labels per image and at gallery level.
+* `Viewfinder.reverse` — forwarded to `PageView.reverse` for right-to-left galleries.
+* `Viewfinder.allowEdgeHandoff` (default `true`) — when `false`, a zoomed image consumes all pan and never yields to the parent `PageView`; the user must reset zoom before swiping.
+* `Viewfinder.rubberBandPan` / `ViewfinderImage.rubberBandPan` (default `true`) — opt out of elastic over-pan for hard edge clamping.
+* `ViewfinderImage.onScaleStart` / `onScaleEnd` — gesture lifecycle callbacks, useful for haptics and analytics.
+* `ViewfinderImage.gaplessPlayback` / `ViewfinderImageItem.gaplessPlayback` (default `true`) — forwarded to the underlying `Image.gaplessPlayback`.
+* `ViewfinderImageController.currentTransform` getter and `jumpToTransform` / `animateToTransform` setters for imperative position / rotation control.

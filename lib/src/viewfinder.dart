@@ -50,6 +50,9 @@ class Viewfinder extends StatefulWidget {
     this.chromeFadeDuration = const .new(milliseconds: 220),
     this.pagerAxis = .horizontal,
     this.swipeDragDevices = kViewfinderDefaultSwipeDragDevices,
+    this.reverse = false,
+    this.allowEdgeHandoff = true,
+    this.rubberBandPan = true,
   }) : assert(itemCount >= 0),
        assert(minScale > 0),
        assert(maxScale >= minScale),
@@ -297,6 +300,23 @@ class Viewfinder extends StatefulWidget {
   /// where mouse-drag should select surrounding text instead.
   final Set<PointerDeviceKind> swipeDragDevices;
 
+  /// Reverses the order pages are shown in. Forwarded to
+  /// [PageView.reverse]. Useful for right-to-left galleries.
+  final bool reverse;
+
+  /// When `true` (default), a zoomed image's pan against its boundary
+  /// yields the gesture so the parent [PageView] takes over (zoom-to-
+  /// next-page handoff). When `false`, the image consumes all pan
+  /// gestures while zoomed; the user must reset zoom before swiping
+  /// to the next page.
+  final bool allowEdgeHandoff;
+
+  /// When `true` (default), every page allows live elastic over-pan
+  /// at its edges that snaps back on release. When `false`, every
+  /// page hard-clamps with no elastic give. Forwarded to each
+  /// page's [ViewfinderImage.rubberBandPan].
+  final bool rubberBandPan;
+
   @override
   State<Viewfinder> createState() => _ViewfinderState();
 }
@@ -540,7 +560,9 @@ class _ViewfinderState extends State<Viewfinder> {
     if (axis != widget.pagerAxis) return true;
     // Adjacent pre-built pages always allow their own pan.
     if (index != _currentIndex) return true;
-    // Not zoomed: yield to the pager.
+    // Not zoomed: yield to the pager — unconditional, regardless of
+    // handoff setting. The handoff knob only governs the zoomed-edge
+    // case; unzoomed swipe is part of the basic PageView contract.
     //
     // For touch this is symmetric with the previous "let scale handle
     // it as usual" behavior because the pager's drag recognizer wins
@@ -550,6 +572,9 @@ class _ViewfinderState extends State<Viewfinder> {
     // would otherwise race and steal the gesture, blocking
     // mouse-drag page swipes on web/desktop.
     if (c.scaleState == .initial) return false;
+    // Zoomed: handoff disabled means the image consumes all pan even
+    // at the edge — user must reset zoom before swiping.
+    if (!widget.allowEdgeHandoff) return true;
     // Zoomed and at the relevant edge: cede to PageView only if a
     // page exists in the drag direction (otherwise stay inside).
     if (!_canSwipeAlongPager(c)) return true;
@@ -570,6 +595,7 @@ class _ViewfinderState extends State<Viewfinder> {
         child: PageView.builder(
           controller: _pageController,
           scrollDirection: widget.pagerAxis,
+          reverse: widget.reverse,
           itemCount: widget.itemCount,
           onPageChanged: _onPageChanged,
           allowImplicitScrolling: widget.allowImplicitScrolling,
@@ -757,6 +783,8 @@ class _ViewfinderPage extends StatelessWidget {
         interactionEndFrictionCoefficient:
             spec.interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
+        gaplessPlayback: item.gaplessPlayback,
+        rubberBandPan: spec.rubberBandPan,
       ),
       final ViewfinderChildItem item => ViewfinderImage.child(
         initialScale: initialScale,
@@ -771,6 +799,7 @@ class _ViewfinderPage extends StatelessWidget {
         interactionEndFrictionCoefficient:
             spec.interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
+        rubberBandPan: spec.rubberBandPan,
         child: item.child,
       ),
     };

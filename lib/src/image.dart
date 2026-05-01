@@ -31,6 +31,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.backgroundColor = Colors.black,
     this.hero,
     this.onScaleChanged,
+    this.onScaleStart,
+    this.onScaleEnd,
     this.onTap,
     this.onTapUp,
     this.onTapDown,
@@ -41,6 +43,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.canPan,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.semanticLabel,
+    this.rubberBandPan = true,
   }) : assert(minScale > 0),
        assert(maxScale >= minScale),
        assert(interactionEndFrictionCoefficient > 0);
@@ -60,6 +63,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     ImageLoadingBuilder? loadingBuilder,
     ImageErrorWidgetBuilder? errorBuilder,
     ViewfinderScaleChanged? onScaleChanged,
+    GestureScaleStartCallback? onScaleStart,
+    GestureScaleEndCallback? onScaleEnd,
     GestureTapCallback? onTap,
     GestureTapUpCallback? onTapUp,
     GestureTapDownCallback? onTapDown,
@@ -71,6 +76,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     double interactionEndFrictionCoefficient,
     String? semanticLabel,
     Duration thumbCrossFadeDuration,
+    bool gaplessPlayback,
+    bool rubberBandPan,
   }) = ViewfinderProviderImage;
 
   /// Displays an arbitrary [child] widget instead of an image.
@@ -84,6 +91,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     Color backgroundColor,
     ViewfinderHero? hero,
     ViewfinderScaleChanged? onScaleChanged,
+    GestureScaleStartCallback? onScaleStart,
+    GestureScaleEndCallback? onScaleEnd,
     GestureTapCallback? onTap,
     GestureTapUpCallback? onTapUp,
     GestureTapDownCallback? onTapDown,
@@ -94,6 +103,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     ZoomableCanPan? canPan,
     double interactionEndFrictionCoefficient,
     String? semanticLabel,
+    bool rubberBandPan,
   }) = ViewfinderChildImage;
 
   /// Initial scale applied before any user interaction.
@@ -117,6 +127,14 @@ sealed class ViewfinderImage extends StatefulWidget {
 
   /// Per-frame scale callback. See [ViewfinderScaleChanged].
   final ViewfinderScaleChanged? onScaleChanged;
+
+  /// Fired when a pinch / pan / rotate gesture begins. Useful for
+  /// haptic feedback or analytics.
+  final GestureScaleStartCallback? onScaleStart;
+
+  /// Fired when a pinch / pan / rotate gesture ends. Useful for
+  /// analytics or paired-haptic feedback.
+  final GestureScaleEndCallback? onScaleEnd;
 
   /// Tap callbacks forwarded to the internal [GestureDetector] using
   /// Flutter's standard typedefs, so callers can listen for taps without
@@ -161,6 +179,12 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// Semantic label used by screen readers when this image is image-backed.
   final String? semanticLabel;
 
+  /// When `true` (default), pulling a zoomed image past its boundary
+  /// shows live elastic over-pan that diminishes with distance, then
+  /// snaps back on release. When `false`, the image hard-clamps at the
+  /// boundary with no elastic give.
+  final bool rubberBandPan;
+
   @override
   State<ViewfinderImage> createState() => _ViewfinderImageState();
 }
@@ -183,6 +207,8 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     this.loadingBuilder,
     this.errorBuilder,
     super.onScaleChanged,
+    super.onScaleStart,
+    super.onScaleEnd,
     super.onTap,
     super.onTapUp,
     super.onTapDown,
@@ -193,7 +219,9 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     super.canPan,
     super.interactionEndFrictionCoefficient,
     super.semanticLabel,
+    super.rubberBandPan,
     this.thumbCrossFadeDuration = const .new(milliseconds: 200),
+    this.gaplessPlayback = true,
   }) : super._();
 
   /// Provider rendered as the main image.
@@ -219,6 +247,11 @@ final class ViewfinderProviderImage extends ViewfinderImage {
 
   /// Cross-fade duration from [thumbImage] to [image].
   final Duration thumbCrossFadeDuration;
+
+  /// Forwarded to [Image.gaplessPlayback]. When `true` (default), keeps
+  /// showing the previous frame while a new [image] decodes; when
+  /// `false`, briefly shows nothing during the swap.
+  final bool gaplessPlayback;
 }
 
 /// Custom-widget [ViewfinderImage] variant.
@@ -235,6 +268,8 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.backgroundColor,
     super.hero,
     super.onScaleChanged,
+    super.onScaleStart,
+    super.onScaleEnd,
     super.onTap,
     super.onTapUp,
     super.onTapDown,
@@ -245,6 +280,7 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.canPan,
     super.interactionEndFrictionCoefficient,
     super.semanticLabel,
+    super.rubberBandPan,
   }) : super._();
 
   /// Widget rendered for this view.
@@ -399,6 +435,16 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     );
   }
 
+  Matrix4 get currentTransform => _transformation.value.clone();
+
+  void jumpToTransform(Matrix4 target) {
+    _animController.stop();
+    _animation = null;
+    _transformation.value = target;
+  }
+
+  void animateToTransform(Matrix4 target) => _animateTo(target);
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (ctx, constraints) {
@@ -444,6 +490,7 @@ class _ImageBody extends StatelessWidget {
         :final loadingBuilder,
         :final errorBuilder,
         :final thumbCrossFadeDuration,
+        :final gaplessPlayback,
       ) =>
         _ImageWithOptionalThumb(
           image: image,
@@ -454,6 +501,7 @@ class _ImageBody extends StatelessWidget {
           errorBuilder: errorBuilder,
           thumbCrossFadeDuration: thumbCrossFadeDuration,
           semanticLabel: spec.semanticLabel,
+          gaplessPlayback: gaplessPlayback,
         ),
       ViewfinderChildImage(:final child) => child,
     };
@@ -489,6 +537,9 @@ class _ImageBody extends StatelessWidget {
           interactionEndFrictionCoefficient:
               spec.interactionEndFrictionCoefficient,
           canPan: spec.canPan,
+          rubberBandPan: spec.rubberBandPan,
+          onScaleStart: spec.onScaleStart,
+          onScaleEnd: spec.onScaleEnd,
           child: content,
         ),
       ),
@@ -506,6 +557,7 @@ class _ImageWithOptionalThumb extends StatelessWidget {
     required this.errorBuilder,
     required this.thumbCrossFadeDuration,
     required this.semanticLabel,
+    required this.gaplessPlayback,
   });
 
   final ImageProvider image;
@@ -516,6 +568,7 @@ class _ImageWithOptionalThumb extends StatelessWidget {
   final ImageErrorWidgetBuilder? errorBuilder;
   final Duration thumbCrossFadeDuration;
   final String? semanticLabel;
+  final bool gaplessPlayback;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -529,7 +582,7 @@ class _ImageWithOptionalThumb extends StatelessWidget {
         filterQuality: filterQuality,
         loadingBuilder: loadingBuilder,
         errorBuilder: errorBuilder,
-        gaplessPlayback: true,
+        gaplessPlayback: gaplessPlayback,
         // When a thumb is provided, wrap the main image in a
         // frame-aware fade-in so the thumb shows through until the
         // main's first frame arrives.
@@ -652,4 +705,18 @@ class ViewfinderImageController extends ChangeNotifier {
   /// Animate to a specific scale, optionally around a focal point.
   void animateToScale(double scale, {Offset? focal}) =>
       _state?.animateToScale(scale, focal: focal);
+
+  /// Current transform matrix. Returns the identity when not attached.
+  Matrix4 get currentTransform =>
+      _state?.currentTransform ?? Matrix4.identity();
+
+  /// Set the transform matrix without animation. No-op when not attached.
+  /// Bypasses the boundary clamp — caller is responsible for keeping the
+  /// content visible.
+  void jumpToTransform(Matrix4 target) => _state?.jumpToTransform(target);
+
+  /// Animate to [target] using the same easing/duration as
+  /// [animateToScale] / [reset]. No-op when not attached.
+  void animateToTransform(Matrix4 target) =>
+      _state?.animateToTransform(target);
 }
