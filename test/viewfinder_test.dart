@@ -864,8 +864,8 @@ void main() {
     await g.up();
     await tester.pumpAndSettle();
 
-    expect(startCount, greaterThanOrEqualTo(1));
-    expect(endCount, greaterThanOrEqualTo(1));
+    expect(startCount, 1);
+    expect(endCount, 1);
   });
 
   testWidgets(

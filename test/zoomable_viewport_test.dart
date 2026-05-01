@@ -1101,7 +1101,10 @@ void main() {
         ),
       );
 
-      expect(startAt, isNotNull);
+      // onDragStart receives the second tap's down position, not the
+      // move position — verifies the recognizer captured the focal at
+      // tap2Down, not at the slop-crossing PointerMove.
+      expect(startAt, equals(at2));
       expect(updates, isNotEmpty);
       expect(endCount, 1);
       r.dispose();
