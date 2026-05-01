@@ -1,5 +1,8 @@
 # viewfinder
 
+[![pub package](https://img.shields.io/pub/v/viewfinder.svg)](https://pub.dev/packages/viewfinder)
+[![GitHub license](https://img.shields.io/github/license/koji-1009/viewfinder)](https://github.com/koji-1009/viewfinder/blob/main/LICENSE)
+[![CI](https://github.com/koji-1009/viewfinder/actions/workflows/ci.yaml/badge.svg)](https://github.com/koji-1009/viewfinder/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/koji-1009/viewfinder/graph/badge.svg)](https://codecov.io/gh/koji-1009/viewfinder)
 
 A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware gesture layer that hands off edge pans to a parent `PageView`, drag-to-dismiss, a synchronized thumbnail strip, a page indicator, keyboard shortcuts, and a chrome controller for tap-to-toggle UX.
