@@ -593,7 +593,7 @@ void main() {
             precacheAdjacent: 1,
             onPageChanged: pageChanges.add,
             thumbnails: const ViewfinderThumbnails(size: 40),
-            indicator: const ViewfinderPageIndicator(),
+            indicator: ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1623,7 +1623,7 @@ void main() {
           body: Viewfinder(
             itemCount: 1,
             chromeController: chrome,
-            indicator: const ViewfinderPageIndicator(),
+            indicator: ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1911,7 +1911,7 @@ void main() {
           body: Viewfinder(
             itemCount: 1,
             chromeController: chrome,
-            indicator: const ViewfinderPageIndicator(),
+            indicator: ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1938,7 +1938,7 @@ void main() {
         home: Scaffold(
           body: Viewfinder(
             itemCount: 20,
-            indicator: const ViewfinderPageIndicator(maxDots: 5),
+            indicator: ViewfinderPageIndicatorAdaptive(maxDots: 5),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
@@ -1946,6 +1946,176 @@ void main() {
     );
     await _settleImages(tester);
     expect(find.text('1 / 20'), findsOneWidget);
+  });
+
+  testWidgets('PageIndicator Dots: renders dots even past 12 items, no label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 30,
+            indicator: const ViewfinderPageIndicatorDots(),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    // No numeric label.
+    expect(find.text('1 / 30'), findsNothing);
+    // One dot (AnimatedContainer) per item, all rendered.
+    final overlay = find.byType(ViewfinderPageIndicatorOverlay);
+    expect(
+      find.descendant(of: overlay, matching: find.byType(AnimatedContainer)),
+      findsNWidgets(30),
+    );
+  });
+
+  testWidgets('PageIndicator Label: renders default "i / N" pill', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 3,
+            indicator: const ViewfinderPageIndicatorLabel(),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(find.text('1 / 3'), findsOneWidget);
+  });
+
+  testWidgets('PageIndicator Label: custom labelBuilder receives indices', (
+    tester,
+  ) async {
+    final controller = ViewfinderController(initialIndex: 2);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 7,
+            controller: controller,
+            indicator: ViewfinderPageIndicatorLabel(
+              labelBuilder: (_, current, total) => Text(
+                'page=${current + 1} of $total',
+                textDirection: TextDirection.ltr,
+              ),
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(find.text('page=3 of 7'), findsOneWidget);
+    // Default pill must NOT render alongside the custom label.
+    expect(find.text('3 / 7'), findsNothing);
+  });
+
+  testWidgets('PageIndicator Adaptive: dots at/below threshold', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 4,
+            indicator: ViewfinderPageIndicatorAdaptive(maxDots: 5),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(find.text('1 / 4'), findsNothing);
+    final overlay = find.byType(ViewfinderPageIndicatorOverlay);
+    expect(
+      find.descendant(of: overlay, matching: find.byType(AnimatedContainer)),
+      findsNWidgets(4),
+    );
+  });
+
+  testWidgets(
+    'PageIndicator Adaptive: custom labelBuilder used past threshold',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 10,
+              indicator: ViewfinderPageIndicatorAdaptive(
+                maxDots: 5,
+                label: ViewfinderPageIndicatorLabel(
+                  labelBuilder: (_, current, total) => Text(
+                    'idx=$current/$total',
+                    textDirection: TextDirection.ltr,
+                  ),
+                ),
+              ),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      expect(find.text('idx=0/10'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'PageIndicator Adaptive: itemCount=0 renders nothing (no assert)',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 0,
+              indicator: ViewfinderPageIndicatorAdaptive(),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      // The overlay short-circuits to SizedBox.shrink for empty galleries.
+      final overlay = find.byType(ViewfinderPageIndicatorOverlay);
+      expect(
+        find.descendant(of: overlay, matching: find.byType(AnimatedContainer)),
+        findsNothing,
+      );
+      expect(find.text('1 / 0'), findsNothing);
+    },
+  );
+
+  test('PageIndicator Adaptive: asserts on inner alignment/padding mismatch', () {
+    expect(
+      () => ViewfinderPageIndicatorAdaptive(
+        dots: const ViewfinderPageIndicatorDots(alignment: Alignment.topCenter),
+      ),
+      throwsA(isA<AssertionError>()),
+    );
+    expect(
+      () => ViewfinderPageIndicatorAdaptive(
+        label: const ViewfinderPageIndicatorLabel(
+          padding: EdgeInsets.zero,
+        ),
+      ),
+      throwsA(isA<AssertionError>()),
+    );
+    // Negative maxDots is rejected too.
+    expect(
+      () => ViewfinderPageIndicatorAdaptive(maxDots: -1),
+      throwsA(isA<AssertionError>()),
+    );
+    // Defaults match — should construct without asserting.
+    expect(ViewfinderPageIndicatorAdaptive.new, returnsNormally);
   });
 
   testWidgets('Viewfinder: out-of-range initialIndex clamps to last page', (
@@ -2022,7 +2192,7 @@ void main() {
           body: Viewfinder(
             itemCount: 0,
             thumbnails: const ViewfinderThumbnails(size: 40),
-            indicator: const ViewfinderPageIndicator(),
+            indicator: ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
           ),
         ),
