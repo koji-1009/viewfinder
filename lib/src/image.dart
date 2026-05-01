@@ -279,8 +279,8 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   ViewfinderScaleState get scaleState {
     const eps = 0.01;
     return currentScale > widget.initialScale.baseScale + eps
-        ? ViewfinderScaleState.zoomed
-        : ViewfinderScaleState.initial;
+        ? .zoomed
+        : .initial;
   }
 
   /// True when a horizontal page swipe can reasonably take over: either
@@ -288,7 +288,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   /// its horizontal edges so further horizontal pan inside the image
   /// has no effect.
   bool get canSwipeHorizontally {
-    if (scaleState == ViewfinderScaleState.initial) return true;
+    if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
     final m = _transformation.value;
     final scale = xyScale(m);
@@ -302,7 +302,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   /// image is at its initial scale or panned against one of its vertical
   /// edges. The gallery consults this when its `pagerAxis` is vertical.
   bool get canSwipeVertically {
-    if (scaleState == ViewfinderScaleState.initial) return true;
+    if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
     final m = _transformation.value;
     final scale = xyScale(m);
@@ -590,8 +590,7 @@ class ViewfinderImageController extends ChangeNotifier {
   double get scale => _state?.currentScale ?? 1.0;
 
   /// Whether the user has zoomed in past the initial scale.
-  ViewfinderScaleState get scaleState =>
-      _state?.scaleState ?? ViewfinderScaleState.initial;
+  ViewfinderScaleState get scaleState => _state?.scaleState ?? .initial;
 
   /// True when a horizontal page swipe can reasonably take over.
   /// See [_ViewfinderImageState.canSwipeHorizontally] for the exact rule.

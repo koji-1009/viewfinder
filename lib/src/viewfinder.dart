@@ -68,8 +68,7 @@ class Viewfinder extends StatefulWidget {
     ViewfinderThumbnails? thumbnails,
     ViewfinderPageIndicator? indicator,
     ViewfinderDismiss? dismiss,
-    ViewfinderInitialScale defaultInitialScale =
-        const ViewfinderInitialScale.contain(),
+    ViewfinderInitialScale defaultInitialScale = const .contain(),
     double minScale = 1.0,
     double maxScale = 8.0,
     List<double> doubleTapScales = const [1.0, 2.5, 5.0],
@@ -149,8 +148,7 @@ class Viewfinder extends StatefulWidget {
     ImageErrorWidgetBuilder? errorBuilder,
     ViewfinderController? controller,
     ViewfinderDismiss? dismiss,
-    ViewfinderInitialScale defaultInitialScale =
-        const ViewfinderInitialScale.contain(),
+    ViewfinderInitialScale defaultInitialScale = const .contain(),
     double minScale = 1.0,
     double maxScale = 8.0,
     List<double> doubleTapScales = const [1.0, 2.5, 5.0],
@@ -350,7 +348,7 @@ class _ViewfinderState extends State<Viewfinder> {
   /// navigation.
   bool resetCurrentImage() {
     final c = _imageControllers[_currentIndex];
-    if (c != null && c.scaleState == ViewfinderScaleState.zoomed) {
+    if (c != null && c.scaleState == .zoomed) {
       c.reset();
       return true;
     }
@@ -517,7 +515,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // pan-slop (4 px) is small enough that the scale recognizer
     // would otherwise race and steal the gesture, blocking
     // mouse-drag page swipes on web/desktop.
-    if (c.scaleState == ViewfinderScaleState.initial) return false;
+    if (c.scaleState == .initial) return false;
     // Zoomed and at the relevant edge: cede to PageView only if a
     // page exists in the drag direction (otherwise stay inside).
     if (!_canSwipeAlongPager(c)) return true;
@@ -572,7 +570,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // thumbnails / indicator / chromeOverlays stay put during the
     // drag-to-dismiss gesture.
     if (widget.dismiss case final dismiss?
-        when dismiss.slideType == ViewfinderDismissSlideType.onlyImage) {
+        when dismiss.slideType == .onlyImage) {
       pager = ViewfinderDismissible(
         config: dismiss,
         enabled: !_swipeLocked,
@@ -625,7 +623,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // `slideType: wholePage` (default) wraps Dismissible around the
     // full body so thumbnails and overlays slide together.
     if (widget.dismiss case final dismiss?
-        when dismiss.slideType == ViewfinderDismissSlideType.wholePage) {
+        when dismiss.slideType == .wholePage) {
       body = ViewfinderDismissible(
         config: dismiss,
         enabled: !_swipeLocked,
@@ -660,8 +658,7 @@ class _ViewfinderState extends State<Viewfinder> {
     //    the callback *before* the Hero flight reads the source rect,
     //    so hero transitions stay coherent.
     final isCurrentZoomed =
-        _imageControllers[_currentIndex]?.scaleState ==
-        ViewfinderScaleState.zoomed;
+        _imageControllers[_currentIndex]?.scaleState == .zoomed;
     body = PopScope<Object?>(
       canPop: !isCurrentZoomed,
       onPopInvokedWithResult: (didPop, _) {

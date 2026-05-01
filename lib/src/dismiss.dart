@@ -22,7 +22,7 @@ class ViewfinderDismiss {
     this.threshold = 0.25,
     this.fadeBackground = true,
     this.backgroundColor = Colors.black,
-    this.slideType = ViewfinderDismissSlideType.wholePage,
+    this.slideType = .wholePage,
     this.onProgress,
   });
 
