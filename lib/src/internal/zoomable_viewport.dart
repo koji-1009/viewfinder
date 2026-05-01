@@ -64,7 +64,6 @@ class ZoomableViewport extends StatefulWidget {
     this.clipBehavior = .none,
     this.onEdgeHit,
     this.canPan,
-    this.fling = true,
     this.doubleTapDragZoom = true,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.enableMouseWheelZoom = true,
@@ -94,10 +93,6 @@ class ZoomableViewport extends StatefulWidget {
   /// `(Axis.horizontal, 1)` means a finger moving right into a blocked
   /// state should yield.
   final ZoomableCanPan? canPan;
-
-  /// When true, scale-end with residual velocity produces a
-  /// boundary-clamped fling animation.
-  final bool fling;
 
   /// When true, a double-tap followed by a vertical drag (without
   /// releasing) continuously scales around the first tap location —
@@ -295,10 +290,6 @@ class _ZoomableViewportState extends State<ZoomableViewport>
   void _onScaleEnd(ScaleEndDetails d) {
     _inGesture = false;
     widget.onScaleEnd?.call(d);
-    if (!widget.fling) {
-      _snapBackIfOverPan();
-      return;
-    }
     final v = d.velocity.pixelsPerSecond;
     final scaleV = d.scaleVelocity;
     final m = widget.transformationController.value;
@@ -954,5 +945,4 @@ class FlingRunnerForTest {
   final _FlingRunner _inner;
 
   Matrix4 matrixAt(double t) => _inner.matrixAt(t);
-  bool isDoneAt(double t) => _inner.isDoneAt(t);
 }
