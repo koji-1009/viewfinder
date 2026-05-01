@@ -1,5 +1,7 @@
 # viewfinder
 
+[![codecov](https://codecov.io/gh/koji-1009/viewfinder/graph/badge.svg)](https://codecov.io/gh/koji-1009/viewfinder)
+
 A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware gesture layer that hands off edge pans to a parent `PageView`, drag-to-dismiss, a synchronized thumbnail strip, a page indicator, keyboard shortcuts, and a chrome controller for tap-to-toggle UX.
 
 Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
