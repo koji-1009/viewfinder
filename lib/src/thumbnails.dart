@@ -243,8 +243,8 @@ class _DefaultThumbnailTile extends StatelessWidget {
     // both axes, so we decode at that size × DPR regardless of the
     // source resolution. The main viewer's decode size is left alone.
     final thumbPx = (config.size * dpr).ceil();
-    final Widget img = switch (item.image) {
-      final ImageProvider image => Image(
+    final Widget img = switch (item) {
+      ViewfinderImageItem(:final image) => Image(
         image: ResizeImage(image, width: thumbPx, height: thumbPx),
         fit: .cover,
         width: config.size,
@@ -252,10 +252,10 @@ class _DefaultThumbnailTile extends StatelessWidget {
         gaplessPlayback: true,
         errorBuilder: (_, _, _) => Container(color: Colors.white12),
       ),
-      _ => SizedBox(
+      ViewfinderChildItem(:final child) => SizedBox(
         width: config.size,
         height: config.size,
-        child: item.child,
+        child: child,
       ),
     };
     return AnimatedOpacity(

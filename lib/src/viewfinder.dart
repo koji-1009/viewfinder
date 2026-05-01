@@ -441,8 +441,7 @@ class _ViewfinderState extends State<Viewfinder> {
       for (final i in [index - delta, index + delta]) {
         if (i < 0 || i >= widget.itemCount) continue;
         if (_precached.contains(i)) continue;
-        final item = _itemAt(i);
-        if (item.image case final image?) {
+        if (_itemAt(i) case ViewfinderImageItem(:final image)) {
           _precached.add(i);
           precacheImage(
             image,
@@ -731,9 +730,9 @@ class _ViewfinderPage extends StatelessWidget {
     // carried Heroes too, every adjacent-grid thumbnail would fly on pop.
     final hero = isCurrent ? item.hero : null;
 
-    final page = switch (item.image) {
-      final ImageProvider image => ViewfinderImage(
-        image: image,
+    final page = switch (item) {
+      final ViewfinderImageItem item => ViewfinderImage(
+        image: item.image,
         thumbImage: item.thumbImage,
         initialScale: initialScale,
         doubleTapScales: doubleTapScales,
@@ -749,7 +748,7 @@ class _ViewfinderPage extends StatelessWidget {
         interactionEndFrictionCoefficient: frictionCoefficient,
         backgroundColor: Colors.transparent,
       ),
-      _ => ViewfinderImage.child(
+      final ViewfinderChildItem item => ViewfinderImage.child(
         initialScale: initialScale,
         doubleTapScales: doubleTapScales,
         hero: hero,
@@ -761,7 +760,7 @@ class _ViewfinderPage extends StatelessWidget {
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: frictionCoefficient,
         backgroundColor: Colors.transparent,
-        child: item.child!,
+        child: item.child,
       ),
     };
 

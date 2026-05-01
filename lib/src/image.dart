@@ -450,12 +450,16 @@ class _ImageWithOptionalThumb extends StatelessWidget {
 
 /// External control surface for a [ViewfinderImage].
 ///
-/// Extends [ChangeNotifier] so callers can subscribe to transform changes
-/// (scale, translation, edge state) and react — for example, to unlock a
-/// parent [PageView] when the image is panned against its horizontal edge.
+/// Extends [ChangeNotifier] so callers can subscribe to *state-level*
+/// changes (zoomed in/out, edge transitions). Notifications are coalesced
+/// to fire only when [scaleState], [canSwipeHorizontally], or
+/// [canSwipeVertically] actually transitions — not on every transform
+/// frame. For per-frame scale callbacks, use
+/// [ViewfinderImage.onScaleChanged].
 class ViewfinderImageController extends ChangeNotifier {
   _ViewfinderImageState? _state;
   bool _disposed = false;
+  ({ViewfinderScaleState scale, bool h, bool v})? _lastSignal;
 
   @override
   void dispose() {
@@ -463,23 +467,39 @@ class ViewfinderImageController extends ChangeNotifier {
     super.dispose();
   }
 
+  // Lifecycle hooks do not call notifyListeners — neither attach nor
+  // detach changes any user-observable property at the moment they fire.
+  // Real state changes (transform, scaleState, canSwipe*) flow through
+  // [_bump] from the transform-controller listener.
   void _attach(_ViewfinderImageState s) {
     if (_disposed) return;
     _state = s;
-    notifyListeners();
+    _lastSignal = null;
   }
 
   void _detach(_ViewfinderImageState s) {
     if (_disposed) return;
     if (identical(_state, s)) {
       _state = null;
-      notifyListeners();
+      _lastSignal = null;
     }
   }
 
-  /// Called by the view whenever the transformation changes.
+  /// Called by the view whenever the transformation or viewport changes.
+  /// Coalesces per-frame ticks into a single notification per state
+  /// transition.
   void _bump() {
     if (_disposed) return;
+    final s = _state;
+    final next = s == null
+        ? null
+        : (
+            scale: s.scaleState,
+            h: s.canSwipeHorizontally,
+            v: s.canSwipeVertically,
+          );
+    if (next == _lastSignal) return;
+    _lastSignal = next;
     notifyListeners();
   }
 

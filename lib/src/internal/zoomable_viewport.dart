@@ -762,7 +762,6 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
         // is a pan, not a tap. Yield so the scale recognizer can claim.
         if (drift > kTouchSlop) {
           resolve(.rejected);
-          _reset();
           stopTrackingPointer(event.pointer);
         }
       }
@@ -780,11 +779,9 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
         // Second tap released without drag → this is a plain double-tap.
         // Back out so the parent GestureDetector's onDoubleTap can win.
         resolve(.rejected);
-        _reset();
         stopTrackingPointer(event.pointer);
       } else if (_state == _State.dragging) {
         onDragEnd?.call();
-        _reset();
         stopTrackingPointer(event.pointer);
       } else {
         stopTrackingPointer(event.pointer);
@@ -792,7 +789,6 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
     } else if (event is PointerCancelEvent) {
       if (_state == _State.dragging) onDragEnd?.call();
       resolve(.rejected);
-      _reset();
       stopTrackingPointer(event.pointer);
     }
   }
@@ -806,7 +802,12 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
   }
 
   @override
-  void didStopTrackingLastPointer(int pointer) {}
+  void didStopTrackingLastPointer(int pointer) {
+    // [tap1Up] is intentionally preserved across the inter-tap gap — no
+    // pointer is tracked while we wait for the second tap. All other
+    // states are "done" when the last pointer stops.
+    if (_state != _State.tap1Up) _reset();
+  }
 
   @override
   String get debugDescription => 'doubleTapDrag';

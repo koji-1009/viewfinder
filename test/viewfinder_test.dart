@@ -69,18 +69,16 @@ void main() {
   });
 
   group('ViewfinderItem', () {
-    test('image constructor keeps image and rejects child', () {
+    test('image factory builds a ViewfinderImageItem', () {
       final item = ViewfinderItem(image: MemoryImage(_pngBytes));
-      expect(item.image, isNotNull);
-      expect(item.child, isNull);
+      expect(item, isA<ViewfinderImageItem>());
+      expect((item as ViewfinderImageItem).image, isNotNull);
     });
 
-    test('child constructor keeps child and clears image-only fields', () {
+    test('child factory builds a ViewfinderChildItem with no image fields', () {
       const item = ViewfinderItem.child(child: SizedBox.shrink());
-      expect(item.image, isNull);
-      expect(item.child, isNotNull);
-      expect(item.loadingBuilder, isNull);
-      expect(item.errorBuilder, isNull);
+      expect(item, isA<ViewfinderChildItem>());
+      expect((item as ViewfinderChildItem).child, isNotNull);
     });
   });
 
