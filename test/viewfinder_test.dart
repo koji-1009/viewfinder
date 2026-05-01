@@ -7,8 +7,6 @@ import 'package:viewfinder/src/internal/dismissible.dart';
 import 'package:viewfinder/src/internal/page_indicator_overlay.dart';
 import 'package:viewfinder/src/internal/thumbnail_bar.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
-import 'package:viewfinder/src/item.dart'
-    show ViewfinderChildItem, ViewfinderImageItem;
 import 'package:viewfinder/viewfinder.dart';
 
 // A 1x1 ARGB PNG — decodes cleanly in the test environment.
@@ -97,6 +95,15 @@ void main() {
       expect(a, isNot(equals(b)));
     });
 
+    test('cover(x) instances with same factor compare equal', () {
+      // ignore: prefer_const_constructors
+      final a = ViewfinderInitialScale.cover(1.5);
+      // ignore: prefer_const_constructors
+      final b = ViewfinderInitialScale.cover(1.5);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+    });
+
     test('factor must be positive', () {
       expect(
         () => ViewfinderInitialScale.contain(0),
@@ -109,21 +116,77 @@ void main() {
     });
   });
 
-  group('ViewfinderItem', () {
-    test('image factory builds a ViewfinderImageItem', () {
-      final item = ViewfinderItem(image: MemoryImage(_pngBytes));
-      expect(
-        item,
-        isA<ViewfinderImageItem>().having((i) => i.image, 'image', isNotNull),
-      );
+  group('Config equality', () {
+    // Use `final` (non-canonicalized) so `identical(this, other)` is
+    // false and the field-by-field branch of `==` actually runs.
+    void onDismiss() {}
+    test('ViewfinderHero', () {
+      // ignore: prefer_const_constructors
+      final a = ViewfinderHero('photo-1');
+      // ignore: prefer_const_constructors
+      final b = ViewfinderHero('photo-1');
+      // ignore: prefer_const_constructors
+      final c = ViewfinderHero('photo-2');
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
     });
 
-    test('child factory builds a ViewfinderChildItem', () {
-      const item = ViewfinderItem.child(child: SizedBox.shrink());
-      expect(
-        item,
-        isA<ViewfinderChildItem>().having((i) => i.child, 'child', isNotNull),
-      );
+    test('ViewfinderDismiss', () {
+      final a = ViewfinderDismiss(onDismiss: onDismiss);
+      final b = ViewfinderDismiss(onDismiss: onDismiss);
+      final c = ViewfinderDismiss(onDismiss: onDismiss, threshold: 0.5);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
+    });
+
+    test('ViewfinderThumbnails', () {
+      // ignore: prefer_const_constructors
+      final a = ViewfinderThumbnails();
+      // ignore: prefer_const_constructors
+      final b = ViewfinderThumbnails();
+      // ignore: prefer_const_constructors
+      final c = ViewfinderThumbnails(size: 80);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
+    });
+
+    test('ViewfinderPageIndicatorDots', () {
+      // ignore: prefer_const_constructors
+      final a = ViewfinderPageIndicatorDots();
+      // ignore: prefer_const_constructors
+      final b = ViewfinderPageIndicatorDots();
+      // ignore: prefer_const_constructors
+      final c = ViewfinderPageIndicatorDots(dotSize: 12);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
+    });
+
+    test('ViewfinderPageIndicatorLabel', () {
+      // ignore: prefer_const_constructors
+      final a = ViewfinderPageIndicatorLabel();
+      // ignore: prefer_const_constructors
+      final b = ViewfinderPageIndicatorLabel();
+      // ignore: prefer_const_constructors
+      final c = ViewfinderPageIndicatorLabel(padding: EdgeInsets.zero);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
+    });
+
+    test('ViewfinderPageIndicatorAdaptive', () {
+      // ignore: prefer_const_constructors
+      final a = ViewfinderPageIndicatorAdaptive();
+      // ignore: prefer_const_constructors
+      final b = ViewfinderPageIndicatorAdaptive();
+      // ignore: prefer_const_constructors
+      final c = ViewfinderPageIndicatorAdaptive(maxDots: 6);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
     });
   });
 
@@ -748,6 +811,30 @@ void main() {
     expect(img.gaplessPlayback, isFalse);
   });
 
+  testWidgets(
+    'Viewfinder: ViewfinderImageItem.gaplessPlayback reaches per-page Image',
+    (tester) async {
+      // Gallery code path is separate from standalone ViewfinderImage —
+      // `_ViewfinderPage.build` has to thread the field through.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 1,
+              itemBuilder: (_, _) => ViewfinderItem(
+                image: _memoryImage(),
+                gaplessPlayback: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final img = tester.widget<Image>(find.byType(Image).first);
+      expect(img.gaplessPlayback, isFalse);
+    },
+  );
+
   testWidgets('ViewfinderImage onScaleStart / onScaleEnd fire on pinch', (
     tester,
   ) async {
@@ -782,6 +869,54 @@ void main() {
   });
 
   testWidgets(
+    'ViewfinderImage.rubberBandPan: false hard-clamps pan past the edge',
+    (tester) async {
+      final c = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 400,
+              child: ViewfinderImage(
+                image: _memoryImage(),
+                controller: c,
+                rubberBandPan: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // Zoom 3× so there is over-pan room.
+      c.animateToScale(3.0);
+      await tester.pumpAndSettle();
+
+      final viewer = find.byType(ZoomableViewport);
+      final center = tester.getCenter(viewer);
+
+      // Drag hard left mid-gesture. Without rubber-band, the live
+      // matrix's tx must not drop below the strict left clamp
+      // (= viewport.width - scale * viewport.width = 400 - 3*400 = -800).
+      final p = await tester.startGesture(center);
+      for (var i = 0; i < 30; i++) {
+        await p.moveBy(const Offset(-100, 0));
+        await tester.pump();
+        final tx = c.currentTransform.storage[12];
+        // 0.5 epsilon matches the in-code clamp tolerance.
+        expect(
+          tx,
+          greaterThanOrEqualTo(-800 - 0.5),
+          reason: 'rubberBandPan: false must not allow elastic over-pan',
+        );
+      }
+      await p.up();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
     'ViewfinderImageController.jumpToTransform sets the matrix instantly',
     (tester) async {
       final c = ViewfinderImageController();
@@ -799,6 +934,26 @@ void main() {
       await tester.pump();
       expect(c.currentTransform, equals(target));
       expect(c.scale, closeTo(2.0, 1e-6));
+    },
+  );
+
+  testWidgets(
+    'ViewfinderImageController.animateToTransform converges to target',
+    (tester) async {
+      final c = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ViewfinderImage(image: _memoryImage(), controller: c),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      final target = Matrix4.identity()..scaleByDouble(3.0, 3.0, 1, 1);
+      c.animateToTransform(target);
+      await tester.pumpAndSettle();
+      expect(c.scale, closeTo(3.0, 1e-2));
     },
   );
 
@@ -2818,6 +2973,35 @@ void main() {
     await _settleImages(tester);
     expect(find.bySemanticsLabel('Photo gallery, 1 of 3'), findsOneWidget);
   });
+
+  testWidgets(
+    'Viewfinder.images: thumbImage and semanticLabel callbacks are invoked',
+    (tester) async {
+      final thumbCalls = <int>[];
+      final labelCalls = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.images(
+              List.generate(2, (_) => _memoryImage()),
+              thumbImage: (i) {
+                thumbCalls.add(i);
+                return _memoryImage();
+              },
+              semanticLabel: (i) {
+                labelCalls.add(i);
+                return 'photo $i';
+              },
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      // Both callbacks fire while the gallery's itemBuilder runs.
+      expect(thumbCalls, isNotEmpty);
+      expect(labelCalls, isNotEmpty);
+    },
+  );
 
   testWidgets('Viewfinder.images: hero callback wires per-page Hero', (
     tester,
