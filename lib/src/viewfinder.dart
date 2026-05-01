@@ -457,12 +457,21 @@ class _ViewfinderState extends State<Viewfinder> {
   }
 
   void _onPageChanged(int index) {
+    final previous = _currentIndex;
     setState(() {
       _currentIndex = index;
       // Re-derive swipe lock for the new page's current state.
       final c = _imageControllers[index];
       _swipeLocked = c != null && !_canSwipeAlongPager(c);
     });
+    // The page we just left keeps its own TransformationController
+    // alive (PageView retains adjacent pages). If the user had zoomed
+    // it, a later swipe back would reveal the stale zoom. Snap it
+    // back instantly — matches photo-viewer convention of presenting
+    // every page at its initial scale.
+    if (previous != index) {
+      _imageControllers[previous]?.jumpToInitial();
+    }
     _controller._setIndex(index);
     widget.onPageChanged?.call(index);
     _precacheAround(index);

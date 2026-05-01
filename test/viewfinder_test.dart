@@ -617,6 +617,50 @@ void main() {
     expect(pageChanges.last, 3);
   });
 
+  testWidgets(
+    'Viewfinder: navigating away from a zoomed page resets its transform',
+    (tester) async {
+      final ctrl = ViewfinderController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 3,
+              controller: ctrl,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // Zoom page 0 via double-tap.
+      final viewer = find.byType(ZoomableViewport);
+      final center = tester.getCenter(viewer);
+      final g1 = await tester.startGesture(center);
+      await g1.up();
+      await tester.pump(const Duration(milliseconds: 50));
+      final g2 = await tester.startGesture(center);
+      await g2.up();
+      await tester.pumpAndSettle();
+
+      // Navigate to page 1, then back to page 0.
+      ctrl.animateTo(1);
+      await tester.pumpAndSettle();
+      ctrl.animateTo(0);
+      await tester.pumpAndSettle();
+
+      // resetCurrentImage returns true only if a reset actually happened
+      // (i.e., the page was still zoomed on entry). After navigating away
+      // and back, page 0 must already be at initial scale.
+      expect(
+        ctrl.resetCurrentImage(),
+        isFalse,
+        reason: 'previous page should be at initial scale on return',
+      );
+    },
+  );
+
   testWidgets('ViewfinderThumbnails: tapping a thumbnail jumps the page', (
     tester,
   ) async {
