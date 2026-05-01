@@ -792,8 +792,6 @@ class _DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
       } else if (_state == _State.dragging) {
         onDragEnd?.call();
         stopTrackingPointer(event.pointer);
-      } else {
-        stopTrackingPointer(event.pointer);
       }
     } else if (event is PointerCancelEvent) {
       if (_state == _State.dragging) onDragEnd?.call();
