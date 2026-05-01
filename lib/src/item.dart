@@ -6,10 +6,8 @@ import 'viewfinder.dart' show Viewfinder;
 
 /// Describes a single page of a [Viewfinder] gallery.
 ///
-/// Use [ViewfinderItem.new] (alias for the `image:` form) for an
-/// `ImageProvider`-backed page, or [ViewfinderItem.child] for a custom
-/// widget. Pattern-match on the variant ([ViewfinderImageItem] /
-/// [ViewfinderChildItem]) when you need the variant-specific fields.
+/// Construct via [ViewfinderItem.new] (image-backed) or
+/// [ViewfinderItem.child] (custom widget).
 @immutable
 sealed class ViewfinderItem {
   const ViewfinderItem._({

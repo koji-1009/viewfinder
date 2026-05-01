@@ -7,6 +7,8 @@ import 'package:viewfinder/src/internal/dismissible.dart';
 import 'package:viewfinder/src/internal/page_indicator_overlay.dart';
 import 'package:viewfinder/src/internal/thumbnail_bar.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
+import 'package:viewfinder/src/item.dart'
+    show ViewfinderChildItem, ViewfinderImageItem;
 import 'package:viewfinder/viewfinder.dart';
 
 // A 1x1 ARGB PNG — decodes cleanly in the test environment.

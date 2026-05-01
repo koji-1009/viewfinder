@@ -16,11 +16,11 @@ typedef ViewfinderScaleChanged = void Function(double scale);
 /// [InteractiveViewer] + a light custom double-tap handler. Suitable as a
 /// standalone viewer or as a page inside `Viewfinder`.
 ///
-/// Sealed: the public ctors are factories returning private final
-/// subclasses ([ViewfinderProviderImage] / [ViewfinderChildImage]).
-/// External code can pattern-match on the variant where useful, but
-/// `find.byType(ViewfinderImage)` will not match — use
-/// `find.byWidgetPredicate((w) => w is ViewfinderImage)` instead.
+/// Construct via the [ViewfinderImage.new] (image-backed) or
+/// [ViewfinderImage.child] factories. The runtime type of an instance
+/// is a package-internal subclass; `find.byType(ViewfinderImage)` in
+/// widget tests will therefore not match — use
+/// `find.byWidgetPredicate((w) => w is ViewfinderImage)`.
 sealed class ViewfinderImage extends StatefulWidget {
   const ViewfinderImage._({
     super.key,
