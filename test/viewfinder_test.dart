@@ -2682,14 +2682,14 @@ void main() {
           dots: ViewfinderPageIndicatorDots(alignment: Alignment.topCenter),
         ),
       );
-      expect(tester.takeException(), isA<FlutterError>());
+      expect(tester.takeException(), isA<AssertionError>());
 
       await pumpWith(
         const ViewfinderPageIndicatorAdaptive(
           label: ViewfinderPageIndicatorLabel(padding: EdgeInsets.zero),
         ),
       );
-      expect(tester.takeException(), isA<FlutterError>());
+      expect(tester.takeException(), isA<AssertionError>());
     },
   );
 
