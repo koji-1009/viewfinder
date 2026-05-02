@@ -22,6 +22,17 @@ import 'thumbnails.dart';
 /// Built on [PageView.builder] + [ViewfinderImage]. Every affordance —
 /// thumbnails, page indicator, drag-to-dismiss, adjacent-page precache —
 /// is opt-in via a dedicated config object.
+///
+/// Per-page pan/zoom state is held by the gallery and keyed by **slot
+/// index**, not by content identity. If the same `ImageProvider` (or
+/// the same `.child` `contentKey`) is placed at multiple slots, each
+/// slot gets an independent transform — zooming the photo at slot 0
+/// does not move the same photo if it also appears at slot 3. This
+/// matches photo-viewer convention (swiping back to a previously
+/// viewed page presents it at its initial scale) and keeps each slot's
+/// `ViewfinderImageController` bound to a single state. To synchronise
+/// transforms across slots, drive a single controller yourself via
+/// [ViewfinderImage] in a custom layout instead of using `Viewfinder`.
 class Viewfinder extends StatefulWidget {
   /// Creates a swipeable photo gallery. [itemCount] and [itemBuilder]
   /// are required; every other parameter is opt-in.

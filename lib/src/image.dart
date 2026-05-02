@@ -423,12 +423,26 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   /// extents are the rotated photo's outermost corners, which are the
   /// angle-dependent corners of a square photo, not the user-visible
   /// "left" and "right" sides. Yielding on the logical edge matches
-  /// the user's intent: "the photo's left side is now at the screen's
-  /// left → swipe to the previous page."
+  /// the user's intent at zero rotation: "the photo's left side is now
+  /// at the screen's left → swipe to the previous page."
+  ///
+  /// At non-zero rotation, "horizontal swipe" is fundamentally
+  /// ambiguous — it can mean "swipe along the photo's frame" or
+  /// "swipe along the screen's horizontal axis", and the two diverge.
+  /// This implementation picks the photo-frame interpretation because
+  /// it agrees with intuition at zero rotation (the typical case) and
+  /// keeps the rotated case symmetric. At ±90° the photo's logical
+  /// left/right are aligned with the screen's *vertical* axis, so a
+  /// horizontal swipe will not yield based on the photo's logical
+  /// horizontal edges; the photo's pan stays in charge until the user
+  /// finishes the gesture. If you need screen-axis-based handoff under
+  /// rotation, intercept the gesture upstream of `Viewfinder`.
   bool get canSwipeHorizontally => _atHorizontalEdge();
 
   /// Vertical-axis counterpart of [canSwipeHorizontally]. Consulted by
-  /// the gallery when its `pagerAxis` is vertical.
+  /// the gallery when its `pagerAxis` is vertical. Same photo-frame
+  /// interpretation under rotation: at ±90° the photo's logical
+  /// top/bottom are aligned with the screen's horizontal axis.
   bool get canSwipeVertically => _atVerticalEdge();
 
   bool _atHorizontalEdge() {
