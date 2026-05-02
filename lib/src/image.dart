@@ -81,9 +81,19 @@ sealed class ViewfinderImage extends StatefulWidget {
   }) = ViewfinderProviderImage;
 
   /// Displays an arbitrary [child] widget instead of an image.
+  ///
+  /// [contentKey] identifies the rendered content. When the parent
+  /// rebuilds with a different [contentKey] the in-page pan/zoom is
+  /// reset, so a re-ordered slot does not leak the previous photo's
+  /// transform. The image-backed variant gets this for free from the
+  /// `ImageProvider`'s `==`; for `.child` the rendered widget identity
+  /// is unreliable (inline `Text(...)` etc. are fresh every rebuild),
+  /// so the caller supplies a stable handle. For a single static
+  /// `.child`, any constant works (e.g. `contentKey: 'main'`).
   const factory ViewfinderImage.child({
     Key? key,
     required Widget child,
+    required Object contentKey,
     ViewfinderInitialScale initialScale,
     List<double> doubleTapScales,
     double minScale,
@@ -261,6 +271,7 @@ final class ViewfinderChildImage extends ViewfinderImage {
   const ViewfinderChildImage({
     super.key,
     required this.child,
+    required this.contentKey,
     super.initialScale,
     super.doubleTapScales,
     super.minScale,
@@ -285,6 +296,9 @@ final class ViewfinderChildImage extends ViewfinderImage {
 
   /// Widget rendered for this view.
   final Widget child;
+
+  /// Stable identity for [child]; see [ViewfinderImage.child].
+  final Object contentKey;
 }
 
 class _ViewfinderImageState extends State<ViewfinderImage>
@@ -314,13 +328,54 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       oldWidget.controller?._detach(this);
       widget.controller?._attach(this);
     }
-    if (oldWidget.initialScale != widget.initialScale) {
+    // Reset on either an explicit initial-scale change or a content
+    // swap. The latter handles the slot-reuse case in galleries: when
+    // the parent rebuilds the same index with a different photo,
+    // Element reuse keeps this State alive — without an explicit reset
+    // the previous photo's pan/zoom would carry over to the new one.
+    if (oldWidget.initialScale != widget.initialScale ||
+        _isContentSwap(oldWidget, widget)) {
       _transformation.value = _initialMatrix();
     }
   }
 
+  static bool _isContentSwap(ViewfinderImage a, ViewfinderImage b) =>
+      switch ((a, b)) {
+        (
+          ViewfinderProviderImage(image: final ai),
+          ViewfinderProviderImage(image: final bi),
+        ) =>
+          ai != bi,
+        (
+          ViewfinderChildImage(contentKey: final ak),
+          ViewfinderChildImage(contentKey: final bk),
+        ) =>
+          ak != bk,
+        // Different runtime variants (provider <-> child) is a swap.
+        _ => true,
+      };
+
+  @override
+  void deactivate() {
+    // Detach here (not in dispose) so a tree rearrangement that
+    // mounts a new ViewfinderImage at the same controller before the
+    // outgoing one is disposed does not leave both states attached
+    // briefly. If the framework reactivates this State, [activate]
+    // re-attaches.
+    widget.controller?._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    widget.controller?._attach(this);
+  }
+
   @override
   void dispose() {
+    // Idempotent — `_detach` is a no-op when this state is already
+    // detached, which it normally is by this point (deactivate ran).
     widget.controller?._detach(this);
     _transformation
       ..removeListener(_notifyScaleChange)
@@ -355,33 +410,34 @@ class _ViewfinderImageState extends State<ViewfinderImage>
         : .initial;
   }
 
-  /// True when a horizontal page swipe can reasonably take over: either
-  /// the image is at its initial scale, or it is panned against one of
-  /// its horizontal edges so further horizontal pan inside the image
-  /// has no effect.
+  /// True when a horizontal page swipe can reasonably take over: the
+  /// image is at its initial scale, or the rotated content's AABB is
+  /// flush against the viewport's left or right edge so no pixel of
+  /// the image overflows past that side.
+  ///
+  /// Uses the same axis-aligned bbox the boundary clamp uses, so
+  /// edge-handoff stays consistent with the clamp under rotation: when
+  /// the user has panned the rotated photo so that no part of it lies
+  /// further left than the viewport, yielding to the previous page is
+  /// the screen-axis intent. Symmetric on the right.
   bool get canSwipeHorizontally {
     if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
-    final m = _transformation.value;
-    final scale = xyScale(m);
-    final tx = m.storage[12];
-    final minTx = _viewportSize.width - scale * _viewportSize.width;
+    final bbox = contentBbox(_transformation.value, _viewportSize);
     const epsilon = 0.5;
-    return tx >= -epsilon || tx <= minTx + epsilon;
+    if (bbox.maxX - bbox.minX <= _viewportSize.width + epsilon) return true;
+    return bbox.minX >= -epsilon || bbox.maxX <= _viewportSize.width + epsilon;
   }
 
-  /// Vertical-axis counterpart of [canSwipeHorizontally] — true when the
-  /// image is at its initial scale or panned against one of its vertical
-  /// edges. The gallery consults this when its `pagerAxis` is vertical.
+  /// Vertical-axis counterpart of [canSwipeHorizontally]. Consulted by
+  /// the gallery when its `pagerAxis` is vertical.
   bool get canSwipeVertically {
     if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
-    final m = _transformation.value;
-    final scale = xyScale(m);
-    final ty = m.storage[13];
-    final minTy = _viewportSize.height - scale * _viewportSize.height;
+    final bbox = contentBbox(_transformation.value, _viewportSize);
     const epsilon = 0.5;
-    return ty >= -epsilon || ty <= minTy + epsilon;
+    if (bbox.maxY - bbox.minY <= _viewportSize.height + epsilon) return true;
+    return bbox.minY >= -epsilon || bbox.maxY <= _viewportSize.height + epsilon;
   }
 
   void _animateTo(Matrix4 target) {
@@ -628,6 +684,10 @@ class _ImageWithOptionalThumb extends StatelessWidget {
 /// [canSwipeVertically] actually transitions — not on every transform
 /// frame. For per-frame scale callbacks, use
 /// [ViewfinderImage.onScaleChanged].
+///
+/// Each controller drives a single [ViewfinderImage]. Passing the same
+/// instance to multiple widgets is rejected by a debug assert; create a
+/// fresh controller per viewer.
 class ViewfinderImageController extends ChangeNotifier {
   /// Creates a detached controller. Pass it to a [ViewfinderImage] to
   /// observe and drive that image's transform.
@@ -649,6 +709,14 @@ class ViewfinderImageController extends ChangeNotifier {
   // [_bump] from the transform-controller listener.
   void _attach(_ViewfinderImageState s) {
     if (_disposed) return;
+    assert(
+      _state == null || identical(_state, s),
+      'A ViewfinderImageController was attached to multiple ViewfinderImage '
+      'widgets at once. Each controller can drive only one viewer — create a '
+      'separate controller per widget. (Debug-only check; release builds '
+      'silently overwrite the previous binding, which produces incorrect '
+      'reads through the controller.)',
+    );
     _state = s;
     _lastSignal = null;
   }

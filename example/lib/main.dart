@@ -312,7 +312,7 @@ class _SettingsSheet extends StatelessWidget {
             segments: const [
               ButtonSegment(value: .contain, label: Text('contain')),
               ButtonSegment(value: .cover, label: Text('cover')),
-              ButtonSegment(value: .value15, label: Text('1.5x')),
+              ButtonSegment(value: .contain15, label: Text('1.5x')),
             ],
             selected: {settings.initialScale},
             onSelectionChanged: (s) =>
@@ -516,12 +516,12 @@ extension on _DragDevicesPreset {
   };
 }
 
-enum _InitialScalePreset { contain, cover, value15 }
+enum _InitialScalePreset { contain, cover, contain15 }
 
 extension on _InitialScalePreset {
   ViewfinderInitialScale resolve() => switch (this) {
     .contain => const ViewfinderInitialScale.contain(),
     .cover => const ViewfinderInitialScale.cover(),
-    .value15 => const ViewfinderInitialScale.value(1.5),
+    .contain15 => const ViewfinderInitialScale.contain(1.5),
   };
 }

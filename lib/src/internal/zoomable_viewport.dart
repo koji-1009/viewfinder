@@ -436,24 +436,14 @@ class _ZoomableViewportState extends State<ZoomableViewport>
   }) {
     if (_viewport.isEmpty) return m;
 
-    // Compute the axis-aligned bounding box of the transformed content
-    // (which is originally a 0..viewport.width × 0..viewport.height rect).
-    final corners = <Offset>[
-      _apply(m, Offset.zero),
-      _apply(m, Offset(_viewport.width, 0)),
-      _apply(m, Offset(0, _viewport.height)),
-      _apply(m, Offset(_viewport.width, _viewport.height)),
-    ];
-    var minX = corners.first.dx;
-    var maxX = corners.first.dx;
-    var minY = corners.first.dy;
-    var maxY = corners.first.dy;
-    for (final p in corners.skip(1)) {
-      if (p.dx < minX) minX = p.dx;
-      if (p.dx > maxX) maxX = p.dx;
-      if (p.dy < minY) minY = p.dy;
-      if (p.dy > maxY) maxY = p.dy;
-    }
+    // Axis-aligned bounding box of the transformed content (which is
+    // originally a 0..viewport.width × 0..viewport.height rect). Correct
+    // under rotation because all four projected corners drive it.
+    final bbox = contentBbox(m, _viewport);
+    final minX = bbox.minX;
+    final maxX = bbox.maxX;
+    final minY = bbox.minY;
+    final maxY = bbox.maxY;
     final bboxW = maxX - minX;
     final bboxH = maxY - minY;
 
@@ -501,14 +491,6 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     out.storage[12] += dx;
     out.storage[13] += dy;
     return out;
-  }
-
-  Offset _apply(Matrix4 m, Offset p) {
-    final v = m.storage;
-    return Offset(
-      v[0] * p.dx + v[4] * p.dy + v[12],
-      v[1] * p.dx + v[5] * p.dy + v[13],
-    );
   }
 
   // ---------------- gestures plumbing ---------------- //

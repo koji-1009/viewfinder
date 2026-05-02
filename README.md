@@ -76,19 +76,20 @@ ViewfinderImage(
 )
 ```
 
-For non-image content, `ViewfinderImage.child(child: …)` zooms any widget.
+For non-image content, `ViewfinderImage.child(child: …, contentKey: …)` zooms any widget. The required `contentKey` is any `Object` whose `==` identifies the rendered content; for a single static `.child`, a constant string works (`contentKey: 'main'`).
 
 ## Initial scale
 
-Three flavors, each accepting an optional multiplier:
+Two flavors, each accepting an optional multiplier:
 
 ```dart
 const ViewfinderInitialScale.contain()      // fit-in-viewport (default)
 const ViewfinderInitialScale.contain(0.8)   // 80% of fit, leaves margin
 const ViewfinderInitialScale.cover()        // fill-viewport, crop overflow
 const ViewfinderInitialScale.cover(1.2)     // 120% of fill
-const ViewfinderInitialScale.value(2.0)     // absolute 2× over `contain`
 ```
+
+For an "always 2×" feel, use `contain(2.0)`.
 
 ## Zoom & pan
 
@@ -133,6 +134,8 @@ Knobs on `Viewfinder` that control how pages flow.
 ## Drag-to-dismiss
 
 `ViewfinderDismiss(onDismiss: …)`. Auto-disabled while zoomed. Background fades with drag.
+
+> Drag-to-dismiss reads vertical drags, so pairing it with `pagerAxis: Axis.vertical` would put both into the same gesture arena. The combination is rejected at construction time (debug assert). Pick one — horizontal pager + dismiss, or vertical pager without dismiss.
 
 | Knob             | Default      | What it does                                                                                     |
 | ---------------- | ------------ | ------------------------------------------------------------------------------------------------ |

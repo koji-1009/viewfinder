@@ -111,8 +111,8 @@ final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
 ///
 /// The [alignment] and [padding] on the inner [dots] / [label] are ignored —
 /// the outer values on the [ViewfinderPageIndicatorAdaptive] are the source of
-/// truth. A debug-mode assert in the overlay catches accidental customization
-/// of the inner values.
+/// truth. Customizing the inner values is rejected by a debug-only assert; in
+/// release builds it is silently ignored.
 final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   /// Creates an adaptive indicator. The default values match standard
   /// photo-viewer behaviour: dots up to 12 items, then `"i / N"` label.

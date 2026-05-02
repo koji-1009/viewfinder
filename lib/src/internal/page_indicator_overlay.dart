@@ -22,25 +22,21 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (itemCount == 0) return const SizedBox.shrink();
     final cfg = config;
-    assert(() {
-      if (cfg is ViewfinderPageIndicatorAdaptive) {
-        if (cfg.dots.alignment != cfg.alignment ||
-            cfg.dots.padding != cfg.padding) {
-          throw FlutterError(
-            'Inner dots alignment/padding on a ViewfinderPageIndicatorAdaptive '
-            'are ignored — set them on the Adaptive instance instead.',
-          );
-        }
-        if (cfg.label.alignment != cfg.alignment ||
-            cfg.label.padding != cfg.padding) {
-          throw FlutterError(
-            'Inner label alignment/padding on a ViewfinderPageIndicatorAdaptive '
-            'are ignored — set them on the Adaptive instance instead.',
-          );
-        }
-      }
-      return true;
-    }());
+    if (cfg is ViewfinderPageIndicatorAdaptive) {
+      assert(
+        cfg.dots.alignment == cfg.alignment && cfg.dots.padding == cfg.padding,
+        'Inner dots alignment/padding on a ViewfinderPageIndicatorAdaptive '
+        'are ignored at runtime — set them on the Adaptive instance '
+        'instead. (Debug-only check; release builds silently ignore.)',
+      );
+      assert(
+        cfg.label.alignment == cfg.alignment &&
+            cfg.label.padding == cfg.padding,
+        'Inner label alignment/padding on a ViewfinderPageIndicatorAdaptive '
+        'are ignored at runtime — set them on the Adaptive instance '
+        'instead. (Debug-only check; release builds silently ignore.)',
+      );
+    }
     final content = switch (cfg) {
       ViewfinderPageIndicatorDots() => _DotsView(
         dots: cfg,
