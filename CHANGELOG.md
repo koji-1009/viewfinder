@@ -1,3 +1,10 @@
+## 0.2.1
+
+### API additions
+
+* `thumbCrossFadeCurve` is now configurable on `ViewfinderImage` and `ViewfinderItem` (default `Curves.easeOut`). Previously the curve was hardcoded while `thumbCrossFadeDuration` was the only knob, so callers wanting non-default easing on the thumb-to-main fade had no way in.
+* `Viewfinder.images(...)` and `Viewfinder.single(...)` now forward the per-page image-display knobs — `thumbCrossFadeDuration`, `thumbCrossFadeCurve`, `gaplessPlayback` — to every `ViewfinderItem` they construct. Previously these were reachable only by writing a custom `itemBuilder`; per-page transform overrides (`initialScale` / `minScale` / `maxScale`) still are.
+
 ## 0.2.0
 
 ### Breaking changes
