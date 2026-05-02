@@ -3321,6 +3321,93 @@ void main() {
     },
   );
 
+  testWidgets(
+    'ViewfinderImageController: attaching to multiple ViewfinderImage '
+    'widgets at once trips a debug assert',
+    (tester) async {
+      // 1 controller = 1 view. Sharing across widgets would silently
+      // overwrite the binding (release) or produce incorrect reads
+      // (because per-state fields like scaleState would resolve to
+      // whichever widget attached last).
+      final shared = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                Expanded(
+                  child: ViewfinderImage(
+                    image: _memoryImage(),
+                    controller: shared,
+                  ),
+                ),
+                Expanded(
+                  child: ViewfinderImage(
+                    image: _memoryImage(),
+                    controller: shared,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      // The second ViewfinderImage's initState calls _attach while the
+      // first is still attached → debug assert fires.
+      expect(tester.takeException(), isA<AssertionError>());
+    },
+  );
+
+  testWidgets('ViewfinderImage: deactivate detaches and activate re-attaches '
+      'the controller across a GlobalKey-driven tree move', (tester) async {
+    // GlobalKey moves trigger deactivate (old slot) then activate
+    // (new slot) on the same State instance — without re-attaching
+    // in activate, the controller would be left detached.
+    final key = GlobalKey();
+    final controller = ViewfinderImageController();
+    var inA = true;
+    late StateSetter setSlot;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (_, setState) {
+              setSlot = setState;
+              final viewer = ViewfinderImage(
+                key: key,
+                image: _memoryImage(),
+                controller: controller,
+              );
+              return Column(
+                children: [
+                  Expanded(child: inA ? viewer : const SizedBox.expand()),
+                  Expanded(child: inA ? const SizedBox.expand() : viewer),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Initial bind: controller drives the viewer.
+    controller.animateToScale(3.0);
+    await tester.pumpAndSettle();
+    expect(controller.scaleState, ViewfinderScaleState.zoomed);
+
+    // Move to slot B — same State, deactivate then activate.
+    setSlot(() => inA = false);
+    await tester.pumpAndSettle();
+
+    // After the move, the controller is still bound and reads the
+    // (preserved) zoom state from the same State instance.
+    expect(controller.scaleState, ViewfinderScaleState.zoomed);
+    controller.reset();
+    await tester.pumpAndSettle();
+    expect(controller.scaleState, ViewfinderScaleState.initial);
+  });
+
   testWidgets('Viewfinder.single: shows exactly one page', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

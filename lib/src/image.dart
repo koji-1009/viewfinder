@@ -358,7 +358,26 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       };
 
   @override
+  void deactivate() {
+    // Detach here (not in dispose) so a tree rearrangement that
+    // mounts a new ViewfinderImage at the same controller before the
+    // outgoing one is disposed does not leave both states attached
+    // briefly. If the framework reactivates this State, [activate]
+    // re-attaches.
+    widget.controller?._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    widget.controller?._attach(this);
+  }
+
+  @override
   void dispose() {
+    // Idempotent — `_detach` is a no-op when this state is already
+    // detached, which it normally is by this point (deactivate ran).
     widget.controller?._detach(this);
     _transformation
       ..removeListener(_notifyScaleChange)
@@ -690,6 +709,10 @@ class _ImageWithOptionalThumb extends StatelessWidget {
 /// [canSwipeVertically] actually transitions — not on every transform
 /// frame. For per-frame scale callbacks, use
 /// [ViewfinderImage.onScaleChanged].
+///
+/// Each controller drives a single [ViewfinderImage]. Passing the same
+/// instance to multiple widgets is rejected by a debug assert; create a
+/// fresh controller per viewer.
 class ViewfinderImageController extends ChangeNotifier {
   /// Creates a detached controller. Pass it to a [ViewfinderImage] to
   /// observe and drive that image's transform.
@@ -711,6 +734,14 @@ class ViewfinderImageController extends ChangeNotifier {
   // [_bump] from the transform-controller listener.
   void _attach(_ViewfinderImageState s) {
     if (_disposed) return;
+    assert(
+      _state == null || identical(_state, s),
+      'A ViewfinderImageController was attached to multiple ViewfinderImage '
+      'widgets at once. Each controller can drive only one viewer — create a '
+      'separate controller per widget. (Debug-only check; release builds '
+      'silently overwrite the previous binding, which produces incorrect '
+      'reads through the controller.)',
+    );
     _state = s;
     _lastSignal = null;
   }
