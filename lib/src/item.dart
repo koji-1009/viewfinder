@@ -31,6 +31,8 @@ sealed class ViewfinderItem {
     double? minScale,
     double? maxScale,
     String? semanticLabel,
+    Duration thumbCrossFadeDuration,
+    Curve thumbCrossFadeCurve,
     bool gaplessPlayback,
   }) = ViewfinderImageItem;
 
@@ -85,6 +87,8 @@ final class ViewfinderImageItem extends ViewfinderItem {
     super.minScale,
     super.maxScale,
     super.semanticLabel,
+    this.thumbCrossFadeDuration = const .new(milliseconds: 200),
+    this.thumbCrossFadeCurve = Curves.easeOut,
     this.gaplessPlayback = true,
   }) : super._();
 
@@ -100,6 +104,13 @@ final class ViewfinderImageItem extends ViewfinderItem {
 
   /// Builder rendered when [image] fails to load. See [Image.errorBuilder].
   final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Cross-fade duration from [thumbImage] to [image].
+  final Duration thumbCrossFadeDuration;
+
+  /// Easing curve applied to the [thumbImage] -> [image] cross-fade.
+  /// Defaults to [Curves.easeOut].
+  final Curve thumbCrossFadeCurve;
 
   /// Forwarded to [Image.gaplessPlayback]. When `true` (default), keeps
   /// showing the previous frame while [image] decodes.
