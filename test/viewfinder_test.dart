@@ -3245,12 +3245,13 @@ void main() {
   });
 
   testWidgets(
-    'ViewfinderImageController.canSwipeHorizontally tracks the photo\'s '
-    'logical edges under rotation, not raw translation',
+    'ViewfinderImageController.canSwipeHorizontally tracks the rotated '
+    'AABB, not raw translation',
     (tester) async {
       // Regression for the pre-0.2.0 implementation that consulted
       // m.storage[12]/[13] directly and so misreported edge state when
-      // `rotateEnabled: true`.
+      // `rotateEnabled: true`. The clamp also uses the AABB, so the
+      // edge gate stays in sync with it.
       final imageController = ViewfinderImageController();
       await tester.pumpWidget(
         MaterialApp(
@@ -3270,9 +3271,8 @@ void main() {
       await _settleImages(tester);
 
       // 3× scale plus 30° rotation around the viewport center: the
-      // photo's logical left edge is well past the viewport's left
-      // (≈ x=-619) and its logical right edge is well past the right
-      // (≈ x=1019). User is at neither logical edge → no handoff.
+      // rotated AABB overflows on both sides → the user is at neither
+      // horizontal edge → no handoff yet.
       final m = Matrix4.identity()
         ..translateByDouble(200.0, 200.0, 0, 1)
         ..rotateZ(0.5236)
@@ -3287,8 +3287,7 @@ void main() {
   );
 
   testWidgets(
-    'ViewfinderImageController.canSwipeVertically tracks the photo\'s '
-    'logical edges under rotation',
+    'ViewfinderImageController.canSwipeVertically tracks the rotated AABB',
     (tester) async {
       final imageController = ViewfinderImageController();
       await tester.pumpWidget(

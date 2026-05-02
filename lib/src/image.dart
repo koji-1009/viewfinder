@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import 'hero.dart';
@@ -413,70 +411,33 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   /// True when a horizontal page swipe can reasonably take over: the
-  /// image is at its initial scale, or the user has panned the photo's
-  /// logical left or right edge into the viewport so further horizontal
-  /// pan inside the image is meaningless on that side.
+  /// image is at its initial scale, or the rotated content's AABB is
+  /// flush against the viewport's left or right edge so no pixel of
+  /// the image overflows past that side.
   ///
-  /// Tracks the *logical* edges (`x = 0` and `x = viewport.width` of
-  /// the unit content rect, projected through the current transform),
-  /// not the AABB. With `rotateEnabled: true` the two diverge — AABB
-  /// extents are the rotated photo's outermost corners, which are the
-  /// angle-dependent corners of a square photo, not the user-visible
-  /// "left" and "right" sides. Yielding on the logical edge matches
-  /// the user's intent at zero rotation: "the photo's left side is now
-  /// at the screen's left → swipe to the previous page."
-  ///
-  /// At non-zero rotation, "horizontal swipe" is fundamentally
-  /// ambiguous — it can mean "swipe along the photo's frame" or
-  /// "swipe along the screen's horizontal axis", and the two diverge.
-  /// This implementation picks the photo-frame interpretation because
-  /// it agrees with intuition at zero rotation (the typical case) and
-  /// keeps the rotated case symmetric. At ±90° the photo's logical
-  /// left/right are aligned with the screen's *vertical* axis, so a
-  /// horizontal swipe will not yield based on the photo's logical
-  /// horizontal edges; the photo's pan stays in charge until the user
-  /// finishes the gesture. If you need screen-axis-based handoff under
-  /// rotation, intercept the gesture upstream of `Viewfinder`.
-  bool get canSwipeHorizontally => _atHorizontalEdge();
-
-  /// Vertical-axis counterpart of [canSwipeHorizontally]. Consulted by
-  /// the gallery when its `pagerAxis` is vertical. Same photo-frame
-  /// interpretation under rotation: at ±90° the photo's logical
-  /// top/bottom are aligned with the screen's horizontal axis.
-  bool get canSwipeVertically => _atVerticalEdge();
-
-  bool _atHorizontalEdge() {
+  /// Uses the same axis-aligned bbox the boundary clamp uses, so
+  /// edge-handoff stays consistent with the clamp under rotation: when
+  /// the user has panned the rotated photo so that no part of it lies
+  /// further left than the viewport, yielding to the previous page is
+  /// the screen-axis intent. Symmetric on the right.
+  bool get canSwipeHorizontally {
     if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
-    final m = _transformation.value;
-    final leftA = applyMatrix2D(m, Offset.zero);
-    final leftB = applyMatrix2D(m, Offset(0, _viewportSize.height));
-    final rightA = applyMatrix2D(m, Offset(_viewportSize.width, 0));
-    final rightB = applyMatrix2D(
-      m,
-      Offset(_viewportSize.width, _viewportSize.height),
-    );
-    final leftMinX = math.min(leftA.dx, leftB.dx);
-    final rightMaxX = math.max(rightA.dx, rightB.dx);
+    final bbox = contentBbox(_transformation.value, _viewportSize);
     const epsilon = 0.5;
-    return leftMinX >= -epsilon || rightMaxX <= _viewportSize.width + epsilon;
+    if (bbox.maxX - bbox.minX <= _viewportSize.width + epsilon) return true;
+    return bbox.minX >= -epsilon || bbox.maxX <= _viewportSize.width + epsilon;
   }
 
-  bool _atVerticalEdge() {
+  /// Vertical-axis counterpart of [canSwipeHorizontally]. Consulted by
+  /// the gallery when its `pagerAxis` is vertical.
+  bool get canSwipeVertically {
     if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
-    final m = _transformation.value;
-    final topA = applyMatrix2D(m, Offset.zero);
-    final topB = applyMatrix2D(m, Offset(_viewportSize.width, 0));
-    final bottomA = applyMatrix2D(m, Offset(0, _viewportSize.height));
-    final bottomB = applyMatrix2D(
-      m,
-      Offset(_viewportSize.width, _viewportSize.height),
-    );
-    final topMinY = math.min(topA.dy, topB.dy);
-    final bottomMaxY = math.max(bottomA.dy, bottomB.dy);
+    final bbox = contentBbox(_transformation.value, _viewportSize);
     const epsilon = 0.5;
-    return topMinY >= -epsilon || bottomMaxY <= _viewportSize.height + epsilon;
+    if (bbox.maxY - bbox.minY <= _viewportSize.height + epsilon) return true;
+    return bbox.minY >= -epsilon || bbox.maxY <= _viewportSize.height + epsilon;
   }
 
   void _animateTo(Matrix4 target) {

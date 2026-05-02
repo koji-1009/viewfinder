@@ -24,8 +24,6 @@
 
 * `Viewfinder.rotateEnabled` doc said "Boundary clamping is disabled while rotated"; in fact the clamp always runs against the rotated content's AABB. Doc fixed to match the implementation.
 * `ViewfinderPageIndicatorAdaptive` doc clarifies that customizing inner `dots.alignment` / `padding` / `label.alignment` / `padding` is rejected by a debug assert and silently ignored in release.
-* `Viewfinder` now documents that per-page pan/zoom state is keyed by slot index, not content identity. The same `ImageProvider` (or `contentKey`) at multiple slots gets independent transforms — drive a single controller through `ViewfinderImage` in a custom layout if you need cross-slot synchronisation.
-* `canSwipeHorizontally` / `canSwipeVertically` now document the photo-frame interpretation under rotation: at ±90° the photo's logical left/right are aligned with the screen's vertical axis, so a horizontal swipe will not auto-yield to the pager — that interpretation is symmetric with the unrotated case and avoids guessing at user intent.
 
 ## 0.1.0
 
