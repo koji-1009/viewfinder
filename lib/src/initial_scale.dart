@@ -4,10 +4,9 @@ import 'package:flutter/painting.dart';
 /// The starting scale applied to a `ViewfinderImage` before the user
 /// interacts with it.
 ///
-/// Construct via the [ViewfinderInitialScale.contain],
-/// [ViewfinderInitialScale.cover], or [ViewfinderInitialScale.value]
-/// factories. Each fit-based factory accepts an optional `factor`
-/// multiplier — `contain(0.8)` shows the photo at 80% of the
+/// Construct via the [ViewfinderInitialScale.contain] or
+/// [ViewfinderInitialScale.cover] factories. Each accepts an optional
+/// `factor` multiplier — `contain(0.8)` shows the photo at 80% of the
 /// fit-in-viewport size (leaving margin), `cover(1.2)` zooms to 120%
 /// of the fill-viewport size. Consumers read [boxFit] and [baseScale];
 /// the variant type itself is not part of the public surface.
@@ -23,12 +22,6 @@ sealed class ViewfinderInitialScale {
   /// Fill the viewport, cropping overflow. Optional [factor] multiplies
   /// the resulting scale: `cover(1.5)` zooms to 1.5× fill.
   const factory ViewfinderInitialScale.cover([double factor]) = _Cover;
-
-  /// Explicit absolute scale relative to `BoxFit.contain`. Equivalent to
-  /// [ViewfinderInitialScale.contain] with the same `factor`; kept as a
-  /// shortcut for callers who want an absolute-multiplier reading
-  /// (`value(2.0)` reads as "always 2×").
-  const factory ViewfinderInitialScale.value(double scale) = _Contain;
 
   /// BoxFit used for the initial layout of the underlying `Image`.
   BoxFit get boxFit;

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'hero.dart';
@@ -81,9 +83,19 @@ sealed class ViewfinderImage extends StatefulWidget {
   }) = ViewfinderProviderImage;
 
   /// Displays an arbitrary [child] widget instead of an image.
+  ///
+  /// [contentKey] identifies the rendered content. When the parent
+  /// rebuilds with a different [contentKey] the in-page pan/zoom is
+  /// reset, so a re-ordered slot does not leak the previous photo's
+  /// transform. The image-backed variant gets this for free from the
+  /// `ImageProvider`'s `==`; for `.child` the rendered widget identity
+  /// is unreliable (inline `Text(...)` etc. are fresh every rebuild),
+  /// so the caller supplies a stable handle. For a single static
+  /// `.child`, any constant works (e.g. `contentKey: 'main'`).
   const factory ViewfinderImage.child({
     Key? key,
     required Widget child,
+    required Object contentKey,
     ViewfinderInitialScale initialScale,
     List<double> doubleTapScales,
     double minScale,
@@ -261,6 +273,7 @@ final class ViewfinderChildImage extends ViewfinderImage {
   const ViewfinderChildImage({
     super.key,
     required this.child,
+    required this.contentKey,
     super.initialScale,
     super.doubleTapScales,
     super.minScale,
@@ -285,6 +298,9 @@ final class ViewfinderChildImage extends ViewfinderImage {
 
   /// Widget rendered for this view.
   final Widget child;
+
+  /// Stable identity for [child]; see [ViewfinderImage.child].
+  final Object contentKey;
 }
 
 class _ViewfinderImageState extends State<ViewfinderImage>
@@ -314,10 +330,32 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       oldWidget.controller?._detach(this);
       widget.controller?._attach(this);
     }
-    if (oldWidget.initialScale != widget.initialScale) {
+    // Reset on either an explicit initial-scale change or a content
+    // swap. The latter handles the slot-reuse case in galleries: when
+    // the parent rebuilds the same index with a different photo,
+    // Element reuse keeps this State alive — without an explicit reset
+    // the previous photo's pan/zoom would carry over to the new one.
+    if (oldWidget.initialScale != widget.initialScale ||
+        _isContentSwap(oldWidget, widget)) {
       _transformation.value = _initialMatrix();
     }
   }
+
+  static bool _isContentSwap(ViewfinderImage a, ViewfinderImage b) =>
+      switch ((a, b)) {
+        (
+          ViewfinderProviderImage(image: final ai),
+          ViewfinderProviderImage(image: final bi),
+        ) =>
+          ai != bi,
+        (
+          ViewfinderChildImage(contentKey: final ak),
+          ViewfinderChildImage(contentKey: final bk),
+        ) =>
+          ak != bk,
+        // Different runtime variants (provider <-> child) is a swap.
+        _ => true,
+      };
 
   @override
   void dispose() {
@@ -355,33 +393,57 @@ class _ViewfinderImageState extends State<ViewfinderImage>
         : .initial;
   }
 
-  /// True when a horizontal page swipe can reasonably take over: either
-  /// the image is at its initial scale, or it is panned against one of
-  /// its horizontal edges so further horizontal pan inside the image
-  /// has no effect.
-  bool get canSwipeHorizontally {
+  /// True when a horizontal page swipe can reasonably take over: the
+  /// image is at its initial scale, or the user has panned the photo's
+  /// logical left or right edge into the viewport so further horizontal
+  /// pan inside the image is meaningless on that side.
+  ///
+  /// Tracks the *logical* edges (`x = 0` and `x = viewport.width` of
+  /// the unit content rect, projected through the current transform),
+  /// not the AABB. With `rotateEnabled: true` the two diverge — AABB
+  /// extents are the rotated photo's outermost corners, which are the
+  /// angle-dependent corners of a square photo, not the user-visible
+  /// "left" and "right" sides. Yielding on the logical edge matches
+  /// the user's intent: "the photo's left side is now at the screen's
+  /// left → swipe to the previous page."
+  bool get canSwipeHorizontally => _atHorizontalEdge();
+
+  /// Vertical-axis counterpart of [canSwipeHorizontally]. Consulted by
+  /// the gallery when its `pagerAxis` is vertical.
+  bool get canSwipeVertically => _atVerticalEdge();
+
+  bool _atHorizontalEdge() {
     if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
     final m = _transformation.value;
-    final scale = xyScale(m);
-    final tx = m.storage[12];
-    final minTx = _viewportSize.width - scale * _viewportSize.width;
+    final leftA = applyMatrix2D(m, Offset.zero);
+    final leftB = applyMatrix2D(m, Offset(0, _viewportSize.height));
+    final rightA = applyMatrix2D(m, Offset(_viewportSize.width, 0));
+    final rightB = applyMatrix2D(
+      m,
+      Offset(_viewportSize.width, _viewportSize.height),
+    );
+    final leftMinX = math.min(leftA.dx, leftB.dx);
+    final rightMaxX = math.max(rightA.dx, rightB.dx);
     const epsilon = 0.5;
-    return tx >= -epsilon || tx <= minTx + epsilon;
+    return leftMinX >= -epsilon || rightMaxX <= _viewportSize.width + epsilon;
   }
 
-  /// Vertical-axis counterpart of [canSwipeHorizontally] — true when the
-  /// image is at its initial scale or panned against one of its vertical
-  /// edges. The gallery consults this when its `pagerAxis` is vertical.
-  bool get canSwipeVertically {
+  bool _atVerticalEdge() {
     if (scaleState == .initial) return true;
     if (_viewportSize.isEmpty) return true;
     final m = _transformation.value;
-    final scale = xyScale(m);
-    final ty = m.storage[13];
-    final minTy = _viewportSize.height - scale * _viewportSize.height;
+    final topA = applyMatrix2D(m, Offset.zero);
+    final topB = applyMatrix2D(m, Offset(_viewportSize.width, 0));
+    final bottomA = applyMatrix2D(m, Offset(0, _viewportSize.height));
+    final bottomB = applyMatrix2D(
+      m,
+      Offset(_viewportSize.width, _viewportSize.height),
+    );
+    final topMinY = math.min(topA.dy, topB.dy);
+    final bottomMaxY = math.max(bottomA.dy, bottomB.dy);
     const epsilon = 0.5;
-    return ty >= -epsilon || ty <= minTy + epsilon;
+    return topMinY >= -epsilon || bottomMaxY <= _viewportSize.height + epsilon;
   }
 
   void _animateTo(Matrix4 target) {

@@ -28,14 +28,16 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
             cfg.dots.padding != cfg.padding) {
           throw FlutterError(
             'Inner dots alignment/padding on a ViewfinderPageIndicatorAdaptive '
-            'are ignored — set them on the Adaptive instance instead.',
+            'are ignored at runtime — set them on the Adaptive instance '
+            'instead. (Debug-only check; release builds silently ignore.)',
           );
         }
         if (cfg.label.alignment != cfg.alignment ||
             cfg.label.padding != cfg.padding) {
           throw FlutterError(
             'Inner label alignment/padding on a ViewfinderPageIndicatorAdaptive '
-            'are ignored — set them on the Adaptive instance instead.',
+            'are ignored at runtime — set them on the Adaptive instance '
+            'instead. (Debug-only check; release builds silently ignore.)',
           );
         }
       }

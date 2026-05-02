@@ -36,8 +36,18 @@ sealed class ViewfinderItem {
 
   /// Custom-widget page. The [child] is wrapped with the same zoom +
   /// pan gestures as an image-backed page.
+  ///
+  /// [contentKey] identifies the rendered content for the gallery's
+  /// per-page transform reset logic. When the parent rebuilds the same
+  /// slot with a different [contentKey] (e.g. a re-order or swap-in),
+  /// the previous photo's pan/zoom is dropped instead of leaking to
+  /// the new content. For the image-backed variant the provider's `==`
+  /// supplies this signal automatically; for `.child` the [child]
+  /// widget identity is unreliable (inline `Text(...)` etc. are fresh
+  /// every rebuild), so the caller hands the gallery a stable handle.
   const factory ViewfinderItem.child({
     required Widget child,
+    required Object contentKey,
     ViewfinderHero? hero,
     ViewfinderInitialScale? initialScale,
     double? minScale,
@@ -102,6 +112,7 @@ final class ViewfinderChildItem extends ViewfinderItem {
   /// zoom + pan + dismiss machinery as image-backed pages.
   const ViewfinderChildItem({
     required this.child,
+    required this.contentKey,
     super.hero,
     super.initialScale,
     super.minScale,
@@ -111,4 +122,11 @@ final class ViewfinderChildItem extends ViewfinderItem {
 
   /// The widget rendered for this page.
   final Widget child;
+
+  /// Stable identity for [child]. The gallery compares this between
+  /// rebuilds (`==`) to decide whether the same slot is showing the
+  /// same content; a value change resets the in-page pan/zoom so a
+  /// re-ordered slot does not display the previous photo's transform.
+  /// See [ViewfinderItem.child] for the rationale.
+  final Object contentKey;
 }

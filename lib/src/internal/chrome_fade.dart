@@ -1,0 +1,33 @@
+import 'package:flutter/material.dart';
+
+import '../chrome.dart';
+
+/// Cross-fades [child] in/out in step with a [ViewfinderChromeController].
+/// Used internally by `Viewfinder` to wrap thumbnails / page indicator /
+/// chromeOverlays.
+class ChromeFade extends StatelessWidget {
+  const ChromeFade({
+    super.key,
+    required this.chrome,
+    required this.fadeDuration,
+    required this.child,
+  });
+
+  final ViewfinderChromeController chrome;
+  final Duration fadeDuration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: chrome,
+    builder: (_, c) => IgnorePointer(
+      ignoring: !chrome.visible,
+      child: AnimatedOpacity(
+        opacity: chrome.visible ? 1.0 : 0.0,
+        duration: fadeDuration,
+        child: c,
+      ),
+    ),
+    child: child,
+  );
+}

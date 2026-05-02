@@ -26,6 +26,7 @@ ImageProvider _memoryImage() => MemoryImage(_pngBytes);
 
 ViewfinderItem _childItemBuilder(BuildContext _, int _) =>
     const ViewfinderItem.child(
+      contentKey: 'custom-gallery-child',
       child: Center(
         child: Text('custom-gallery-child', textDirection: TextDirection.ltr),
       ),
@@ -64,12 +65,6 @@ void main() {
       expect(s.baseScale, 1.0);
     });
 
-    test('value: contain fit and custom base', () {
-      const s = ViewfinderInitialScale.value(2.5);
-      expect(s.boxFit, BoxFit.contain);
-      expect(s.baseScale, 2.5);
-    });
-
     test('contain(factor): scales the contain fit', () {
       const s = ViewfinderInitialScale.contain(0.8);
       expect(s.boxFit, BoxFit.contain);
@@ -80,13 +75,6 @@ void main() {
       const s = ViewfinderInitialScale.cover(1.5);
       expect(s.boxFit, BoxFit.cover);
       expect(s.baseScale, 1.5);
-    });
-
-    test('value(x) and contain(x) compare equal (same canonical variant)', () {
-      const a = ViewfinderInitialScale.value(2.0);
-      const b = ViewfinderInitialScale.contain(2.0);
-      expect(a, equals(b));
-      expect(a.hashCode, equals(b.hashCode));
     });
 
     test('contain and cover with same factor are not equal', () {
@@ -100,6 +88,18 @@ void main() {
       final a = ViewfinderInitialScale.cover(1.5);
       // ignore: prefer_const_constructors
       final b = ViewfinderInitialScale.cover(1.5);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+    });
+
+    test('contain(x) instances with same factor compare equal', () {
+      // Use `final` (non-canonicalized) so the field-by-field == branch
+      // and the hashCode getter run rather than the const-pool identity
+      // short-circuit.
+      // ignore: prefer_const_constructors
+      final a = ViewfinderInitialScale.contain(1.5);
+      // ignore: prefer_const_constructors
+      final b = ViewfinderInitialScale.contain(1.5);
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
     });
@@ -190,25 +190,26 @@ void main() {
     });
   });
 
-  testWidgets('ViewfinderImage.value initialScale applies the multiplier', (
-    tester,
-  ) async {
-    final controller = ViewfinderImageController();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ViewfinderImage(
-            image: _memoryImage(),
-            controller: controller,
-            initialScale: const ViewfinderInitialScale.value(2.0),
-            maxScale: 10,
+  testWidgets(
+    'ViewfinderImage.contain(factor) initialScale applies the multiplier',
+    (tester) async {
+      final controller = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ViewfinderImage(
+              image: _memoryImage(),
+              controller: controller,
+              initialScale: const ViewfinderInitialScale.contain(2.0),
+              maxScale: 10,
+            ),
           ),
         ),
-      ),
-    );
-    await _settleImages(tester);
-    expect(controller.scale, closeTo(2.0, 0.001));
-  });
+      );
+      await _settleImages(tester);
+      expect(controller.scale, closeTo(2.0, 0.001));
+    },
+  );
 
   testWidgets('ViewfinderImageController.scale reports the X/Y scale, not '
       'getMaxScaleOnAxis (which Z=1 would mask when shrunk)', (tester) async {
@@ -383,10 +384,162 @@ void main() {
     await _settleImages(tester);
     expect(controller.scale, closeTo(1.0, 0.001));
 
-    setScale(() => scale = const ViewfinderInitialScale.value(2.5));
+    setScale(() => scale = const ViewfinderInitialScale.contain(2.5));
     await tester.pumpAndSettle();
     expect(controller.scale, closeTo(2.5, 0.001));
   });
+
+  testWidgets(
+    'ViewfinderImage: swapping in a different ImageProvider resets the '
+    'transform (slot reuse must not leak the previous photo zoom)',
+    (tester) async {
+      // Distinct byte buffers → MemoryImage equality returns false
+      // because Uint8List uses identity-based ==.
+      final bytesA = Uint8List.fromList(_pngBytes);
+      final bytesB = Uint8List.fromList(_pngBytes);
+      final controller = ViewfinderImageController();
+      ImageProvider current = MemoryImage(bytesA);
+      late StateSetter setImage;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (_, setState) {
+              setImage = setState;
+              return Scaffold(
+                body: ViewfinderImage(image: current, controller: controller),
+              );
+            },
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      controller.animateToScale(3.0);
+      await tester.pumpAndSettle();
+      expect(controller.scaleState, ViewfinderScaleState.zoomed);
+
+      setImage(() => current = MemoryImage(bytesB));
+      await tester.pump();
+      // Transform reset is synchronous via didUpdateWidget.
+      expect(controller.scaleState, ViewfinderScaleState.initial);
+      expect(controller.scale, closeTo(1.0, 0.001));
+    },
+  );
+
+  testWidgets(
+    'ViewfinderImage.child: stable contentKey preserves the transform '
+    'across rebuilds even when child is a fresh instance each frame',
+    (tester) async {
+      // With required contentKey, the gallery decides identity from
+      // the key, not from the child reference. A fresh Text() per
+      // rebuild with the same contentKey must keep the user's zoom.
+      final controller = ViewfinderImageController();
+      late StateSetter bumpRebuild;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (_, setState) {
+              bumpRebuild = setState;
+              // ignore: prefer_const_constructors
+              return Scaffold(
+                body: ViewfinderImage.child(
+                  controller: controller,
+                  contentKey: 'main',
+                  // ignore: prefer_const_constructors
+                  child: Text('arbitrary', textDirection: TextDirection.ltr),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      controller.animateToScale(3.0);
+      await tester.pumpAndSettle();
+      expect(controller.scaleState, ViewfinderScaleState.zoomed);
+
+      bumpRebuild(() {});
+      await tester.pump();
+      expect(controller.scaleState, ViewfinderScaleState.zoomed);
+    },
+  );
+
+  testWidgets(
+    'ViewfinderImage.child: changing contentKey resets the transform',
+    (tester) async {
+      final controller = ViewfinderImageController();
+      Object key = 'photo-1';
+      late StateSetter setKey;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (_, setState) {
+              setKey = setState;
+              return Scaffold(
+                body: ViewfinderImage.child(
+                  controller: controller,
+                  contentKey: key,
+                  child: const SizedBox.expand(),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      controller.animateToScale(3.0);
+      await tester.pumpAndSettle();
+      expect(controller.scaleState, ViewfinderScaleState.zoomed);
+
+      setKey(() => key = 'photo-2');
+      await tester.pump();
+      expect(controller.scaleState, ViewfinderScaleState.initial);
+    },
+  );
+
+  testWidgets(
+    'ViewfinderImage: re-rendering with the equal ImageProvider keeps '
+    'the user transform (no spurious reset on pure rebuild)',
+    (tester) async {
+      // Same provider value (same MemoryImage bytes reference) on
+      // both renders → equality is true → didUpdateWidget must not
+      // touch the transform.
+      final bytes = Uint8List.fromList(_pngBytes);
+      final controller = ViewfinderImageController();
+      var rebuilds = 0;
+      late StateSetter bumpRebuild;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (_, setState) {
+              bumpRebuild = setState;
+              rebuilds++;
+              return Scaffold(
+                body: ViewfinderImage(
+                  image: MemoryImage(bytes),
+                  controller: controller,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      expect(rebuilds, 1);
+
+      controller.animateToScale(3.0);
+      await tester.pumpAndSettle();
+      expect(controller.scaleState, ViewfinderScaleState.zoomed);
+
+      bumpRebuild(() {}); // trigger an idempotent rebuild
+      await tester.pump();
+      expect(rebuilds, greaterThan(1));
+      // Same image bytes → no swap → user zoom preserved.
+      expect(controller.scaleState, ViewfinderScaleState.zoomed);
+    },
+  );
 
   testWidgets('ViewfinderImage: semanticLabel wraps the Image in Semantics', (
     tester,
@@ -560,6 +713,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: ViewfinderImage.child(
+            contentKey: 'custom-child',
             child: Text('custom-child', textDirection: .ltr),
           ),
         ),
@@ -1055,6 +1209,7 @@ void main() {
             itemCount: 2,
             thumbnails: const ViewfinderThumbnails(size: 40),
             itemBuilder: (_, i) => ViewfinderItem.child(
+              contentKey: 'C$i',
               child: Text('C$i', textDirection: TextDirection.ltr),
             ),
           ),
@@ -2505,7 +2660,8 @@ void main() {
   });
 
   testWidgets(
-    'PageIndicator Adaptive: build flags inner alignment/padding mismatch',
+    'PageIndicator Adaptive: debug assert flags inner alignment/padding '
+    'customization (release silently ignores)',
     (tester) async {
       Future<void> pumpWith(ViewfinderPageIndicator indicator) async {
         await tester.pumpWidget(
@@ -3029,6 +3185,141 @@ void main() {
     await tester.pumpAndSettle();
     expect(dismissed, 1);
   });
+
+  testWidgets(
+    'Viewfinder.images: reverse / allowEdgeHandoff / rubberBandPan are '
+    'forwarded to the underlying Viewfinder',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.images(
+              [_memoryImage(), _memoryImage(), _memoryImage()],
+              reverse: true,
+              allowEdgeHandoff: false,
+              rubberBandPan: false,
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final inner = tester.widget<Viewfinder>(find.byType(Viewfinder));
+      expect(inner.reverse, isTrue);
+      expect(inner.allowEdgeHandoff, isFalse);
+      expect(inner.rubberBandPan, isFalse);
+      // PageView.reverse confirms the option actually reaches the pager.
+      final pv = tester.widget<PageView>(find.byType(PageView));
+      expect(pv.reverse, isTrue);
+    },
+  );
+
+  test('Viewfinder: pagerAxis: vertical with non-null dismiss is rejected '
+      'by debug assert', () {
+    expect(
+      () => Viewfinder(
+        itemCount: 1,
+        pagerAxis: Axis.vertical,
+        dismiss: ViewfinderDismiss(onDismiss: () {}),
+        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+      ),
+      throwsA(isA<AssertionError>()),
+    );
+    // Sanity: vertical without dismiss is fine.
+    expect(
+      () => Viewfinder(
+        itemCount: 1,
+        pagerAxis: Axis.vertical,
+        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+      ),
+      returnsNormally,
+    );
+    // Sanity: horizontal with dismiss is fine.
+    expect(
+      () => Viewfinder(
+        itemCount: 1,
+        dismiss: ViewfinderDismiss(onDismiss: () {}),
+        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+      ),
+      returnsNormally,
+    );
+  });
+
+  testWidgets(
+    'ViewfinderImageController.canSwipeHorizontally tracks the photo\'s '
+    'logical edges under rotation, not raw translation',
+    (tester) async {
+      // Regression for the pre-0.2.0 implementation that consulted
+      // m.storage[12]/[13] directly and so misreported edge state when
+      // `rotateEnabled: true`.
+      final imageController = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 400,
+              child: ViewfinderImage(
+                image: _memoryImage(),
+                controller: imageController,
+                rotateEnabled: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // 3× scale plus 30° rotation around the viewport center: the
+      // photo's logical left edge is well past the viewport's left
+      // (≈ x=-619) and its logical right edge is well past the right
+      // (≈ x=1019). User is at neither logical edge → no handoff.
+      final m = Matrix4.identity()
+        ..translateByDouble(200.0, 200.0, 0, 1)
+        ..rotateZ(0.5236)
+        ..scaleByDouble(3.0, 3.0, 1, 1)
+        ..translateByDouble(-200.0, -200.0, 0, 1);
+      imageController.jumpToTransform(m);
+      await tester.pumpAndSettle();
+
+      expect(imageController.scaleState, ViewfinderScaleState.zoomed);
+      expect(imageController.canSwipeHorizontally, isFalse);
+    },
+  );
+
+  testWidgets(
+    'ViewfinderImageController.canSwipeVertically tracks the photo\'s '
+    'logical edges under rotation',
+    (tester) async {
+      final imageController = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 400,
+              child: ViewfinderImage(
+                image: _memoryImage(),
+                controller: imageController,
+                rotateEnabled: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      final m = Matrix4.identity()
+        ..translateByDouble(200.0, 200.0, 0, 1)
+        ..rotateZ(0.5236)
+        ..scaleByDouble(3.0, 3.0, 1, 1)
+        ..translateByDouble(-200.0, -200.0, 0, 1);
+      imageController.jumpToTransform(m);
+      await tester.pumpAndSettle();
+
+      expect(imageController.scaleState, ViewfinderScaleState.zoomed);
+      expect(imageController.canSwipeVertically, isFalse);
+    },
+  );
 
   testWidgets('Viewfinder.single: shows exactly one page', (tester) async {
     await tester.pumpWidget(
