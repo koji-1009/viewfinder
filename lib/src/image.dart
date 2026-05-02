@@ -76,6 +76,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     double interactionEndFrictionCoefficient,
     String? semanticLabel,
     Duration thumbCrossFadeDuration,
+    Curve thumbCrossFadeCurve,
     bool gaplessPlayback,
     bool rubberBandPan,
   }) = ViewfinderProviderImage;
@@ -231,6 +232,7 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     super.semanticLabel,
     super.rubberBandPan,
     this.thumbCrossFadeDuration = const .new(milliseconds: 200),
+    this.thumbCrossFadeCurve = Curves.easeOut,
     this.gaplessPlayback = true,
   }) : super._();
 
@@ -257,6 +259,10 @@ final class ViewfinderProviderImage extends ViewfinderImage {
 
   /// Cross-fade duration from [thumbImage] to [image].
   final Duration thumbCrossFadeDuration;
+
+  /// Easing curve applied to the [thumbImage] -> [image] cross-fade.
+  /// Defaults to [Curves.easeOut].
+  final Curve thumbCrossFadeCurve;
 
   /// Forwarded to [Image.gaplessPlayback]. When `true` (default), keeps
   /// showing the previous frame while a new [image] decodes; when
@@ -546,6 +552,7 @@ class _ImageBody extends StatelessWidget {
         :final loadingBuilder,
         :final errorBuilder,
         :final thumbCrossFadeDuration,
+        :final thumbCrossFadeCurve,
         :final gaplessPlayback,
       ) =>
         _ImageWithOptionalThumb(
@@ -556,6 +563,7 @@ class _ImageBody extends StatelessWidget {
           loadingBuilder: loadingBuilder,
           errorBuilder: errorBuilder,
           thumbCrossFadeDuration: thumbCrossFadeDuration,
+          thumbCrossFadeCurve: thumbCrossFadeCurve,
           semanticLabel: spec.semanticLabel,
           gaplessPlayback: gaplessPlayback,
         ),
@@ -612,6 +620,7 @@ class _ImageWithOptionalThumb extends StatelessWidget {
     required this.loadingBuilder,
     required this.errorBuilder,
     required this.thumbCrossFadeDuration,
+    required this.thumbCrossFadeCurve,
     required this.semanticLabel,
     required this.gaplessPlayback,
   });
@@ -623,6 +632,7 @@ class _ImageWithOptionalThumb extends StatelessWidget {
   final ImageLoadingBuilder? loadingBuilder;
   final ImageErrorWidgetBuilder? errorBuilder;
   final Duration thumbCrossFadeDuration;
+  final Curve thumbCrossFadeCurve;
   final String? semanticLabel;
   final bool gaplessPlayback;
 
@@ -647,7 +657,7 @@ class _ImageWithOptionalThumb extends StatelessWidget {
             : (context, child, frame, wasSyncLoaded) => AnimatedOpacity(
                 opacity: frame == null ? 0.0 : 1.0,
                 duration: thumbCrossFadeDuration,
-                curve: Curves.easeOut,
+                curve: thumbCrossFadeCurve,
                 child: child,
               ),
       );

@@ -983,6 +983,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Viewfinder: ViewfinderImageItem thumbCrossFade* reach the per-page '
+    'AnimatedOpacity',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 1,
+              itemBuilder: (_, _) => ViewfinderItem(
+                image: _memoryImage(),
+                thumbImage: _memoryImage(),
+                thumbCrossFadeDuration: const Duration(milliseconds: 75),
+                thumbCrossFadeCurve: Curves.linear,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final main = tester
+          .widgetList<Image>(find.byType(Image))
+          .firstWhere((i) => i.frameBuilder != null);
+      final ctx = tester.element(
+        find.byWidgetPredicate((w) => w is ViewfinderImage),
+      );
+      final faded =
+          main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
+      expect(faded.duration, const Duration(milliseconds: 75));
+      expect(faded.curve, Curves.linear);
+    },
+  );
+
   testWidgets('ViewfinderImage onScaleStart / onScaleEnd fire on pinch', (
     tester,
   ) async {
@@ -2258,6 +2291,7 @@ void main() {
             image: _memoryImage(),
             thumbImage: _memoryImage(),
             thumbCrossFadeDuration: const Duration(milliseconds: 50),
+            thumbCrossFadeCurve: Curves.linear,
           ),
         ),
       ),
@@ -2283,9 +2317,12 @@ void main() {
         main.frameBuilder!(ctx, const SizedBox(), null, false)
             as AnimatedOpacity;
     expect(beforeFirstFrame.opacity, 0.0);
+    expect(beforeFirstFrame.duration, const Duration(milliseconds: 50));
+    expect(beforeFirstFrame.curve, Curves.linear);
     final afterFirstFrame =
         main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
     expect(afterFirstFrame.opacity, 1.0);
+    expect(afterFirstFrame.curve, Curves.linear);
   });
 
   testWidgets('ViewfinderImage without thumbImage has no second Image '
@@ -3185,6 +3222,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(dismissed, 1);
   });
+
+  testWidgets(
+    'Viewfinder.images: thumbCrossFade* / gaplessPlayback are forwarded to '
+    'each ViewfinderItem',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.images(
+              [_memoryImage()],
+              thumbImage: (_) => _memoryImage(),
+              thumbCrossFadeDuration: const Duration(milliseconds: 75),
+              thumbCrossFadeCurve: Curves.linear,
+              gaplessPlayback: false,
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final main = tester
+          .widgetList<Image>(find.byType(Image))
+          .firstWhere((i) => i.frameBuilder != null);
+      expect(main.gaplessPlayback, isFalse);
+      final ctx = tester.element(
+        find.byWidgetPredicate((w) => w is ViewfinderImage),
+      );
+      final faded =
+          main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
+      expect(faded.duration, const Duration(milliseconds: 75));
+      expect(faded.curve, Curves.linear);
+    },
+  );
+
+  testWidgets(
+    'Viewfinder.single: thumbCrossFade* / gaplessPlayback are forwarded to '
+    'the lone ViewfinderItem',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder.single(
+              image: _memoryImage(),
+              thumbImage: _memoryImage(),
+              thumbCrossFadeDuration: const Duration(milliseconds: 75),
+              thumbCrossFadeCurve: Curves.linear,
+              gaplessPlayback: false,
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final main = tester
+          .widgetList<Image>(find.byType(Image))
+          .firstWhere((i) => i.frameBuilder != null);
+      expect(main.gaplessPlayback, isFalse);
+      final ctx = tester.element(
+        find.byWidgetPredicate((w) => w is ViewfinderImage),
+      );
+      final faded =
+          main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
+      expect(faded.duration, const Duration(milliseconds: 75));
+      expect(faded.curve, Curves.linear);
+    },
+  );
 
   testWidgets(
     'Viewfinder.images: reverse / allowEdgeHandoff / rubberBandPan are '

@@ -69,6 +69,8 @@ class ViewfinderPage extends StatelessWidget {
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
+        thumbCrossFadeDuration: item.thumbCrossFadeDuration,
+        thumbCrossFadeCurve: item.thumbCrossFadeCurve,
         gaplessPlayback: item.gaplessPlayback,
         rubberBandPan: rubberBandPan,
       ),

@@ -71,9 +71,11 @@ class Viewfinder extends StatefulWidget {
   /// Equivalent to passing `itemCount: images.length` and an
   /// `itemBuilder` that wraps each provider in a [ViewfinderItem]. The
   /// per-item callbacks ([loadingBuilder], [errorBuilder], [hero],
-  /// [semanticLabel], [thumbImage]) apply to every page; for per-page
-  /// overrides on `initialScale` / `minScale` / `maxScale` etc., use the
-  /// main constructor with a custom `itemBuilder`.
+  /// [semanticLabel], [thumbImage]) and the image-display knobs
+  /// ([gaplessPlayback], [thumbCrossFadeDuration], [thumbCrossFadeCurve])
+  /// apply to every page; for per-page overrides on `initialScale` /
+  /// `minScale` / `maxScale` etc., use the main constructor with a
+  /// custom `itemBuilder`.
   factory Viewfinder.images(
     List<ImageProvider> images, {
     Key? key,
@@ -109,6 +111,9 @@ class Viewfinder extends StatefulWidget {
     ViewfinderHero Function(int index)? hero,
     String Function(int index)? semanticLabel,
     ImageProvider Function(int index)? thumbImage,
+    Duration thumbCrossFadeDuration = const .new(milliseconds: 200),
+    Curve thumbCrossFadeCurve = Curves.easeOut,
+    bool gaplessPlayback = true,
   }) {
     return Viewfinder(
       key: key,
@@ -120,6 +125,9 @@ class Viewfinder extends StatefulWidget {
         loadingBuilder: loadingBuilder,
         errorBuilder: errorBuilder,
         semanticLabel: semanticLabel?.call(i),
+        thumbCrossFadeDuration: thumbCrossFadeDuration,
+        thumbCrossFadeCurve: thumbCrossFadeCurve,
+        gaplessPlayback: gaplessPlayback,
       ),
       controller: controller,
       thumbnails: thumbnails,
@@ -179,6 +187,9 @@ class Viewfinder extends StatefulWidget {
     ViewfinderChromeController? chromeController,
     List<Widget> chromeOverlays = const <Widget>[],
     Duration chromeFadeDuration = const .new(milliseconds: 220),
+    Duration thumbCrossFadeDuration = const .new(milliseconds: 200),
+    Curve thumbCrossFadeCurve = Curves.easeOut,
+    bool gaplessPlayback = true,
   }) {
     return Viewfinder(
       key: key,
@@ -190,6 +201,9 @@ class Viewfinder extends StatefulWidget {
         semanticLabel: semanticLabel,
         loadingBuilder: loadingBuilder,
         errorBuilder: errorBuilder,
+        thumbCrossFadeDuration: thumbCrossFadeDuration,
+        thumbCrossFadeCurve: thumbCrossFadeCurve,
+        gaplessPlayback: gaplessPlayback,
       ),
       controller: controller,
       dismiss: dismiss,
