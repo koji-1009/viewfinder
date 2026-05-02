@@ -1,3 +1,30 @@
+## 0.2.0
+
+### Breaking changes
+
+* **Removed `ViewfinderInitialScale.value(scale)`.** It was behaviorally identical to `ViewfinderInitialScale.contain(scale)` — three names for two behaviors. Use `contain(scale)` instead.
+* **`ViewfinderImage.child` and `ViewfinderItem.child` now require a `contentKey`.** The gallery uses it to detect content swaps and reset the in-page transform on a re-order or swap-in (the image-backed variant gets this for free from the `ImageProvider`'s `==`; for `.child` the rendered widget identity is unreliable, so the caller hands in a stable handle). For a single static `.child`, any constant works (e.g. `contentKey: 'main'`).
+
+### Bug fixes
+
+* `ViewfinderImageController.canSwipeHorizontally` / `canSwipeVertically` were computed from raw matrix translation components and so misreported the edge state when `rotateEnabled: true`. They now project the photo's logical left/right (and top/bottom) edges through the current transform and check whether either has been pulled into the viewport — matching the user's intent ("the photo's left side is exposed → swipe to the previous page") rather than the AABB extents (which, under rotation, are the photo's outermost corners, not its visible sides).
+* `Viewfinder` no longer caches built `ViewfinderItem`s by index. The cache pinned the gallery to the first builder's output, so a dynamic gallery (re-order, swap-in) with the same `itemCount` would keep showing stale items. Pages are now rebuilt lazily through the underlying `PageView.builder` / `ListView.builder`, matching standard Flutter scrollables.
+* `ViewfinderImage` now resets its in-page pan/zoom transform when the underlying content identity changes — the `ImageProvider`'s `==` for the image-backed variant, the new required `contentKey` for `.child`. Previously, slot reuse during a re-order or swap-in left the previous photo's transform applied to the new content. Pure rebuilds with the same content value still preserve the user's transform.
+
+### API additions
+
+* `Viewfinder.images(...)` now forwards `reverse`, `allowEdgeHandoff`, and `rubberBandPan` (previously only available on the main `Viewfinder.new` constructor).
+
+### Validation
+
+* Combining `pagerAxis: Axis.vertical` with a non-null `dismiss` is now rejected by a debug assert at construction. Both consume vertical drags; pick one.
+* Attaching the same `ViewfinderImageController` to more than one `ViewfinderImage` at once is now rejected by a debug assert. Each controller can drive only one viewer; sharing it would silently overwrite the previous binding and produce incorrect reads through `scaleState` / `canSwipe*`. Release builds still overwrite silently — `assert` is debug-only — so callers should not rely on it as a hard guard. Internally, `ViewfinderImage` now detaches in `deactivate` and re-attaches in `activate` so tree rearrangements and `GlobalKey` moves don't trip the assert.
+
+### Documentation
+
+* `Viewfinder.rotateEnabled` doc said "Boundary clamping is disabled while rotated"; in fact the clamp always runs against the rotated content's AABB. Doc fixed to match the implementation.
+* `ViewfinderPageIndicatorAdaptive` doc clarifies that customizing inner `dots.alignment` / `padding` / `label.alignment` / `padding` is rejected by a debug assert and silently ignored in release.
+
 ## 0.1.0
 
 * Initial release.
