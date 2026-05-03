@@ -1,3 +1,10 @@
+## 0.3.1
+
+### Internal
+
+* Removed an internal `_precached` index set that was only deduping `precacheImage` calls. The dedup is already provided by Flutter's `ImageCache`, while the set never shrank, so it grew monotonically with every visited index. Its `onError` callback was also silently swallowing precache failures; precache errors now route through the normal `FlutterError.reportError` path. Production behavior is unchanged — the actual display path still surfaces decode errors to the user-supplied `errorBuilder`.
+* Dropped a redundant `LayoutBuilder` from the image-and-thumb composite. The parent `ZoomableViewport` already wraps its child in a tight-sized `SizedBox`, so `Image.fit` lays out against the viewport without an extra layout pass.
+
 ## 0.3.0
 
 ### Breaking changes

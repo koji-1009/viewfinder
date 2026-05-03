@@ -708,53 +708,46 @@ class _ImageWithOptionalThumb extends StatelessWidget {
   final bool gaplessPlayback;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (ctx, constraints) {
-      final size = Size(constraints.maxWidth, constraints.maxHeight);
-      Widget img = Image(
-        image: image,
-        fit: boxFit,
-        width: size.width,
-        height: size.height,
-        filterQuality: filterQuality,
-        loadingBuilder: loadingBuilder,
-        errorBuilder: errorBuilder,
-        gaplessPlayback: gaplessPlayback,
-        // When a thumb is provided, wrap the main image in a
-        // frame-aware fade-in so the thumb shows through until the
-        // main's first frame arrives.
-        frameBuilder: thumb == null
-            ? null
-            : (context, child, frame, wasSyncLoaded) => AnimatedOpacity(
-                opacity: frame == null ? 0.0 : 1.0,
-                duration: thumbCrossFadeDuration,
-                curve: thumbCrossFadeCurve,
-                child: child,
-              ),
-      );
-      if (thumb case final t?) {
-        img = Stack(
-          fit: .expand,
-          children: [
-            Image(
-              image: t,
-              fit: boxFit,
-              width: size.width,
-              height: size.height,
-              filterQuality: .low,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+  Widget build(BuildContext context) {
+    // Parent (`ZoomableViewport`) wraps us in a tight-sized `SizedBox`,
+    // so `Image.fit` already lays out against the viewport — no
+    // `LayoutBuilder` / explicit width/height needed here.
+    Widget img = Image(
+      image: image,
+      fit: boxFit,
+      filterQuality: filterQuality,
+      loadingBuilder: loadingBuilder,
+      errorBuilder: errorBuilder,
+      gaplessPlayback: gaplessPlayback,
+      frameBuilder: thumb == null
+          ? null
+          : (context, child, frame, wasSyncLoaded) => AnimatedOpacity(
+              opacity: frame == null ? 0.0 : 1.0,
+              duration: thumbCrossFadeDuration,
+              curve: thumbCrossFadeCurve,
+              child: child,
             ),
-            img,
-          ],
-        );
-      }
-      if (semanticLabel case final label?) {
-        img = Semantics(label: label, image: true, child: img);
-      }
-      return img;
-    },
-  );
+    );
+    if (thumb case final t?) {
+      img = Stack(
+        fit: .expand,
+        children: [
+          Image(
+            image: t,
+            fit: boxFit,
+            filterQuality: .low,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+          img,
+        ],
+      );
+    }
+    if (semanticLabel case final label?) {
+      img = Semantics(label: label, image: true, child: img);
+    }
+    return img;
+  }
 }
 
 /// External control surface for a [ViewfinderImage].
