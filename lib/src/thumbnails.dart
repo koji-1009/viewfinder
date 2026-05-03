@@ -37,6 +37,7 @@ class ViewfinderThumbnails {
     ),
     this.unselectedOpacity = 0.55,
     this.backgroundColor = const .new(0x8A000000),
+    this.errorBuilder,
     this.itemBuilder,
   });
 
@@ -54,7 +55,8 @@ class ViewfinderThumbnails {
   }) : selectedBorder = const Border.fromBorderSide(
          BorderSide(color: Colors.white, width: 2),
        ),
-       unselectedOpacity = 0.55;
+       unselectedOpacity = 0.55,
+       errorBuilder = null;
 
   /// Where the strip is anchored relative to the main viewer.
   final ViewfinderThumbnailPosition position;
@@ -87,6 +89,14 @@ class ViewfinderThumbnails {
   /// safe-area inset when [safeArea] is true).
   final Color backgroundColor;
 
+  /// Applied to the default tile only — fires when a thumbnail's
+  /// [ImageProvider] fails to decode. Defaults to a neutral grey
+  /// placeholder (`Container(color: Colors.white12)`) when null, which
+  /// avoids the broken-image icon Flutter would otherwise render.
+  /// Ignored when [itemBuilder] is provided — the builder owns the
+  /// entire visual treatment, including error handling.
+  final ImageErrorWidgetBuilder? errorBuilder;
+
   /// Optional fully custom tile builder. When provided, [selectedBorder]
   /// and [unselectedOpacity] are skipped — the builder receives the
   /// `selected` flag and renders the tile exactly as returned.
@@ -110,6 +120,7 @@ class ViewfinderThumbnails {
           selectedBorder == other.selectedBorder &&
           unselectedOpacity == other.unselectedOpacity &&
           backgroundColor == other.backgroundColor &&
+          errorBuilder == other.errorBuilder &&
           itemBuilder == other.itemBuilder;
 
   @override
@@ -122,6 +133,7 @@ class ViewfinderThumbnails {
     selectedBorder,
     unselectedOpacity,
     backgroundColor,
+    errorBuilder,
     itemBuilder,
   );
 }

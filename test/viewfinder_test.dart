@@ -1245,15 +1245,75 @@ void main() {
     await tester.tap(thumbs.at(1), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 1);
+  });
 
-    // The default thumb builder's errorBuilder swaps in a neutral
-    // placeholder when a thumb fails to decode.
-    final thumb = tester.widget<Image>(thumbs.first);
-    final ctx = tester.element(thumbs.first);
-    expect(
-      thumb.errorBuilder!(ctx, Exception('boom'), StackTrace.current),
-      isA<Container>(),
+  testWidgets(
+    'ViewfinderThumbnails: default tile uses neutral grey placeholder '
+    'on decode failure when no errorBuilder is provided',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 1,
+              thumbnails: const ViewfinderThumbnails(size: 64),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final thumb = tester.widget<Image>(
+        find
+            .descendant(
+              of: find.byType(ViewfinderThumbnailBar),
+              matching: find.byType(Image),
+            )
+            .first,
+      );
+      final fallback = thumb.errorBuilder!(
+        tester.element(find.byType(ViewfinderThumbnailBar)),
+        Exception('boom'),
+        StackTrace.current,
+      );
+      expect(fallback, isA<Container>());
+    },
+  );
+
+  testWidgets('ViewfinderThumbnails: default tile forwards a caller-supplied '
+      'errorBuilder', (tester) async {
+    const placeholderKey = ValueKey('user-error-placeholder');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 1,
+            thumbnails: ViewfinderThumbnails(
+              size: 64,
+              errorBuilder: (_, _, _) =>
+                  const SizedBox.shrink(key: placeholderKey),
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
     );
+    await _settleImages(tester);
+    final thumb = tester.widget<Image>(
+      find
+          .descendant(
+            of: find.byType(ViewfinderThumbnailBar),
+            matching: find.byType(Image),
+          )
+          .first,
+    );
+    final widget = thumb.errorBuilder!(
+      tester.element(find.byType(ViewfinderThumbnailBar)),
+      Exception('boom'),
+      StackTrace.current,
+    );
+    expect(widget, isA<SizedBox>());
+    expect((widget as SizedBox).key, placeholderKey);
   });
 
   testWidgets('ViewfinderThumbnails: default builder handles child-type '
