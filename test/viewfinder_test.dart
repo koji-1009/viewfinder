@@ -1276,7 +1276,7 @@ void main() {
         Exception('boom'),
         StackTrace.current,
       );
-      expect(fallback, isA<Container>());
+      expect(fallback, isA<ColoredBox>());
     },
   );
 

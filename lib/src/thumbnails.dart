@@ -91,7 +91,7 @@ class ViewfinderThumbnails {
 
   /// Applied to the default tile only — fires when a thumbnail's
   /// [ImageProvider] fails to decode. Defaults to a neutral grey
-  /// placeholder (`Container(color: Colors.white12)`) when null, which
+  /// placeholder (`ColoredBox(color: Colors.white12)`) when null, which
   /// avoids the broken-image icon Flutter would otherwise render.
   /// Ignored when [itemBuilder] is provided — the builder owns the
   /// entire visual treatment, including error handling.

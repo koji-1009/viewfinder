@@ -2,7 +2,7 @@
 
 ### API additions
 
-* `ViewfinderThumbnails.errorBuilder` lets callers customize the placeholder rendered in the thumbnail strip when an `ImageProvider` fails to decode. When omitted, the library default (`Container(color: Colors.white12)`) is used; when provided, the caller's builder runs in its place. Applied to the default tile only — when [itemBuilder] is provided the builder owns the entire visual treatment, including error handling.
+* `ViewfinderThumbnails.errorBuilder` lets callers customize the placeholder rendered in the thumbnail strip when an `ImageProvider` fails to decode. When omitted, the library default (`ColoredBox(color: Colors.white12)`) is used; when provided, the caller's builder runs in its place. Applied to the default tile only — when [itemBuilder] is provided the builder owns the entire visual treatment, including error handling.
 
 ### Internal
 

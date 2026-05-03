@@ -174,7 +174,7 @@ class _DefaultThumbnailTile extends StatelessWidget {
         gaplessPlayback: true,
         errorBuilder:
             config.errorBuilder ??
-            (_, _, _) => Container(color: Colors.white12),
+            (_, _, _) => const ColoredBox(color: Colors.white12),
       ),
       ViewfinderChildItem(:final child) => SizedBox(
         width: config.size,
