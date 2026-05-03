@@ -192,10 +192,13 @@ controller.jumpToTransform(m..translate(20.0, 0.0));
 controller.animateToTransform(targetMatrix);
 
 // Edge-state introspection.
-controller.canSwipeHorizontally; // bool
-controller.canSwipeVertically;   // bool
-controller.scaleState;           // ViewfinderScaleState
+controller.canSwipe(Axis.horizontal); // bool — at an edge of the screen-axis viewport
+controller.canSwipe(Axis.vertical);   // bool
+controller.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content); // photo-frame edge instead
+controller.scaleState;                // ViewfinderScaleState
 ```
+
+The default `mode: SwipeEdgeMode.screen` matches the bundled gallery — a screen-axis pager. Pass `SwipeEdgeMode.content` when you have a custom pager that should follow the photo's own axes through rotation (e.g., a pager that stays aligned with the photo's logical horizontal even at 90° rotation). At zero rotation both modes agree.
 
 ### `ViewfinderChromeController` — chrome visibility
 

@@ -422,9 +422,7 @@ class _ViewfinderState extends State<Viewfinder> {
   }
 
   bool _canSwipeAlongPager(ViewfinderImageController c) =>
-      widget.pagerAxis == .horizontal
-      ? c.canSwipeHorizontally
-      : c.canSwipeVertically;
+      c.canSwipe(widget.pagerAxis);
 
   /// Reset the current image's zoom if it's zoomed in. Returns true when
   /// a reset was performed — useful for intercepting custom back-button

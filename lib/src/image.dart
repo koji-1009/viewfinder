@@ -10,6 +10,36 @@ export 'internal/zoomable_viewport.dart' show kViewfinderDefaultFlingDrag;
 /// Callback fired with the current transformation scale.
 typedef ViewfinderScaleChanged = void Function(double scale);
 
+/// Frame of reference used by [ViewfinderImageController.canSwipe] when
+/// asking whether a page swipe along a given axis can take over.
+///
+/// At zero rotation the two modes agree. They diverge under rotation:
+/// pick the one that matches what the receiving handoff target (pager,
+/// custom gesture, etc.) is aligned with.
+enum SwipeEdgeMode {
+  /// Check the rotated content's axis-aligned bounding box against the
+  /// viewport, in screen coordinates. Symmetric with the internal
+  /// boundary clamp; matches the screen-axis intent of a pager whose
+  /// own axis is screen-aligned. The bundled gallery uses this and it
+  /// is the default for [ViewfinderImageController.canSwipe].
+  screen,
+
+  /// Check the photo's own logical edges (`x = 0` and `x = viewport.width`
+  /// for horizontal; `y = 0` and `y = viewport.height` for vertical) in
+  /// the photo's frame. Implemented by inverse-projecting the viewport
+  /// into photo space and asking whether the viewport has reached or
+  /// crossed those logical extents.
+  ///
+  /// Use when the consumer wants handoff aligned to the photo's frame
+  /// rather than the screen — for instance, a custom pager that
+  /// follows the photo's axes through rotation. The semantic is
+  /// "the user has reached the photo's logical edge" regardless of
+  /// rotation; at 90° the photo's logical-H corresponds to screen-V,
+  /// at 180° axes are reversed, and so on. The check is correct at
+  /// every angle (no special-casing of cardinal rotations).
+  content,
+}
+
 /// A single zoomable, pannable viewer for images or arbitrary widgets.
 ///
 /// Pinch zoom, pan, and double-tap zoom are delegated to
@@ -416,34 +446,75 @@ class _ViewfinderImageState extends State<ViewfinderImage>
         : .initial;
   }
 
-  /// True when a horizontal page swipe can reasonably take over: the
-  /// image is at its initial scale, or the rotated content's AABB is
-  /// flush against the viewport's left or right edge so no pixel of
-  /// the image overflows past that side.
+  /// All four [ViewfinderImageController.canSwipe] outcomes
+  /// (axis × mode), bundled with [scaleState] so the controller's
+  /// coalescer can consume one value. Computes the screen-space AABB
+  /// and the photo-space AABB once, then derives the four booleans —
+  /// so a transform tick pays for one forward bbox, one matrix
+  /// inversion, and one inverse bbox regardless of how many
+  /// `canSwipe` queries follow.
   ///
-  /// Uses the same axis-aligned bbox the boundary clamp uses, so
-  /// edge-handoff stays consistent with the clamp under rotation: when
-  /// the user has panned the rotated photo so that no part of it lies
-  /// further left than the viewport, yielding to the previous page is
-  /// the screen-axis intent. Symmetric on the right.
-  bool get canSwipeHorizontally {
-    if (scaleState == .initial) return true;
-    if (_viewportSize.isEmpty) return true;
-    final bbox = contentBbox(_transformation.value, _viewportSize);
+  /// `screen` is the AABB of the transformed content rect against the
+  /// viewport (forward projection). `content` is the AABB of the
+  /// viewport rect pulled back into photo space (inverse projection),
+  /// checked against the photo's logical extents `[0, viewport.width]`
+  /// / `[0, viewport.height]`. The latter answers "has the user
+  /// reached the photo's logical edge in the photo's own frame?",
+  /// independent of rotation — including past 90° where forward-
+  /// projecting the photo's edges would give the wrong answer.
+  ({
+    ViewfinderScaleState scale,
+    bool hScreen,
+    bool vScreen,
+    bool hContent,
+    bool vContent,
+  })
+  _swipeSignals() {
+    final scale = scaleState;
+    if (scale == .initial || _viewportSize.isEmpty) {
+      return (
+        scale: scale,
+        hScreen: true,
+        vScreen: true,
+        hContent: true,
+        vContent: true,
+      );
+    }
     const epsilon = 0.5;
-    if (bbox.maxX - bbox.minX <= _viewportSize.width + epsilon) return true;
-    return bbox.minX >= -epsilon || bbox.maxX <= _viewportSize.width + epsilon;
-  }
-
-  /// Vertical-axis counterpart of [canSwipeHorizontally]. Consulted by
-  /// the gallery when its `pagerAxis` is vertical.
-  bool get canSwipeVertically {
-    if (scaleState == .initial) return true;
-    if (_viewportSize.isEmpty) return true;
-    final bbox = contentBbox(_transformation.value, _viewportSize);
-    const epsilon = 0.5;
-    if (bbox.maxY - bbox.minY <= _viewportSize.height + epsilon) return true;
-    return bbox.minY >= -epsilon || bbox.maxY <= _viewportSize.height + epsilon;
+    final m = _transformation.value;
+    final viewport = _viewportSize;
+    // Singular matrices (e.g., scale 0 forced via jumpToTransform) have
+    // no inverse; surrender all gates rather than throwing inside the
+    // transform listener. The clamp keeps regular gestures away from
+    // this state, so this only fires for caller-supplied transforms.
+    if (m.determinant() == 0) {
+      return (
+        scale: scale,
+        hScreen: true,
+        vScreen: true,
+        hContent: true,
+        vContent: true,
+      );
+    }
+    final bbox = contentBbox(m, viewport);
+    final photoBbox = contentBbox(Matrix4.inverted(m), viewport);
+    return (
+      scale: scale,
+      hScreen:
+          bbox.maxX - bbox.minX <= viewport.width + epsilon ||
+          bbox.minX >= -epsilon ||
+          bbox.maxX <= viewport.width + epsilon,
+      vScreen:
+          bbox.maxY - bbox.minY <= viewport.height + epsilon ||
+          bbox.minY >= -epsilon ||
+          bbox.maxY <= viewport.height + epsilon,
+      hContent:
+          photoBbox.minX <= epsilon ||
+          photoBbox.maxX >= viewport.width - epsilon,
+      vContent:
+          photoBbox.minY <= epsilon ||
+          photoBbox.maxY >= viewport.height - epsilon,
+    );
   }
 
   void _animateTo(Matrix4 target) {
@@ -514,7 +585,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       if (_viewportSize != viewport) {
         _viewportSize = viewport;
         // Recompute derived state after layout settles so controller
-        // listeners see the fresh canSwipeHorizontally.
+        // listeners see the fresh canSwipe results.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) widget.controller?._bump();
         });
@@ -690,9 +761,8 @@ class _ImageWithOptionalThumb extends StatelessWidget {
 ///
 /// Extends [ChangeNotifier] so callers can subscribe to *state-level*
 /// changes (zoomed in/out, edge transitions). Notifications are coalesced
-/// to fire only when [scaleState], [canSwipeHorizontally], or
-/// [canSwipeVertically] actually transitions — not on every transform
-/// frame. For per-frame scale callbacks, use
+/// to fire only when [scaleState] or any [canSwipe] result transitions —
+/// not on every transform frame. For per-frame scale callbacks, use
 /// [ViewfinderImage.onScaleChanged].
 ///
 /// Each controller drives a single [ViewfinderImage]. Passing the same
@@ -705,7 +775,14 @@ class ViewfinderImageController extends ChangeNotifier {
 
   _ViewfinderImageState? _state;
   bool _disposed = false;
-  ({ViewfinderScaleState scale, bool h, bool v})? _lastSignal;
+  ({
+    ViewfinderScaleState scale,
+    bool hScreen,
+    bool vScreen,
+    bool hContent,
+    bool vContent,
+  })?
+  _lastSignal;
 
   @override
   void dispose() {
@@ -715,8 +792,8 @@ class ViewfinderImageController extends ChangeNotifier {
 
   // Lifecycle hooks do not call notifyListeners — neither attach nor
   // detach changes any user-observable property at the moment they fire.
-  // Real state changes (transform, scaleState, canSwipe*) flow through
-  // [_bump] from the transform-controller listener.
+  // Real state changes (transform, scaleState, canSwipe results) flow
+  // through [_bump] from the transform-controller listener.
   void _attach(_ViewfinderImageState s) {
     if (_disposed) return;
     assert(
@@ -741,17 +818,11 @@ class ViewfinderImageController extends ChangeNotifier {
 
   /// Called by the view whenever the transformation or viewport changes.
   /// Coalesces per-frame ticks into a single notification per state
-  /// transition.
+  /// transition. Tracks both edge modes so a listener reading either
+  /// `screen` or `content` results sees its own transitions.
   void _bump() {
     if (_disposed) return;
-    final s = _state;
-    final next = s == null
-        ? null
-        : (
-            scale: s.scaleState,
-            h: s.canSwipeHorizontally,
-            v: s.canSwipeVertically,
-          );
+    final next = _state?._swipeSignals();
     if (next == _lastSignal) return;
     _lastSignal = next;
     notifyListeners();
@@ -763,13 +834,25 @@ class ViewfinderImageController extends ChangeNotifier {
   /// Whether the user has zoomed in past the initial scale.
   ViewfinderScaleState get scaleState => _state?.scaleState ?? .initial;
 
-  /// True when a horizontal page swipe can reasonably take over.
-  /// See [_ViewfinderImageState.canSwipeHorizontally] for the exact rule.
-  bool get canSwipeHorizontally => _state?.canSwipeHorizontally ?? true;
-
-  /// Vertical counterpart of [canSwipeHorizontally]; consulted when the
-  /// gallery's `pagerAxis` is vertical.
-  bool get canSwipeVertically => _state?.canSwipeVertically ?? true;
+  /// True when a page swipe along [axis] can reasonably take over;
+  /// returns `true` while detached. See [SwipeEdgeMode] for how
+  /// rotation is interpreted.
+  ///
+  /// Reads from the coalesced snapshot the controller's listeners
+  /// observed, so a listener that calls `canSwipe` right after being
+  /// notified does not pay for the bbox/inverse-bbox computation a
+  /// second time. Falls back to the live state for the rare pre-first-
+  /// bump read (controller attached, no transform tick yet).
+  bool canSwipe(Axis axis, {SwipeEdgeMode mode = SwipeEdgeMode.screen}) {
+    final signal = _lastSignal ?? _state?._swipeSignals();
+    if (signal == null) return true;
+    return switch ((axis, mode)) {
+      (.horizontal, .screen) => signal.hScreen,
+      (.vertical, .screen) => signal.vScreen,
+      (.horizontal, .content) => signal.hContent,
+      (.vertical, .content) => signal.vContent,
+    };
+  }
 
   /// Animate back to the initial transform.
   void reset() => _state?.reset();
