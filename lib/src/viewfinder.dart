@@ -372,7 +372,6 @@ class _ViewfinderState extends State<Viewfinder> {
   bool _ownsController = false;
   int _currentIndex = 0;
   bool _swipeLocked = false;
-  final Set<int> _precached = {};
   // Index-keyed: each PageView slot owns a distinct controller, so the
   // single-state-attached invariant of `ViewfinderImageController` is
   // preserved even when two slots happen to render the same content.
@@ -477,7 +476,6 @@ class _ViewfinderState extends State<Viewfinder> {
       _controller._attach(this);
     }
     if (oldWidget.itemCount != widget.itemCount) {
-      _precached.clear();
       // Dispose per-slot controllers that fell off the right edge.
       final toRemove = <int>[];
       for (final entry in _imageControllers.entries) {
@@ -525,16 +523,8 @@ class _ViewfinderState extends State<Viewfinder> {
     for (var delta = 1; delta <= widget.precacheAdjacent; delta++) {
       for (final i in [index - delta, index + delta]) {
         if (i < 0 || i >= widget.itemCount) continue;
-        if (_precached.contains(i)) continue;
         if (_itemAt(i) case ViewfinderImageItem(:final image)) {
-          _precached.add(i);
-          precacheImage(
-            image,
-            context,
-            onError: (_, _) {
-              _precached.remove(i);
-            },
-          );
+          precacheImage(image, context);
         }
       }
     }

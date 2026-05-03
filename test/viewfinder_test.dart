@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,20 +12,43 @@ import 'package:viewfinder/src/internal/thumbnail_bar.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
 import 'package:viewfinder/viewfinder.dart';
 
-// A 1x1 ARGB PNG — decodes cleanly in the test environment.
-final Uint8List _pngBytes = Uint8List.fromList(const [
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
-  0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, //
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, //
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, //
-  0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, //
-  0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0x00, //
-  0x00, 0x00, 0x03, 0x00, 0x01, 0x5B, 0xC4, 0x8B, //
-  0x7A, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, //
-  0x44, 0xAE, 0x42, 0x60, 0x82, //
-]);
+// `dart:ui`'s real image codec is not wired up in `flutter test`, so
+// any `MemoryImage` (or other byte-decoding provider) raises "Codec
+// failed to produce an image" — both on the display path and on
+// `precacheImage`. We sidestep the codec entirely by handing the
+// framework a pre-baked `ui.Image` (created via `createTestImage`)
+// through a synchronous `ImageProvider`.
+late ui.Image _testImage;
 
-ImageProvider _memoryImage() => MemoryImage(_pngBytes);
+@immutable
+class _SyncImageProvider extends ImageProvider<_SyncImageProvider> {
+  const _SyncImageProvider(this._tag);
+  final Object _tag;
+
+  @override
+  Future<_SyncImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _SyncImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(
+      SynchronousFuture(ImageInfo(image: _testImage.clone())),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SyncImageProvider && other._tag == _tag;
+
+  @override
+  int get hashCode => _tag.hashCode;
+}
+
+ImageProvider _memoryImage() => const _SyncImageProvider('default');
 
 ViewfinderItem _childItemBuilder(BuildContext _, int _) =>
     const ViewfinderItem.child(
@@ -37,21 +63,13 @@ Future<void> _settleImages(WidgetTester tester) async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
   });
   await tester.pumpAndSettle();
-  // The synthetic test codec rejects our 1x1 PNG fixture when the
-  // request goes through the raw `MemoryImage` path (no ResizeImage
-  // size hint). Production paths don't see this; absorb so individual
-  // tests don't have to. Tests that need to assert image errors should
-  // still call takeException themselves before calling this helper.
-  final ex = tester.takeException();
-  if (ex != null && '$ex'.contains('Codec failed to produce an image')) {
-    return;
-  }
-  if (ex != null) {
-    throw ex;
-  }
 }
 
 void main() {
+  setUpAll(() async {
+    _testImage = await createTestImage(width: 1, height: 1);
+  });
+
   group('ViewfinderInitialScale', () {
     test('contain: contain fit and base 1.0', () {
       const s = ViewfinderInitialScale.contain();
@@ -393,12 +411,10 @@ void main() {
     'ViewfinderImage: swapping in a different ImageProvider resets the '
     'transform (slot reuse must not leak the previous photo zoom)',
     (tester) async {
-      // Distinct byte buffers → MemoryImage equality returns false
-      // because Uint8List uses identity-based ==.
-      final bytesA = Uint8List.fromList(_pngBytes);
-      final bytesB = Uint8List.fromList(_pngBytes);
+      // Distinct providers (different tags) → equality returns false,
+      // mirroring real-world swap-in.
       final controller = ViewfinderImageController();
-      ImageProvider current = MemoryImage(bytesA);
+      ImageProvider current = const _SyncImageProvider('a');
       late StateSetter setImage;
       await tester.pumpWidget(
         MaterialApp(
@@ -418,7 +434,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.scaleState, ViewfinderScaleState.zoomed);
 
-      setImage(() => current = MemoryImage(bytesB));
+      setImage(() => current = const _SyncImageProvider('b'));
       await tester.pump();
       // Transform reset is synchronous via didUpdateWidget.
       expect(controller.scaleState, ViewfinderScaleState.initial);
@@ -503,10 +519,8 @@ void main() {
     'ViewfinderImage: re-rendering with the equal ImageProvider keeps '
     'the user transform (no spurious reset on pure rebuild)',
     (tester) async {
-      // Same provider value (same MemoryImage bytes reference) on
-      // both renders → equality is true → didUpdateWidget must not
-      // touch the transform.
-      final bytes = Uint8List.fromList(_pngBytes);
+      // Equal provider value on both renders → didUpdateWidget must
+      // not touch the transform.
       final controller = ViewfinderImageController();
       var rebuilds = 0;
       late StateSetter bumpRebuild;
@@ -518,7 +532,7 @@ void main() {
               rebuilds++;
               return Scaffold(
                 body: ViewfinderImage(
-                  image: MemoryImage(bytes),
+                  image: const _SyncImageProvider('rebuild'),
                   controller: controller,
                 ),
               );
@@ -1231,6 +1245,75 @@ void main() {
     await tester.tap(thumbs.at(1), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 1);
+  });
+
+  testWidgets(
+    'ViewfinderThumbnails: default tile uses neutral grey placeholder '
+    'on decode failure when no errorBuilder is provided',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 1,
+              thumbnails: const ViewfinderThumbnails(size: 64),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      final thumb = tester.widget<Image>(
+        find
+            .descendant(
+              of: find.byType(ViewfinderThumbnailBar),
+              matching: find.byType(Image),
+            )
+            .first,
+      );
+      final fallback = thumb.errorBuilder!(
+        tester.element(find.byType(ViewfinderThumbnailBar)),
+        Exception('boom'),
+        StackTrace.current,
+      );
+      expect(fallback, isA<ColoredBox>());
+    },
+  );
+
+  testWidgets('ViewfinderThumbnails: default tile forwards a caller-supplied '
+      'errorBuilder', (tester) async {
+    const placeholderKey = ValueKey('user-error-placeholder');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 1,
+            thumbnails: ViewfinderThumbnails(
+              size: 64,
+              errorBuilder: (_, _, _) =>
+                  const SizedBox.shrink(key: placeholderKey),
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    final thumb = tester.widget<Image>(
+      find
+          .descendant(
+            of: find.byType(ViewfinderThumbnailBar),
+            matching: find.byType(Image),
+          )
+          .first,
+    );
+    final widget = thumb.errorBuilder!(
+      tester.element(find.byType(ViewfinderThumbnailBar)),
+      Exception('boom'),
+      StackTrace.current,
+    );
+    expect(widget, isA<SizedBox>());
+    expect((widget as SizedBox).key, placeholderKey);
   });
 
   testWidgets('ViewfinderThumbnails: default builder handles child-type '
@@ -2327,6 +2410,14 @@ void main() {
         main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
     expect(afterFirstFrame.opacity, 1.0);
     expect(afterFirstFrame.curve, Curves.linear);
+
+    // The thumb's errorBuilder collapses to nothing — if the thumb
+    // can't decode, the main image (stacked on top) carries the page.
+    final thumb = images.firstWhere((i) => i.frameBuilder == null);
+    expect(
+      thumb.errorBuilder!(ctx, Exception('boom'), StackTrace.current),
+      isA<SizedBox>(),
+    );
   });
 
   testWidgets('ViewfinderImage without thumbImage has no second Image '

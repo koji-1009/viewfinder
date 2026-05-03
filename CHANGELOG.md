@@ -1,3 +1,14 @@
+## 0.3.1
+
+### API additions
+
+* `ViewfinderThumbnails.errorBuilder` lets callers customize the placeholder rendered in the thumbnail strip when an `ImageProvider` fails to decode. When omitted, the library default (`ColoredBox(color: Colors.white12)`) is used; when provided, the caller's builder runs in its place. Applied to the default tile only — when [itemBuilder] is provided the builder owns the entire visual treatment, including error handling.
+
+### Internal
+
+* Removed an internal `_precached` index set that was deduping `precacheImage` calls. Successful providers are already deduped by Flutter's `ImageCache`; failed providers do get re-attempted on subsequent adjacent moves, but the cost is bounded by `precacheAdjacent`. The set never shrank, so it grew monotonically with every visited index. Its `onError` callback was also silently swallowing precache failures; precache errors now route through the normal `FlutterError.reportError` path. The actual display path still surfaces decode errors to the user-supplied `errorBuilder`.
+* Dropped a redundant `LayoutBuilder` from the image-and-thumb composite. The parent `ZoomableViewport` already wraps its child in a tight-sized `SizedBox`, so `Image.fit` lays out against the viewport without an extra layout pass.
+
 ## 0.3.0
 
 ### Breaking changes
