@@ -1778,76 +1778,80 @@ void main() {
     expect(controller.currentIndex, 0);
   });
 
-  testWidgets('ViewfinderImageController.canSwipeHorizontally tracks '
-      'zoom and edge state', (tester) async {
-    final imageController = ViewfinderImageController();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ViewfinderImage(
-            image: _memoryImage(),
-            controller: imageController,
+  testWidgets(
+    'ViewfinderImageController.canSwipe(horizontal) tracks zoom and edge state',
+    (tester) async {
+      final imageController = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ViewfinderImage(
+              image: _memoryImage(),
+              controller: imageController,
+            ),
           ),
         ),
-      ),
-    );
-    await _settleImages(tester);
+      );
+      await _settleImages(tester);
 
-    // At initial scale: free to swipe.
-    expect(imageController.canSwipeHorizontally, isTrue);
+      // At initial scale: free to swipe.
+      expect(imageController.canSwipe(Axis.horizontal), isTrue);
 
-    // Center-anchored zoom: content overflows both sides, user is
-    // neither at left nor right edge — PageView should be locked.
-    imageController.animateToScale(3.0);
-    await tester.pumpAndSettle();
-    expect(imageController.scaleState, ViewfinderScaleState.zoomed);
-    expect(
-      imageController.canSwipeHorizontally,
-      isFalse,
-      reason: 'zoomed and centered: off both horizontal edges',
-    );
+      // Center-anchored zoom: content overflows both sides, user is
+      // neither at left nor right edge — PageView should be locked.
+      imageController.animateToScale(3.0);
+      await tester.pumpAndSettle();
+      expect(imageController.scaleState, ViewfinderScaleState.zoomed);
+      expect(
+        imageController.canSwipe(Axis.horizontal),
+        isFalse,
+        reason: 'zoomed and centered: off both horizontal edges',
+      );
 
-    // Reset returns to initial — swipe allowed again.
-    imageController.reset();
-    await tester.pumpAndSettle();
-    expect(imageController.canSwipeHorizontally, isTrue);
-  });
+      // Reset returns to initial — swipe allowed again.
+      imageController.reset();
+      await tester.pumpAndSettle();
+      expect(imageController.canSwipe(Axis.horizontal), isTrue);
+    },
+  );
 
-  testWidgets('ViewfinderImageController.canSwipeVertically mirrors '
-      'canSwipeHorizontally on the Y axis', (tester) async {
-    final imageController = ViewfinderImageController();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ViewfinderImage(
-            image: _memoryImage(),
-            controller: imageController,
+  testWidgets(
+    'ViewfinderImageController.canSwipe(vertical) mirrors horizontal on the Y axis',
+    (tester) async {
+      final imageController = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ViewfinderImage(
+              image: _memoryImage(),
+              controller: imageController,
+            ),
           ),
         ),
-      ),
-    );
-    await _settleImages(tester);
+      );
+      await _settleImages(tester);
 
-    expect(imageController.canSwipeVertically, isTrue);
+      expect(imageController.canSwipe(Axis.vertical), isTrue);
 
-    imageController.animateToScale(3.0);
-    await tester.pumpAndSettle();
-    expect(
-      imageController.canSwipeVertically,
-      isFalse,
-      reason: 'zoomed and centered: off both vertical edges',
-    );
+      imageController.animateToScale(3.0);
+      await tester.pumpAndSettle();
+      expect(
+        imageController.canSwipe(Axis.vertical),
+        isFalse,
+        reason: 'zoomed and centered: off both vertical edges',
+      );
 
-    imageController.reset();
-    await tester.pumpAndSettle();
-    expect(imageController.canSwipeVertically, isTrue);
-  });
+      imageController.reset();
+      await tester.pumpAndSettle();
+      expect(imageController.canSwipe(Axis.vertical), isTrue);
+    },
+  );
 
   testWidgets('Viewfinder: vertical pager + zoomed page locks the pager '
       'when the image is off both vertical edges', (tester) async {
-    // Regression: the gallery used to consult canSwipeHorizontally
-    // regardless of pagerAxis, so a vertical pager would unlock the
-    // pager on horizontal-edge state (wrong axis) and lock it on
+    // Regression: the gallery used to consult the horizontal canSwipe
+    // signal regardless of pagerAxis, so a vertical pager would unlock
+    // the pager on horizontal-edge state (wrong axis) and lock it on
     // vertical-edge state in the wrong direction. Verify the lock
     // now follows pagerAxis.
     final galleryController = ViewfinderController();
@@ -2856,7 +2860,7 @@ void main() {
 
     // Step 2: anchor the content's left edge against the viewport's
     // left by panning rightward and releasing. After release the
-    // image controller reports canSwipeHorizontally=true.
+    // image controller reports canSwipe(horizontal)=true.
     final anchor = await tester.startGesture(center);
     for (var i = 0; i < 30; i++) {
       await anchor.moveBy(const Offset(30, 0));
@@ -3346,7 +3350,7 @@ void main() {
   });
 
   testWidgets(
-    'ViewfinderImageController.canSwipeHorizontally tracks the rotated '
+    'ViewfinderImageController.canSwipe(horizontal) tracks the rotated '
     'AABB, not raw translation',
     (tester) async {
       // Regression for the pre-0.2.0 implementation that consulted
@@ -3383,12 +3387,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(imageController.scaleState, ViewfinderScaleState.zoomed);
-      expect(imageController.canSwipeHorizontally, isFalse);
+      expect(imageController.canSwipe(Axis.horizontal), isFalse);
     },
   );
 
   testWidgets(
-    'ViewfinderImageController.canSwipeVertically tracks the rotated AABB',
+    'ViewfinderImageController.canSwipe(vertical) tracks the rotated AABB',
     (tester) async {
       final imageController = ViewfinderImageController();
       await tester.pumpWidget(
@@ -3417,9 +3421,214 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(imageController.scaleState, ViewfinderScaleState.zoomed);
-      expect(imageController.canSwipeVertically, isFalse);
+      expect(imageController.canSwipe(Axis.vertical), isFalse);
     },
   );
+
+  testWidgets(
+    'SwipeEdgeMode.content decouples axis meaning from screen orientation: '
+    '90° rotation + screen-y pan gives photo-H edge handoff while screen-H '
+    'still reports overflow',
+    (tester) async {
+      // At 90° CCW the photo's logical horizontal axis runs along
+      // screen-y. So a pan in screen-y can bring the photo's
+      // logical-H edge into view while the rotated AABB still
+      // overflows screen-x as much as ever.
+      //
+      // Setup: 90° CCW + 2× scale centered, then translate +200 in
+      // screen-y. M_center maps photo (0,0) to screen (600, -200);
+      // the +200 pan brings it to (600, 0), so the viewport's top in
+      // photo-space lands at photo-x = 0. In photo-space the
+      // viewport's photo-x range is exactly [0, 200], which trips
+      // content-mode H ("logical left edge reached"). Screen-mode H
+      // still overflows on both sides (bbox.minX = -200, max = 600).
+      //
+      // The vertical axis diverges in the opposite direction:
+      // screen-V says "flush at top" (bbox.minY = 0 → handoff
+      // allowed) while content-V says "still mid-photo in
+      // photo-space" (photoBbox.minY = 100, maxY = 300).
+      final imageController = ViewfinderImageController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 400,
+              child: ViewfinderImage(
+                image: _memoryImage(),
+                controller: imageController,
+                rotateEnabled: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+
+      // M = T(0,200) · T(200,200) · R(π/2) · S(2) · T(-200,-200).
+      // Combined leading translation: T(200, 400).
+      final m = Matrix4.identity()
+        ..translateByDouble(200.0, 400.0, 0, 1)
+        ..rotateZ(1.5708)
+        ..scaleByDouble(2.0, 2.0, 1, 1)
+        ..translateByDouble(-200.0, -200.0, 0, 1);
+      imageController.jumpToTransform(m);
+      await tester.pumpAndSettle();
+
+      expect(imageController.scaleState, ViewfinderScaleState.zoomed);
+      expect(
+        imageController.canSwipe(Axis.horizontal),
+        isFalse,
+        reason: 'screen mode H: rotated AABB overflows screen-x',
+      );
+      expect(
+        imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
+        isTrue,
+        reason:
+            'content mode H: viewport pulled back into photo-space '
+            'reaches photo-x = 0',
+      );
+      expect(
+        imageController.canSwipe(Axis.vertical),
+        isTrue,
+        reason: 'screen mode V: rotated AABB.minY is flush at viewport top',
+      );
+      expect(
+        imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
+        isFalse,
+        reason:
+            'content mode V: photo-V edges remain interior in '
+            'photo-space (photo-y range [100, 300])',
+      );
+    },
+  );
+
+  testWidgets('SwipeEdgeMode.content returns false at 180° centered, matching '
+      'screen mode (regression guard against forward-edge semantics)', (
+    tester,
+  ) async {
+    // The pre-fix forward-projection semantics returned true at
+    // 180° centered because the photo's logical left/right edges
+    // had crossed each other in screen-x — a self-justifying
+    // interpretation that treated "logical-left edge anywhere to
+    // the right of viewport's left" as "edge reached". The
+    // inverse-projection semantics correctly says "still
+    // mid-photo": at 180° centered scale 2, the viewport pulls
+    // back to photo-x range [100, 300], well inside [0, 400].
+    final imageController = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: _memoryImage(),
+              controller: imageController,
+              rotateEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    final m = Matrix4.identity()
+      ..translateByDouble(200.0, 200.0, 0, 1)
+      ..rotateZ(3.1416)
+      ..scaleByDouble(2.0, 2.0, 1, 1)
+      ..translateByDouble(-200.0, -200.0, 0, 1);
+    imageController.jumpToTransform(m);
+    await tester.pumpAndSettle();
+
+    expect(imageController.scaleState, ViewfinderScaleState.zoomed);
+    expect(imageController.canSwipe(Axis.horizontal), isFalse);
+    expect(imageController.canSwipe(Axis.vertical), isFalse);
+    expect(
+      imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
+      isFalse,
+    );
+    expect(
+      imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
+      isFalse,
+    );
+  });
+
+  testWidgets('SwipeEdgeMode.content and screen agree at zero rotation', (
+    tester,
+  ) async {
+    final imageController = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: _memoryImage(),
+              controller: imageController,
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Center-anchored 3× zoom, no rotation: both modes should
+    // report the same thing on both axes.
+    imageController.animateToScale(3.0);
+    await tester.pumpAndSettle();
+
+    expect(
+      imageController.canSwipe(Axis.horizontal),
+      imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
+    );
+    expect(
+      imageController.canSwipe(Axis.vertical),
+      imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
+    );
+  });
+
+  testWidgets('canSwipe surrenders all gates on a singular jumpToTransform '
+      'matrix instead of throwing', (tester) async {
+    // jumpToTransform bypasses the boundary clamp by design, so a
+    // pathological caller-supplied matrix can be degenerate
+    // (determinant = 0, e.g., scale 0). The transform listener fires
+    // on every set, so a throw inside _swipeSignals would crash the
+    // app; the guard returns safe defaults instead.
+    final imageController = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: _memoryImage(),
+              controller: imageController,
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // All-zeros 4x4: rank 0, determinant 0. Singular.
+    imageController.jumpToTransform(Matrix4.zero());
+    await tester.pumpAndSettle();
+
+    // No throw, and the gates default open.
+    expect(imageController.canSwipe(Axis.horizontal), isTrue);
+    expect(imageController.canSwipe(Axis.vertical), isTrue);
+    expect(
+      imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
+      isTrue,
+    );
+    expect(
+      imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
+      isTrue,
+    );
+  });
 
   testWidgets(
     'ViewfinderImageController: attaching to multiple ViewfinderImage '

@@ -1,3 +1,13 @@
+## 0.3.0
+
+### Breaking changes
+
+* **`ViewfinderImageController.canSwipeHorizontally` / `canSwipeVertically` getters removed** in favor of a single `canSwipe(Axis axis, {SwipeEdgeMode mode = SwipeEdgeMode.screen})` method. The default behavior is unchanged — `canSwipe(Axis.horizontal)` returns the same value as the old `canSwipeHorizontally` did — but the call site changes. Migration: `c.canSwipeHorizontally` → `c.canSwipe(Axis.horizontal)`, `c.canSwipeVertically` → `c.canSwipe(Axis.vertical)`.
+
+### API additions
+
+* `SwipeEdgeMode` selects the frame of reference used by `canSwipe` under rotation. `SwipeEdgeMode.screen` (the default, used by the bundled gallery) checks the rotated content's AABB against the viewport — symmetric with the internal boundary clamp and matching a screen-axis pager's intent. `SwipeEdgeMode.content` inverse-projects the viewport into photo space and checks whether it has reached the photo's logical extents `[0, viewport.width]` / `[0, viewport.height]`; the result tracks "the user has reached the photo's logical edge in the photo's own frame" at every rotation (no special-casing of cardinal angles). Use it for consumers whose handoff target follows the photo's frame, e.g. a custom pager that swipes along the photo's axes through rotation.
+
 ## 0.2.1
 
 ### API additions

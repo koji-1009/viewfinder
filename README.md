@@ -192,9 +192,10 @@ controller.jumpToTransform(m..translate(20.0, 0.0));
 controller.animateToTransform(targetMatrix);
 
 // Edge-state introspection.
-controller.canSwipeHorizontally; // bool
-controller.canSwipeVertically;   // bool
-controller.scaleState;           // ViewfinderScaleState
+controller.canSwipe(Axis.horizontal); // bool, AABB / screen-axis (default)
+controller.canSwipe(Axis.vertical);   // bool
+controller.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content); // photo-frame edges
+controller.scaleState;                // ViewfinderScaleState
 ```
 
 ### `ViewfinderChromeController` — chrome visibility
