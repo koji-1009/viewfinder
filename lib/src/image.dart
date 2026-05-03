@@ -847,10 +847,10 @@ class ViewfinderImageController extends ChangeNotifier {
     final signal = _lastSignal ?? _state?._swipeSignals();
     if (signal == null) return true;
     return switch ((axis, mode)) {
-      (Axis.horizontal, .screen) => signal.hScreen,
-      (Axis.vertical, .screen) => signal.vScreen,
-      (Axis.horizontal, .content) => signal.hContent,
-      (Axis.vertical, .content) => signal.vContent,
+      (.horizontal, .screen) => signal.hScreen,
+      (.vertical, .screen) => signal.vScreen,
+      (.horizontal, .content) => signal.hContent,
+      (.vertical, .content) => signal.vContent,
     };
   }
 
