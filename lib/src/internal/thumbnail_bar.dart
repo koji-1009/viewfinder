@@ -32,7 +32,9 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
   void didUpdateWidget(covariant ViewfinderThumbnailBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentIndex != widget.currentIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToCurrent();
+      });
     }
   }
 
