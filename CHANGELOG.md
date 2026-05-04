@@ -1,3 +1,9 @@
+## 0.3.2
+
+### Bug fixes
+
+* Added `mounted` guard to the thumbnail bar's post-frame scroll callback. Previously, if the widget was disposed between scheduling and execution of the callback, the scroll could attempt to run on a defunct state.
+
 ## 0.3.1
 
 ### API additions
