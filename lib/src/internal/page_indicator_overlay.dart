@@ -61,10 +61,11 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
                 currentIndex: currentIndex,
               ),
     };
-    return Align(
+    final aligned = Align(
       alignment: cfg.alignment,
       child: Padding(padding: cfg.padding, child: content),
     );
+    return cfg.safeArea ? SafeArea(child: aligned) : aligned;
   }
 }
 

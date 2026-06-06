@@ -792,11 +792,28 @@ class _ImageBody extends StatelessWidget {
       ViewfinderChildImage(:final child) => child,
     };
 
+    // Flutter's default flight shuttle is the destination hero's child,
+    // so a pop flight renders the app-side widget (typically a
+    // cover-fit thumbnail) stretched across the viewer's rect — a
+    // visible jump against the viewer's own fit. Fly the viewer's
+    // rendering instead; the viewer side of every flight then matches
+    // exactly. Callers can still override via
+    // [ViewfinderHero.flightShuttleBuilder].
+    final HeroFlightShuttleBuilder? defaultShuttle = switch (spec) {
+      final ViewfinderProviderImage spec => (_, _, _, _, _) => Image(
+        image: spec.image,
+        fit: spec.initialScale.boxFit,
+        filterQuality: spec.filterQuality,
+        gaplessPlayback: true,
+      ),
+      ViewfinderChildImage() => null,
+    };
+
     if (spec.hero case final hero?) {
       content = Hero(
         tag: hero.tag,
         createRectTween: hero.createRectTween,
-        flightShuttleBuilder: hero.flightShuttleBuilder,
+        flightShuttleBuilder: hero.flightShuttleBuilder ?? defaultShuttle,
         placeholderBuilder: hero.placeholderBuilder,
         transitionOnUserGestures: hero.transitionOnUserGestures,
         child: content,
