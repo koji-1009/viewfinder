@@ -19,6 +19,7 @@
 * Dismiss `threshold` / `onProgress` divide by the viewport height in `slideType: onlyImage`, matching the visuals.
 * Page indicators keep clear of system intrusions (`ViewfinderPageIndicator.safeArea`, default `true`); a bottom-aligned indicator no longer sinks under the home indicator or mobile-browser chrome.
 * Provider-backed heroes fly a viewer-fit shuttle by default, so a pop flight no longer flickers against a differently-fitted source thumbnail. Override via `ViewfinderHero.flightShuttleBuilder`.
+* `ViewfinderHero.thumbnailFit` — declare the launcher thumbnail's `BoxFit` and the default shuttle interpolates between the two fits over the flight, landing exactly on the thumbnail's crop at the other end too.
 
 ### API additions
 

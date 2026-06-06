@@ -84,7 +84,10 @@ class _SinglePhotoViewer extends StatelessWidget {
       backgroundColor: Colors.black,
       body: Viewfinder.single(
         image: DemoPhotos.portrait,
-        hero: const ViewfinderHero(SinglePhotoPage._heroTag),
+        hero: const ViewfinderHero(
+          SinglePhotoPage._heroTag,
+          thumbnailFit: BoxFit.cover,
+        ),
         semanticLabel: 'Single demo photo',
         maxScale: 10,
         dismiss: ViewfinderDismiss(

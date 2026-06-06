@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:viewfinder/src/internal/hero_shuttle.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
 import 'package:viewfinder/viewfinder.dart';
 
@@ -751,6 +752,57 @@ void main() {
         .where((w) => w.image == image && w.fit == BoxFit.contain);
     expect(shuttles, isNotEmpty);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('ViewfinderHero.thumbnailFit flies a cross-fit shuttle', (
+    tester,
+  ) async {
+    final image = _memoryImage('cross-fit');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Viewfinder.single(
+                    image: image,
+                    hero: const ViewfinderHero(
+                      'cross-fit-test',
+                      thumbnailFit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+              child: SizedBox(
+                width: 100,
+                height: 100,
+                child: Hero(
+                  tag: 'cross-fit-test',
+                  child: Image(image: image, fit: BoxFit.cover),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    await tester.tap(find.byType(GestureDetector).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100)); // mid-flight
+    expect(find.byType(HeroCrossFitShuttle), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    // Pop flight uses it too and settles cleanly.
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(HeroCrossFitShuttle), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('page indicator respects the bottom safe-area inset', (
