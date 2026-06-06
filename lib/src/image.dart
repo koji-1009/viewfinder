@@ -13,6 +13,21 @@ export 'internal/zoomable_viewport.dart'
 /// baseline).
 typedef ViewfinderScaleChanged = void Function(double scale);
 
+/// Coalesced per-tick snapshot shared between the view state and
+/// [ViewfinderImageController]: the scale state plus the eight
+/// direction × [SwipeEdgeMode] swipe gates.
+typedef _SwipeSignals = ({
+  ViewfinderScaleState scale,
+  bool leftScreen,
+  bool rightScreen,
+  bool upScreen,
+  bool downScreen,
+  bool leftContent,
+  bool rightContent,
+  bool upContent,
+  bool downContent,
+});
+
 /// Frame of reference used by [ViewfinderImageController.canSwipe] when
 /// asking whether a page swipe along a given axis can take over.
 ///
@@ -592,33 +607,25 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   /// reached the photo's logical edge in the photo's own frame?",
   /// independent of rotation — including past 90° where forward-
   /// projecting the photo's edges would give the wrong answer.
-  ({
-    ViewfinderScaleState scale,
-    bool leftScreen,
-    bool rightScreen,
-    bool upScreen,
-    bool downScreen,
-    bool leftContent,
-    bool rightContent,
-    bool upContent,
-    bool downContent,
-  })
-  _swipeSignals() {
+  /// Surrendered gates: every direction reports "swipe may take over".
+  /// Built lazily so the common zoomed path doesn't allocate it on
+  /// every transform tick.
+  _SwipeSignals _allFreeSignals(ViewfinderScaleState scale) => (
+    scale: scale,
+    leftScreen: true,
+    rightScreen: true,
+    upScreen: true,
+    downScreen: true,
+    leftContent: true,
+    rightContent: true,
+    upContent: true,
+    downContent: true,
+  );
+
+  _SwipeSignals _swipeSignals() {
     final scale = scaleState;
-    // Surrendered gates: every direction reports "swipe may take over".
-    final allFree = (
-      scale: scale,
-      leftScreen: true,
-      rightScreen: true,
-      upScreen: true,
-      downScreen: true,
-      leftContent: true,
-      rightContent: true,
-      upContent: true,
-      downContent: true,
-    );
     if (scale == .initial || _viewportSize.isEmpty) {
-      return allFree;
+      return _allFreeSignals(scale);
     }
     const epsilon = 0.5;
     final m = _transformation.value;
@@ -628,7 +635,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     // transform listener. The clamp keeps regular gestures away from
     // this state, so this only fires for caller-supplied transforms.
     if (m.determinant() == 0) {
-      return allFree;
+      return _allFreeSignals(scale);
     }
     final bbox = contentBbox(m, viewport);
     final photoBbox = contentBbox(Matrix4.inverted(m), viewport);
@@ -923,18 +930,7 @@ class ViewfinderImageController extends ChangeNotifier {
 
   _ViewfinderImageState? _state;
   bool _disposed = false;
-  ({
-    ViewfinderScaleState scale,
-    bool leftScreen,
-    bool rightScreen,
-    bool upScreen,
-    bool downScreen,
-    bool leftContent,
-    bool rightContent,
-    bool upContent,
-    bool downContent,
-  })?
-  _lastSignal;
+  _SwipeSignals? _lastSignal;
 
   @override
   void dispose() {

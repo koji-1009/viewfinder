@@ -31,6 +31,7 @@ class ViewfinderPage extends StatelessWidget {
     required this.pagerAxis,
     this.enableMouseWheelZoom = true,
     this.onWheelDelta,
+    this.wrapProvider,
   });
 
   final ViewfinderItem item;
@@ -56,6 +57,11 @@ class ViewfinderPage extends StatelessWidget {
   /// and reported here (the gallery's wheel-paging mode).
   final ValueChanged<double>? onWheelDelta;
 
+  /// Applied to an image-backed item's main provider before display —
+  /// the gallery's decode-size policy. The thumb provider is left
+  /// alone (it is already low-res).
+  final ImageProvider Function(ImageProvider provider)? wrapProvider;
+
   @override
   Widget build(BuildContext context) {
     final initialScale = item.initialScale ?? defaultInitialScale;
@@ -69,7 +75,7 @@ class ViewfinderPage extends StatelessWidget {
 
     Widget page = switch (item) {
       final ViewfinderImageItem item => ViewfinderImage(
-        image: item.image,
+        image: wrapProvider?.call(item.image) ?? item.image,
         thumbImage: item.thumbImage,
         initialScale: initialScale,
         doubleTapScales: effectiveDoubleTapScales,

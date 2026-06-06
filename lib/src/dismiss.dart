@@ -82,21 +82,10 @@ class ViewfinderDismiss {
   /// (`HapticFeedback.selectionClick`) signalling "far enough".
   final ValueChanged<bool>? onThresholdCrossed;
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ViewfinderDismiss &&
-          onDismiss == other.onDismiss &&
-          direction == other.direction &&
-          threshold == other.threshold &&
-          fadeBackground == other.fadeBackground &&
-          backgroundColor == other.backgroundColor &&
-          slideType == other.slideType &&
-          onProgress == other.onProgress &&
-          onThresholdCrossed == other.onThresholdCrossed;
-
-  @override
-  int get hashCode => Object.hash(
+  /// Identity tuple backing [==] and [hashCode] — one field list
+  /// instead of two parallel ones (records compare and hash
+  /// structurally).
+  Object get _props => (
     onDismiss,
     direction,
     threshold,
@@ -106,4 +95,12 @@ class ViewfinderDismiss {
     onProgress,
     onThresholdCrossed,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderDismiss && other._props == _props;
+
+  @override
+  int get hashCode => _props.hashCode;
 }

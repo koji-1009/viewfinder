@@ -597,10 +597,6 @@ class _ViewfinderState extends State<Viewfinder> {
     chrome.toggle();
   }
 
-  void _bumpChrome() {
-    _chrome?.bumpAutoHide();
-  }
-
   void _syncChromeWithZoom() {
     final chrome = _chrome;
     if (chrome == null) return;
@@ -730,61 +726,11 @@ class _ViewfinderState extends State<Viewfinder> {
   void didUpdateWidget(covariant Viewfinder oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?._detach(this);
-      if (_ownsController) _controller.dispose();
-      _controller = widget.controller ?? ViewfinderController();
-      _ownsController = widget.controller == null;
-      _controller._attach(this);
-      // Adopt the gallery's current page into the incoming controller
-      // (silently — we're inside the build phase). A swap is not a
-      // navigation request: without this, the new controller would
-      // keep reporting its construction-time index until the next
-      // user-driven page change.
-      _controller._currentIndex = _currentIndex;
+      _swapController(oldWidget);
     }
     if (oldWidget.itemCount != widget.itemCount ||
         oldWidget.loop != widget.loop) {
-      final wasLoop = oldWidget.loop && oldWidget.itemCount >= 2;
-      if (!wasLoop && !_loopEnabled) {
-        // Plain (non-looping) itemCount change.
-        // Dispose per-slot controllers that fell off the right edge.
-        final toRemove = <int>[];
-        for (final entry in _imageControllers.entries) {
-          if (entry.key >= widget.itemCount) toRemove.add(entry.key);
-        }
-        for (final k in toRemove) {
-          _imageControllers.remove(k)!.dispose();
-        }
-        // The current page may have fallen off the right edge (itemCount
-        // shrank) or the gallery may now be empty. Re-clamp so the
-        // semantic label, scroll position, and PageView builder stay in
-        // a consistent state.
-        final clamped = _clampIndex(_currentIndex);
-        if (clamped != _currentIndex) {
-          _currentIndex = clamped;
-          _currentRawIndex = clamped;
-          _controller._setIndex(clamped);
-          if (_pageController.hasClients) {
-            _pageController.jumpToPage(clamped);
-          }
-        }
-      } else {
-        // The raw↔logical mapping changed (loop toggled, or the modulus
-        // under a looping pager). Rebase: drop every per-slot controller
-        // (raw keys from the old mapping are meaningless now — disposal
-        // is guarded, so still-mounted pages detach harmlessly) and jump
-        // the pager to a fresh raw base for the preserved logical page.
-        for (final c in _imageControllers.values) {
-          c.dispose();
-        }
-        _imageControllers.clear();
-        _currentIndex = _clampIndex(_currentIndex);
-        _controller._currentIndex = _currentIndex;
-        _currentRawIndex = _rawBaseFor(_currentIndex);
-        if (_pageController.hasClients) {
-          _pageController.jumpToPage(_currentRawIndex);
-        }
-      }
+      _reconcileItemSpace(oldWidget);
     }
     if (oldWidget.immersiveSystemUi != widget.immersiveSystemUi ||
         oldWidget.chromeController != widget.chromeController) {
@@ -792,6 +738,74 @@ class _ViewfinderState extends State<Viewfinder> {
         restore: oldWidget.immersiveSystemUi && !widget.immersiveSystemUi,
       );
       _attachSystemUi();
+    }
+  }
+
+  void _swapController(Viewfinder oldWidget) {
+    oldWidget.controller?._detach(this);
+    if (_ownsController) _controller.dispose();
+    _controller = widget.controller ?? ViewfinderController();
+    _ownsController = widget.controller == null;
+    _controller._attach(this);
+    // Adopt the gallery's current page into the incoming controller
+    // (silently — we're inside the build phase). A swap is not a
+    // navigation request: without this, the new controller would
+    // keep reporting its construction-time index until the next
+    // user-driven page change.
+    _controller._currentIndex = _currentIndex;
+  }
+
+  /// Reconciles state after [Viewfinder.itemCount] or [Viewfinder.loop]
+  /// changed.
+  void _reconcileItemSpace(Viewfinder oldWidget) {
+    final wasLoop = oldWidget.loop && oldWidget.itemCount >= 2;
+    if (!wasLoop && !_loopEnabled) {
+      _reclampBoundedItemCount();
+    } else {
+      _rebaseLoopMapping();
+    }
+  }
+
+  /// Plain (non-looping) itemCount change.
+  void _reclampBoundedItemCount() {
+    // Dispose per-slot controllers that fell off the right edge.
+    final toRemove = <int>[];
+    for (final entry in _imageControllers.entries) {
+      if (entry.key >= widget.itemCount) toRemove.add(entry.key);
+    }
+    for (final k in toRemove) {
+      _imageControllers.remove(k)!.dispose();
+    }
+    // The current page may have fallen off the right edge (itemCount
+    // shrank) or the gallery may now be empty. Re-clamp so the
+    // semantic label, scroll position, and PageView builder stay in
+    // a consistent state.
+    final clamped = _clampIndex(_currentIndex);
+    if (clamped != _currentIndex) {
+      _currentIndex = clamped;
+      _currentRawIndex = clamped;
+      _controller._setIndex(clamped);
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(clamped);
+      }
+    }
+  }
+
+  /// The raw↔logical mapping changed (loop toggled, or the modulus
+  /// under a looping pager). Rebase: drop every per-slot controller
+  /// (raw keys from the old mapping are meaningless now — disposal
+  /// is guarded, so still-mounted pages detach harmlessly) and jump
+  /// the pager to a fresh raw base for the preserved logical page.
+  void _rebaseLoopMapping() {
+    for (final c in _imageControllers.values) {
+      c.dispose();
+    }
+    _imageControllers.clear();
+    _currentIndex = _clampIndex(_currentIndex);
+    _controller._currentIndex = _currentIndex;
+    _currentRawIndex = _rawBaseFor(_currentIndex);
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(_currentRawIndex);
     }
   }
 
@@ -832,35 +846,6 @@ class _ViewfinderState extends State<Viewfinder> {
       height: (size.height * dpr * m).round(),
       policy: .fit,
     );
-  }
-
-  /// The item for [index] with the decode-size policy applied to its
-  /// main provider. The thumbnail strip keeps using the raw item — it
-  /// already decodes tiles at tile size.
-  ViewfinderItem _resolvedItemAt(int index) {
-    final item = _itemAt(index);
-    if (widget.decodeSizeMultiplier == null) return item;
-    return switch (item) {
-      final ViewfinderImageItem i => ViewfinderImageItem(
-        image: _decodeWrapped(i.image),
-        thumbImage: i.thumbImage,
-        hero: i.hero,
-        loadingBuilder: i.loadingBuilder,
-        errorBuilder: i.errorBuilder,
-        initialScale: i.initialScale,
-        minScale: i.minScale,
-        maxScale: i.maxScale,
-        doubleTapScales: i.doubleTapScales,
-        semanticLabel: i.semanticLabel,
-        onLongPress: i.onLongPress,
-        onLongPressStart: i.onLongPressStart,
-        onSecondaryTapUp: i.onSecondaryTapUp,
-        thumbCrossFadeDuration: i.thumbCrossFadeDuration,
-        thumbCrossFadeCurve: i.thumbCrossFadeCurve,
-        gaplessPlayback: i.gaplessPlayback,
-      ),
-      final ViewfinderChildItem i => i,
-    };
   }
 
   void _precacheAround(int index) {
@@ -933,7 +918,7 @@ class _ViewfinderState extends State<Viewfinder> {
     _announcePage(logical);
     _precacheAround(logical);
     _pruneLoopControllers();
-    _bumpChrome();
+    _chrome?.bumpAutoHide();
   }
 
   void _goTo(int index, {bool animate = true}) {
@@ -942,7 +927,7 @@ class _ViewfinderState extends State<Viewfinder> {
     if (_loopEnabled) {
       // Wrap the target and travel the shortest way around the loop.
       final n = widget.itemCount;
-      final targetLogical = ((index % n) + n) % n;
+      final targetLogical = _clampIndex(index);
       var delta = targetLogical - _currentIndex;
       if (delta > n / 2) delta -= n;
       if (delta < -n / 2) delta += n;
@@ -976,6 +961,14 @@ class _ViewfinderState extends State<Viewfinder> {
     _goTo(_currentIndex + (delta > 0 ? 1 : -1));
   }
 
+  /// Distance the scroll position currently sits beyond its extents
+  /// (the bouncing-physics flavor of overscroll). Zero while in range.
+  static double _overscrollOf(ScrollMetrics m) {
+    if (m.pixels < m.minScrollExtent) return m.minScrollExtent - m.pixels;
+    if (m.pixels > m.maxScrollExtent) return m.pixels - m.maxScrollExtent;
+    return 0;
+  }
+
   /// Overscroll-to-dismiss: accumulate how far the pager was pulled
   /// past its first/last page within one scroll activity and fire the
   /// dismiss callback once past [_kOverscrollDismissExtent]. Handles
@@ -990,12 +983,7 @@ class _ViewfinderState extends State<Viewfinder> {
       case final OverscrollNotification o:
         _overscrollAccum += o.overscroll.abs();
       case final ScrollUpdateNotification u:
-        final m = u.metrics;
-        final over = m.pixels < m.minScrollExtent
-            ? m.minScrollExtent - m.pixels
-            : m.pixels > m.maxScrollExtent
-            ? m.pixels - m.maxScrollExtent
-            : 0.0;
+        final over = _overscrollOf(u.metrics);
         if (over > _overscrollAccum) _overscrollAccum = over;
       default:
         break;
@@ -1103,6 +1091,30 @@ class _ViewfinderState extends State<Viewfinder> {
     return _canPanForPage(rawIndex, c, axis, sign);
   }
 
+  /// Keyboard bindings: arrows are spatial (they move to the page
+  /// visually in that direction, tracking reverse / RTL); PageUp /
+  /// PageDown stay logical; Escape is two-stage.
+  Map<ShortcutActivator, VoidCallback> _keyboardBindings() {
+    final visualStep = _effectiveReverse ? -1 : 1;
+    return <ShortcutActivator, VoidCallback>{
+      const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+          _goTo(_currentIndex - visualStep),
+      const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+          _goTo(_currentIndex + visualStep),
+      if (widget.pagerAxis == .vertical) ...{
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+            _goTo(_currentIndex - visualStep),
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+            _goTo(_currentIndex + visualStep),
+      },
+      const SingleActivator(LogicalKeyboardKey.pageUp): () =>
+          _goTo(_currentIndex - 1),
+      const SingleActivator(LogicalKeyboardKey.pageDown): () =>
+          _goTo(_currentIndex + 1),
+      const SingleActivator(LogicalKeyboardKey.escape): _handleEscape,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget pageView = PageView.builder(
@@ -1122,7 +1134,7 @@ class _ViewfinderState extends State<Viewfinder> {
         final logical = _logicalFor(rawIndex);
         final imageController = _imageControllerFor(rawIndex);
         Widget page = ViewfinderPage(
-          item: _resolvedItemAt(logical),
+          item: _itemAt(logical),
           isCurrent: rawIndex == _currentRawIndex,
           controller: imageController,
           canPan: (axis, sign) =>
@@ -1143,6 +1155,11 @@ class _ViewfinderState extends State<Viewfinder> {
           onWheelDelta: widget.mouseWheelBehavior == .paging
               ? _onWheelPageDelta
               : null,
+          // Decode-size policy; the same wrapping runs in
+          // _precacheAround so cache keys match.
+          wrapProvider: widget.decodeSizeMultiplier == null
+              ? null
+              : _decodeWrapped,
         );
         if (widget.keepAlivePages) {
           page = KeepAlivePage(child: page);
@@ -1251,28 +1268,8 @@ class _ViewfinderState extends State<Viewfinder> {
     }
 
     if (widget.enableKeyboardShortcuts) {
-      // Arrow keys are spatial: they move to the page visually in that
-      // direction, so they track reverse / RTL. PageUp / PageDown stay
-      // logical (previous / next index).
-      final visualStep = _effectiveReverse ? -1 : 1;
       body = CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-              _goTo(_currentIndex - visualStep),
-          const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-              _goTo(_currentIndex + visualStep),
-          if (widget.pagerAxis == .vertical) ...{
-            const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-                _goTo(_currentIndex - visualStep),
-            const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
-                _goTo(_currentIndex + visualStep),
-          },
-          const SingleActivator(LogicalKeyboardKey.pageUp): () =>
-              _goTo(_currentIndex - 1),
-          const SingleActivator(LogicalKeyboardKey.pageDown): () =>
-              _goTo(_currentIndex + 1),
-          const SingleActivator(LogicalKeyboardKey.escape): _handleEscape,
-        },
+        bindings: _keyboardBindings(),
         child: Focus(autofocus: widget.autofocus, child: body),
       );
     }

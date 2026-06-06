@@ -62,21 +62,10 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   /// localization.
   final ViewfinderPageIndicatorSemanticLabelBuilder? semanticLabelBuilder;
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ViewfinderPageIndicatorDots &&
-          alignment == other.alignment &&
-          padding == other.padding &&
-          dotSize == other.dotSize &&
-          activeDotSize == other.activeDotSize &&
-          spacing == other.spacing &&
-          color == other.color &&
-          activeColor == other.activeColor &&
-          semanticLabelBuilder == other.semanticLabelBuilder;
-
-  @override
-  int get hashCode => Object.hash(
+  /// Identity tuple backing [==] and [hashCode] — one field list
+  /// instead of two parallel ones (records compare and hash
+  /// structurally).
+  Object get _props => (
     alignment,
     padding,
     dotSize,
@@ -86,6 +75,14 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     activeColor,
     semanticLabelBuilder,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderPageIndicatorDots && other._props == _props;
+
+  @override
+  int get hashCode => _props.hashCode;
 }
 
 /// Signature for [ViewfinderPageIndicatorLabel.labelBuilder] and the label
@@ -109,16 +106,15 @@ final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
   /// Builds the rendered label. When `null`, a default pill is used.
   final ViewfinderPageIndicatorLabelBuilder? labelBuilder;
 
+  Object get _props => (alignment, padding, labelBuilder);
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ViewfinderPageIndicatorLabel &&
-          alignment == other.alignment &&
-          padding == other.padding &&
-          labelBuilder == other.labelBuilder;
+      other is ViewfinderPageIndicatorLabel && other._props == _props;
 
   @override
-  int get hashCode => Object.hash(alignment, padding, labelBuilder);
+  int get hashCode => _props.hashCode;
 }
 
 /// Renders [dots] when `itemCount <= maxDots`; switches to [label] beyond it.
@@ -148,16 +144,13 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   /// variant takes over.
   final int maxDots;
 
+  Object get _props => (alignment, padding, dots, label, maxDots);
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ViewfinderPageIndicatorAdaptive &&
-          alignment == other.alignment &&
-          padding == other.padding &&
-          dots == other.dots &&
-          label == other.label &&
-          maxDots == other.maxDots;
+      other is ViewfinderPageIndicatorAdaptive && other._props == _props;
 
   @override
-  int get hashCode => Object.hash(alignment, padding, dots, label, maxDots);
+  int get hashCode => _props.hashCode;
 }

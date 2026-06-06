@@ -55,23 +55,21 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
     .up => dy < 0 || _dragOffset < 0,
   };
 
-  /// The single denominator for drag progress: the viewport height.
-  /// The trigger threshold, [ViewfinderDismiss.onProgress], and the
-  /// visual fade/translate must all divide by the same extent —
-  /// `slideType: onlyImage` shrinks this widget's own render box (the
-  /// thumbnail strip takes part of the column), so `context.size`
-  /// would make the threshold diverge from the documented "fraction
-  /// of viewport height" and from the visuals.
-  double _viewportExtent() {
-    final h = MediaQuery.sizeOf(context).height;
-    return h <= 0 ? 0 : h;
+  /// Normalized drag progress in `[0, 1]`. The denominator is the
+  /// viewport height: the trigger threshold,
+  /// [ViewfinderDismiss.onProgress], and the visual fade/translate
+  /// must all divide by the same extent — `slideType: onlyImage`
+  /// shrinks this widget's own render box (the thumbnail strip takes
+  /// part of the column), so `context.size` would make the threshold
+  /// diverge from the documented "fraction of viewport height" and
+  /// from the visuals.
+  double _dragProgress() {
+    final size = MediaQuery.sizeOf(context).height;
+    return size <= 0 ? 0.0 : (_dragOffset.abs() / size).clamp(0.0, 1.0);
   }
 
   void _reportProgress() {
-    final size = _viewportExtent();
-    final progress = size <= 0
-        ? 0.0
-        : (_dragOffset.abs() / size).clamp(0.0, 1.0);
+    final progress = _dragProgress();
     // Edge-triggered threshold signal (haptics hook) — fires once per
     // crossing in each direction, including during spring-back.
     final past = progress >= widget.config.threshold;
@@ -93,11 +91,7 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
   }
 
   void _handleDragEnd(DragEndDetails _) {
-    final size = _viewportExtent();
-    final progress = size <= 0
-        ? 0.0
-        : (_dragOffset.abs() / size).clamp(0.0, 1.0);
-    if (progress >= widget.config.threshold) {
+    if (_dragProgress() >= widget.config.threshold) {
       widget.config.onDismiss();
     } else {
       _release.forward(from: 0);

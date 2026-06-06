@@ -375,19 +375,19 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     }
 
     _startFling(
-      m,
-      hasPanFling ? v : Offset.zero,
-      hasScaleFling ? scaleV : 0.0,
-      currentScale,
+      from: m,
+      velocity: hasPanFling ? v : Offset.zero,
+      scaleVelocity: hasScaleFling ? scaleV : 0.0,
+      startScale: currentScale,
     );
   }
 
-  void _startFling(
-    Matrix4 from,
-    Offset velocity,
-    double scaleVelocity,
-    double startScale,
-  ) {
+  void _startFling({
+    required Matrix4 from,
+    required Offset velocity,
+    required double scaleVelocity,
+    required double startScale,
+  }) {
     final start = from.clone();
     final runner = FlingRunner(
       startMatrix: start,
@@ -491,6 +491,42 @@ class _ZoomableViewportState extends State<ZoomableViewport>
         viewportDim;
   }
 
+  /// Translation delta that keeps one axis of the content's bbox
+  /// (`min..max`) inside a viewport of [viewportDim]: content smaller
+  /// than the viewport is centered; otherwise an off-edge bound is
+  /// nudged back — elastically when [elastic] — and the hit edge is
+  /// reported when [reportEdge].
+  double _clampAxisDelta({
+    required double min,
+    required double max,
+    required double viewportDim,
+    required Axis axis,
+    required bool reportEdge,
+    required bool elastic,
+  }) {
+    final extent = max - min;
+    if (extent <= viewportDim) {
+      // Content smaller than viewport on this axis → center it.
+      return (viewportDim - extent) / 2 - min;
+    }
+    // Allow the bbox to span the full viewport; nudge back when
+    // off-edge.
+    if (min > 0) {
+      // Content's low edge pulled past the viewport's low edge.
+      if (reportEdge) widget.onEdgeHit?.call(axis, -1);
+      return elastic ? -min + _rubberBand(min, viewportDim) : -min;
+    }
+    if (max < viewportDim) {
+      // Content's high edge pulled past the viewport's high edge.
+      final overshoot = viewportDim - max;
+      if (reportEdge) widget.onEdgeHit?.call(axis, 1);
+      return elastic
+          ? overshoot - _rubberBand(overshoot, viewportDim)
+          : overshoot;
+    }
+    return 0;
+  }
+
   Matrix4 _clampMatrix(
     Matrix4 m, {
     bool reportEdge = false,
@@ -502,51 +538,22 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     // originally a 0..viewport.width × 0..viewport.height rect). Correct
     // under rotation because all four projected corners drive it.
     final bbox = contentBbox(m, _viewport);
-    final minX = bbox.minX;
-    final maxX = bbox.maxX;
-    final minY = bbox.minY;
-    final maxY = bbox.maxY;
-    final bboxW = maxX - minX;
-    final bboxH = maxY - minY;
-
-    double dx = 0;
-    double dy = 0;
-
-    if (bboxW <= _viewport.width) {
-      // Content horizontally smaller than viewport → center it.
-      final targetMin = (_viewport.width - bboxW) / 2;
-      dx = targetMin - minX;
-    } else {
-      // Allow bbox to span full width; nudge back when off-edge.
-      if (minX > 0) {
-        // Content's left has been pulled past the viewport's left.
-        dx = elastic ? -minX + _rubberBand(minX, _viewport.width) : -minX;
-        if (reportEdge) widget.onEdgeHit?.call(.horizontal, -1);
-      } else if (maxX < _viewport.width) {
-        // Content's right has been pulled past the viewport's right.
-        final overshoot = _viewport.width - maxX;
-        dx = elastic
-            ? overshoot - _rubberBand(overshoot, _viewport.width)
-            : overshoot;
-        if (reportEdge) widget.onEdgeHit?.call(.horizontal, 1);
-      }
-    }
-
-    if (bboxH <= _viewport.height) {
-      final targetMin = (_viewport.height - bboxH) / 2;
-      dy = targetMin - minY;
-    } else {
-      if (minY > 0) {
-        dy = elastic ? -minY + _rubberBand(minY, _viewport.height) : -minY;
-        if (reportEdge) widget.onEdgeHit?.call(.vertical, -1);
-      } else if (maxY < _viewport.height) {
-        final overshoot = _viewport.height - maxY;
-        dy = elastic
-            ? overshoot - _rubberBand(overshoot, _viewport.height)
-            : overshoot;
-        if (reportEdge) widget.onEdgeHit?.call(.vertical, 1);
-      }
-    }
+    final dx = _clampAxisDelta(
+      min: bbox.minX,
+      max: bbox.maxX,
+      viewportDim: _viewport.width,
+      axis: .horizontal,
+      reportEdge: reportEdge,
+      elastic: elastic,
+    );
+    final dy = _clampAxisDelta(
+      min: bbox.minY,
+      max: bbox.maxY,
+      viewportDim: _viewport.height,
+      axis: .vertical,
+      reportEdge: reportEdge,
+      elastic: elastic,
+    );
 
     if (dx == 0 && dy == 0) return m;
     final out = m.clone();
@@ -728,47 +735,55 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
     if (!_resolved &&
         !_accepted &&
         event is PointerMoveEvent &&
-        _tracked.length == 1) {
-      final tp = _tracked[event.pointer];
-      if (tp != null) {
-        final delta = event.localPosition - tp.startPosition;
-        final slop = computeHitSlop(tp.kind, gestureSettings);
-        if (delta.distance > slop) {
-          _resolved = true;
-          // Flutter's own convention: strict dominance (no weighting).
-          // Strict axis dominance: test the axis that moved more, and
-          // yield the pointer if the gate says that direction isn't
-          // consumable (image at edge, parent scroller should win) —
-          // or claim it outright when the claim gate says the pan must
-          // stay here (zoomed pan that an ancestor scrollable would
-          // otherwise steal at its smaller hit-slop).
-          final (Axis, int)? dominant = switch (delta) {
-            _ when delta.dx.abs() > delta.dy.abs() => (
-              Axis.horizontal,
-              delta.dx >= 0 ? 1 : -1,
-            ),
-            _ when delta.dy.abs() > delta.dx.abs() => (
-              Axis.vertical,
-              delta.dy >= 0 ? 1 : -1,
-            ),
-            // Exact diagonal: no dominant axis, no gating.
-            _ => null,
-          };
-          if (dominant case (final axis, final sign)) {
-            if (!canPanAt(axis, sign)) {
-              resolvePointer(event.pointer, .rejected);
-              stopTrackingPointer(event.pointer);
-              _tracked.remove(event.pointer);
-              return;
-            }
-            if (claimPanAt(axis, sign)) {
-              resolve(.accepted);
-            }
-          }
-        }
-      }
+        _tracked.length == 1 &&
+        _gateYieldedPointer(event)) {
+      // The pointer was handed to the arena; don't forward the event.
+      return;
     }
     super.handleEvent(event);
+  }
+
+  /// Runs the direction gate once the single tracked pointer crosses
+  /// hit-slop. Returns `true` when the pointer was yielded to the
+  /// arena (the caller must stop processing the event).
+  bool _gateYieldedPointer(PointerMoveEvent event) {
+    final tp = _tracked[event.pointer];
+    if (tp == null) return false;
+    final delta = event.localPosition - tp.startPosition;
+    final slop = computeHitSlop(tp.kind, gestureSettings);
+    if (delta.distance <= slop) return false;
+    _resolved = true;
+    // Flutter's own convention: strict dominance (no weighting).
+    // Strict axis dominance: test the axis that moved more, and
+    // yield the pointer if the gate says that direction isn't
+    // consumable (image at edge, parent scroller should win) —
+    // or claim it outright when the claim gate says the pan must
+    // stay here (zoomed pan that an ancestor scrollable would
+    // otherwise steal at its smaller hit-slop).
+    final (Axis, int)? dominant = switch (delta) {
+      _ when delta.dx.abs() > delta.dy.abs() => (
+        Axis.horizontal,
+        delta.dx >= 0 ? 1 : -1,
+      ),
+      _ when delta.dy.abs() > delta.dx.abs() => (
+        Axis.vertical,
+        delta.dy >= 0 ? 1 : -1,
+      ),
+      // Exact diagonal: no dominant axis, no gating.
+      _ => null,
+    };
+    if (dominant case (final axis, final sign)) {
+      if (!canPanAt(axis, sign)) {
+        resolvePointer(event.pointer, .rejected);
+        stopTrackingPointer(event.pointer);
+        _tracked.remove(event.pointer);
+        return true;
+      }
+      if (claimPanAt(axis, sign)) {
+        resolve(.accepted);
+      }
+    }
+    return false;
   }
 
   @override
@@ -876,48 +891,59 @@ class DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
   void handleEvent(PointerEvent event) {
     if (event.pointer != _activePointer) return;
 
-    if (event is PointerMoveEvent) {
-      if (_state == _State.dragging) {
+    switch (event) {
+      case final PointerMoveEvent move:
+        _handleMove(move);
+      case final PointerUpEvent up:
+        _handleUp(up);
+      case PointerCancelEvent():
+        if (_state == _State.dragging) onDragEnd?.call();
+        resolve(.rejected);
+        stopTrackingPointer(event.pointer);
+      default:
+        break;
+    }
+  }
+
+  void _handleMove(PointerMoveEvent event) {
+    if (_state == _State.dragging) {
+      onDragUpdate?.call(event.localPosition);
+    } else if (_state == _State.tap2Down && _secondTapStart != null) {
+      final drift = (event.localPosition - _secondTapStart!).distance;
+      if (drift > kTouchSlop) {
+        _state = _State.dragging;
+        resolve(.accepted);
+        onDragStart?.call(_secondTapStart!);
         onDragUpdate?.call(event.localPosition);
-      } else if (_state == _State.tap2Down && _secondTapStart != null) {
-        final drift = (event.localPosition - _secondTapStart!).distance;
-        if (drift > kTouchSlop) {
-          _state = _State.dragging;
-          resolve(.accepted);
-          onDragStart?.call(_secondTapStart!);
-          onDragUpdate?.call(event.localPosition);
-        }
-      } else if (_state == _State.tap1Down && _firstTapPosition != null) {
-        final drift = (event.localPosition - _firstTapPosition!).distance;
-        // If the user moved more than a touch-slop during tap 1, this
-        // is a pan, not a tap. Yield so the scale recognizer can claim.
-        if (drift > kTouchSlop) {
-          resolve(.rejected);
-          stopTrackingPointer(event.pointer);
-        }
       }
-    } else if (event is PointerUpEvent) {
-      if (_state == _State.tap1Down) {
-        _state = _State.tap1Up;
-        _firstTapUpTimestamp = event.timeStamp;
-        // Yield pointer 1's arena so ambient Tap/DoubleTap recognizers
-        // can fire for a plain single tap. DTD's own state survives
-        // across the gap, ready to claim a possible second tap (which
-        // starts its own arena).
+    } else if (_state == _State.tap1Down && _firstTapPosition != null) {
+      final drift = (event.localPosition - _firstTapPosition!).distance;
+      // If the user moved more than a touch-slop during tap 1, this
+      // is a pan, not a tap. Yield so the scale recognizer can claim.
+      if (drift > kTouchSlop) {
         resolve(.rejected);
         stopTrackingPointer(event.pointer);
-      } else if (_state == _State.tap2Down) {
-        // Second tap released without drag → this is a plain double-tap.
-        // Back out so the parent GestureDetector's onDoubleTap can win.
-        resolve(.rejected);
-        stopTrackingPointer(event.pointer);
-      } else if (_state == _State.dragging) {
-        onDragEnd?.call();
-        stopTrackingPointer(event.pointer);
       }
-    } else if (event is PointerCancelEvent) {
-      if (_state == _State.dragging) onDragEnd?.call();
+    }
+  }
+
+  void _handleUp(PointerUpEvent event) {
+    if (_state == _State.tap1Down) {
+      _state = _State.tap1Up;
+      _firstTapUpTimestamp = event.timeStamp;
+      // Yield pointer 1's arena so ambient Tap/DoubleTap recognizers
+      // can fire for a plain single tap. DTD's own state survives
+      // across the gap, ready to claim a possible second tap (which
+      // starts its own arena).
       resolve(.rejected);
+      stopTrackingPointer(event.pointer);
+    } else if (_state == _State.tap2Down) {
+      // Second tap released without drag → this is a plain double-tap.
+      // Back out so the parent GestureDetector's onDoubleTap can win.
+      resolve(.rejected);
+      stopTrackingPointer(event.pointer);
+    } else if (_state == _State.dragging) {
+      onDragEnd?.call();
       stopTrackingPointer(event.pointer);
     }
   }

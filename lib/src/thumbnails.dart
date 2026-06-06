@@ -120,24 +120,10 @@ class ViewfinderThumbnails {
     .left || .right => false,
   };
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ViewfinderThumbnails &&
-          position == other.position &&
-          size == other.size &&
-          spacing == other.spacing &&
-          padding == other.padding &&
-          safeArea == other.safeArea &&
-          selectedBorder == other.selectedBorder &&
-          unselectedOpacity == other.unselectedOpacity &&
-          backgroundColor == other.backgroundColor &&
-          errorBuilder == other.errorBuilder &&
-          itemBuilder == other.itemBuilder &&
-          semanticLabelBuilder == other.semanticLabelBuilder;
-
-  @override
-  int get hashCode => Object.hash(
+  /// Identity tuple backing [==] and [hashCode] — one field list
+  /// instead of two parallel ones (records compare and hash
+  /// structurally).
+  Object get _props => (
     position,
     size,
     spacing,
@@ -150,4 +136,12 @@ class ViewfinderThumbnails {
     itemBuilder,
     semanticLabelBuilder,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderThumbnails && other._props == _props;
+
+  @override
+  int get hashCode => _props.hashCode;
 }
