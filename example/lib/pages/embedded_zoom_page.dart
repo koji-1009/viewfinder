@@ -14,6 +14,12 @@ class EmbeddedZoomPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    // Cap the article width with the ListView's own padding — an outer
+    // ConstrainedBox would leave the side margins outside the scrollable.
+    final inset = ((MediaQuery.sizeOf(context).width - 720) / 2).clamp(
+      16.0,
+      double.infinity,
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Embedded zoom')),
       body: Column(
@@ -27,83 +33,76 @@ class EmbeddedZoomPage extends StatelessWidget {
                 'non-image widget.',
           ),
           Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text('A scrollable article', style: text.headlineSmall),
-                    const SizedBox(height: 8),
-                    Text(
-                      'The figure below is a ViewfinderImage with '
-                      'panEnabled / scaleEnabled left on. It lives inside this '
-                      'ListView like any other widget — drag-to-dismiss and '
-                      'chrome are gallery-only concerns, so an embedded image '
-                      'just zooms in place.',
-                      style: text.bodyLarge?.copyWith(height: 1.5),
-                    ),
-                    const SizedBox(height: 16),
-                    _Figure(
-                      caption: 'Figure 1 — ViewfinderImage (image-backed)',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AspectRatio(
-                          aspectRatio: 4 / 3,
-                          child: ViewfinderImage(
-                            image: DemoPhotos.landscape,
-                            initialScale: const ViewfinderInitialScale.cover(),
-                            doubleTapScales: const [1, 2.5, 5],
-                            maxScale: 8,
-                            backgroundColor: Colors.black12,
-                            semanticLabel: 'Embedded landscape photo',
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text('Zooming a non-image widget', style: text.titleLarge),
-                    const SizedBox(height: 8),
-                    Text(
-                      'ViewfinderImage.child applies the same pan / zoom '
-                      'machinery to any widget. The contentKey gives the slot '
-                      'a stable identity so a rebuild does not leak the '
-                      'previous transform — for one static child a constant '
-                      "string ('chart') is enough.",
-                      style: text.bodyLarge?.copyWith(height: 1.5),
-                    ),
-                    const SizedBox(height: 16),
-                    _Figure(
-                      caption: 'Figure 2 — ViewfinderImage.child (widget)',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AspectRatio(
-                          aspectRatio: 4 / 3,
-                          child: ViewfinderImage.child(
-                            contentKey: 'chart',
-                            initialScale: const ViewfinderInitialScale.contain(
-                              0.9,
-                            ),
-                            doubleTapScales: const [1, 2, 4],
-                            maxScale: 6,
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainer,
-                            child: const _ZoomableCard(),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    Text(
-                      'Both figures share the package default double-tap '
-                      'ladder feel, rubber-band over-pan, and wheel-to-zoom on '
-                      'desktop and web — without a single full-screen route.',
-                      style: text.bodyMedium?.copyWith(height: 1.5),
-                    ),
-                  ],
+            child: ListView(
+              padding: EdgeInsets.symmetric(horizontal: inset, vertical: 16),
+              children: [
+                Text('A scrollable article', style: text.headlineSmall),
+                const SizedBox(height: 8),
+                Text(
+                  'The figure below is a ViewfinderImage with '
+                  'panEnabled / scaleEnabled left on. It lives inside this '
+                  'ListView like any other widget — drag-to-dismiss and '
+                  'chrome are gallery-only concerns, so an embedded image '
+                  'just zooms in place.',
+                  style: text.bodyLarge?.copyWith(height: 1.5),
                 ),
-              ),
+                const SizedBox(height: 16),
+                _Figure(
+                  caption: 'Figure 1 — ViewfinderImage (image-backed)',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 4 / 3,
+                      child: ViewfinderImage(
+                        image: DemoPhotos.landscape,
+                        initialScale: const ViewfinderInitialScale.cover(),
+                        doubleTapScales: const [1, 2.5, 5],
+                        maxScale: 8,
+                        backgroundColor: Colors.black12,
+                        semanticLabel: 'Embedded landscape photo',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('Zooming a non-image widget', style: text.titleLarge),
+                const SizedBox(height: 8),
+                Text(
+                  'ViewfinderImage.child applies the same pan / zoom '
+                  'machinery to any widget. The contentKey gives the slot '
+                  'a stable identity so a rebuild does not leak the '
+                  'previous transform — for one static child a constant '
+                  "string ('chart') is enough.",
+                  style: text.bodyLarge?.copyWith(height: 1.5),
+                ),
+                const SizedBox(height: 16),
+                _Figure(
+                  caption: 'Figure 2 — ViewfinderImage.child (widget)',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 4 / 3,
+                      child: ViewfinderImage.child(
+                        contentKey: 'chart',
+                        initialScale: const ViewfinderInitialScale.contain(0.9),
+                        doubleTapScales: const [1, 2, 4],
+                        maxScale: 6,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainer,
+                        child: const _ZoomableCard(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  'Both figures share the package default double-tap '
+                  'ladder feel, rubber-band over-pan, and wheel-to-zoom on '
+                  'desktop and web — without a single full-screen route.',
+                  style: text.bodyMedium?.copyWith(height: 1.5),
+                ),
+              ],
             ),
           ),
         ],

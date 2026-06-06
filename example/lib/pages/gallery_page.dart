@@ -10,12 +10,25 @@ import '../shared.dart';
 /// a thumbnail strip, page indicator, drag-to-dismiss, a tap-to-toggle
 /// chrome overlay, Hero flight, and a live settings sheet (tune icon)
 /// that flips every knob without restarting.
-class GalleryPage extends StatelessWidget {
+class GalleryPage extends StatefulWidget {
   const GalleryPage({super.key});
 
   @override
+  State<GalleryPage> createState() => _GalleryPageState();
+}
+
+class _GalleryPageState extends State<GalleryPage> {
+  final _settings = _Settings();
+
+  @override
+  void dispose() {
+    _settings.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return _SettingsScope(settings: _Settings(), child: const _GalleryGrid());
+    return _SettingsScope(settings: _settings, child: const _GalleryGrid());
   }
 }
 
@@ -24,7 +37,8 @@ class _GalleryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final heroEnabled = _Settings.of(context).heroEnabled;
+    final settings = _Settings.of(context);
+    final heroEnabled = settings.heroEnabled;
     final images = DemoPhotos.images;
     return Scaffold(
       appBar: AppBar(
@@ -33,7 +47,7 @@ class _GalleryGrid extends StatelessWidget {
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.tune),
-            onPressed: () => _openSettings(context),
+            onPressed: () => _openSettings(context, settings),
           ),
         ],
       ),
@@ -69,9 +83,15 @@ class _GalleryGrid extends StatelessWidget {
                     );
                     return InkWell(
                       borderRadius: BorderRadius.circular(8),
+                      // Pushed routes live outside this page's
+                      // _SettingsScope subtree; re-provide the same
+                      // settings instance.
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => _GalleryViewer(initialIndex: i),
+                          builder: (_) => _SettingsScope(
+                            settings: settings,
+                            child: _GalleryViewer(initialIndex: i),
+                          ),
                         ),
                       ),
                       child: heroEnabled
@@ -88,12 +108,13 @@ class _GalleryGrid extends StatelessWidget {
     );
   }
 
-  void _openSettings(BuildContext context) {
+  void _openSettings(BuildContext context, _Settings settings) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (_) => const _SettingsSheet(),
+      builder: (_) =>
+          _SettingsScope(settings: settings, child: const _SettingsSheet()),
     );
   }
 }
