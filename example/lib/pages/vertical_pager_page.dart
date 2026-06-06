@@ -21,10 +21,12 @@ class VerticalPagerPage extends StatelessWidget {
           const DemoHint(
             icon: Icons.swap_vert_outlined,
             message:
-                'Swipe up / down to page through photos. pagerAxis is '
-                'Axis.vertical, so the zoom→swipe edge hand-off runs on the '
-                'vertical axis too. Dismiss is intentionally off — it would '
-                'fight the vertical pager for the same drags.',
+                'Swipe up / down to page through photos — scroll wheel and '
+                'trackpad scrolling page too (mouseWheelBehavior: paging); '
+                'zoom with pinch or double-tap. pagerAxis is Axis.vertical, '
+                'so the zoom→swipe edge hand-off runs on the vertical axis '
+                'too. Dismiss is intentionally off — it would fight the '
+                'vertical pager for the same drags.',
           ),
           Expanded(
             child: Center(
@@ -70,15 +72,19 @@ class _VerticalViewerState extends State<_VerticalViewer> {
   @override
   Widget build(BuildContext context) {
     final images = DemoPhotos.images;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.black,
       body: Stack(
         children: [
           Viewfinder(
             itemCount: images.length,
+            backgroundColor: scheme.surface,
             controller: _controller,
             pagerAxis: Axis.vertical,
             precacheAdjacent: 1,
+            // Scrolling down a vertical feed should page, not zoom;
+            // pinch / double-tap still zoom.
+            mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
             indicator: const ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (context, index) => ViewfinderItem(
               image: images[index],
@@ -94,8 +100,10 @@ class _VerticalViewerState extends State<_VerticalViewer> {
             left: 0,
             child: SafeArea(
               child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                style: IconButton.styleFrom(backgroundColor: Colors.black45),
+                icon: Icon(Icons.close, color: scheme.onSurface),
+                style: IconButton.styleFrom(
+                  backgroundColor: scheme.surface.withValues(alpha: 0.72),
+                ),
                 onPressed: () {
                   if (_controller.resetCurrentImage()) return;
                   Navigator.of(context).maybePop();

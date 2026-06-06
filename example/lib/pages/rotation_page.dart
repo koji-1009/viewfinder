@@ -120,7 +120,7 @@ class _RotationPageState extends State<RotationPage> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: ColoredBox(
-                  color: Colors.black,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       _viewport = Size(

@@ -58,7 +58,9 @@ class EmbeddedZoomPage extends StatelessWidget {
                         initialScale: const ViewfinderInitialScale.cover(),
                         doubleTapScales: const [1, 2.5, 5],
                         maxScale: 8,
-                        backgroundColor: Colors.black12,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         semanticLabel: 'Embedded landscape photo',
                       ),
                     ),

@@ -80,10 +80,11 @@ class _SinglePhotoViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.black,
       body: Viewfinder.single(
         image: DemoPhotos.portrait,
+        backgroundColor: scheme.surface,
         hero: const ViewfinderHero(
           SinglePhotoPage._heroTag,
           thumbnailFit: BoxFit.cover,
@@ -92,6 +93,7 @@ class _SinglePhotoViewer extends StatelessWidget {
         maxScale: 10,
         dismiss: ViewfinderDismiss(
           onDismiss: () => Navigator.of(context).maybePop(),
+          backgroundColor: scheme.surface,
         ),
         errorBuilder: (_, _, _) => const DemoBrokenImage(),
         loadingBuilder: (_, child, progress) => progress == null
