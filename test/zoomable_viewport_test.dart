@@ -1155,4 +1155,180 @@ void main() {
       r.dispose();
     });
   });
+
+  group('ZoomableViewport external transform writes', () {
+    testWidgets('a programmatic write during a fling stops the fling', (
+      tester,
+    ) async {
+      final controller = TransformationController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomableViewport(
+              transformationController: controller,
+              maxScale: 20,
+              child: Container(color: Colors.blue),
+            ),
+          ),
+        ),
+      );
+
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+
+      // Zoom in so a pan fling has room to glide.
+      final a = await tester.startGesture(
+        center - const Offset(10, 0),
+        pointer: 1,
+      );
+      final b = await tester.startGesture(
+        center + const Offset(10, 0),
+        pointer: 2,
+      );
+      await tester.pump();
+      await a.moveBy(const Offset(-150, 0));
+      await b.moveBy(const Offset(150, 0));
+      await tester.pump();
+      await a.up();
+      await b.up();
+      await tester.pumpAndSettle();
+
+      // Fast single-finger drag and release → fling.
+      final p = await tester.startGesture(center);
+      for (var i = 0; i < 5; i++) {
+        await p.moveBy(const Offset(-30, 0));
+        await tester.pump(const Duration(milliseconds: 8));
+      }
+      await p.up();
+      // Let the fling start ticking.
+      await tester.pump(const Duration(milliseconds: 32));
+
+      // External takeover mid-fling: e.g. the viewer's `jumpToInitial`
+      // on a page change or an Esc reset.
+      controller.value = Matrix4.identity();
+      await tester.pump(const Duration(milliseconds: 32));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // The fling must not keep writing over the external value.
+      expect(controller.value, equals(Matrix4.identity()));
+      await tester.pumpAndSettle();
+      expect(controller.value, equals(Matrix4.identity()));
+    });
+
+    testWidgets('viewport resize re-clamps a zoomed, edge-anchored '
+        'transform', (tester) async {
+      final controller = TransformationController();
+      Size box = const Size(400, 400);
+      late StateSetter setBox;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: StatefulBuilder(
+                builder: (_, setState) {
+                  setBox = setState;
+                  return SizedBox.fromSize(
+                    size: box,
+                    child: ZoomableViewport(
+                      transformationController: controller,
+                      child: Container(color: Colors.blue),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Zoom to 2× anchored at the origin: content spans 0..800 in a
+      // 400-px viewport — flush at the left/top, overflowing right/
+      // bottom.
+      controller.value = Matrix4.identity()..scaleByDouble(2, 2, 1, 1);
+      await tester.pump();
+
+      // Pan so the content's RIGHT edge is flush instead: tx = -400.
+      controller.value = Matrix4.identity()
+        ..translateByDouble(-400, 0, 0, 1)
+        ..scaleByDouble(2, 2, 1, 1);
+      await tester.pump();
+
+      // Shrink the viewport. The old matrix leaves a 100-px gap on the
+      // right (content 0..600-100 → 500... gap); the resize re-clamp
+      // must nudge it back so the content still covers the viewport.
+      setBox(() => box = const Size(300, 300));
+      await tester.pump();
+      await tester.pump(); // post-frame re-clamp lands here
+      await tester.pumpAndSettle();
+
+      // Content (now 600×600 logical) must fully cover the 300-px
+      // viewport: left edge at or beyond 0, right edge at or beyond
+      // 300 — no gap. The pre-fix matrix left maxX at 200.
+      final m = controller.value;
+      final scale = _xyScaleOf(m);
+      final minX = m.storage[12];
+      final maxX = minX + 300 * scale;
+      expect(minX, lessThanOrEqualTo(0.5));
+      expect(maxX, greaterThanOrEqualTo(300 - 0.5));
+    });
+  });
+
+  group('ZoomableViewport claimPan', () {
+    testWidgets('claimPan=true claims the arena at hit-slop, panning '
+        'before the scale recognizer\'s own pan-slop', (tester) async {
+      final controller = TransformationController(
+        Matrix4.identity()..scaleByDouble(3, 3, 1, 1),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomableViewport(
+              transformationController: controller,
+              claimPan: (_, _) => true,
+              child: Container(color: Colors.blue),
+            ),
+          ),
+        ),
+      );
+
+      final before = controller.value.storage[12];
+      // 24 px: past the 18-px hit-slop, short of the ~36-px pan-slop.
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+      final p = await tester.startGesture(center);
+      await p.moveBy(const Offset(-24, 0));
+      await tester.pump();
+      final during = controller.value.storage[12];
+      await p.up();
+      await tester.pumpAndSettle();
+
+      expect(during, isNot(equals(before)));
+    });
+
+    testWidgets('without claimPan the same 24-px drag is not yet '
+        'accepted (baseline)', (tester) async {
+      final controller = TransformationController(
+        Matrix4.identity()..scaleByDouble(3, 3, 1, 1),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomableViewport(
+              transformationController: controller,
+              child: Container(color: Colors.blue),
+            ),
+          ),
+        ),
+      );
+
+      final before = controller.value.storage[12];
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+      final p = await tester.startGesture(center);
+      await p.moveBy(const Offset(-24, 0));
+      await tester.pump();
+      final during = controller.value.storage[12];
+      await p.up();
+      await tester.pumpAndSettle();
+
+      expect(during, equals(before));
+    });
+  });
 }

@@ -58,6 +58,18 @@ class Viewfinder extends StatefulWidget {
   }) : assert(itemCount >= 0),
        assert(minScale > 0),
        assert(maxScale >= minScale),
+       assert(
+         minScale <= 1.0,
+         'minScale is relative to the initial scale (1.0 = the '
+         'defaultInitialScale baseline). A value above 1.0 would put '
+         'the initial state below the minimum bound.',
+       ),
+       assert(
+         maxScale >= 1.0,
+         'maxScale is relative to the initial scale (1.0 = the '
+         'defaultInitialScale baseline). A value below 1.0 would put '
+         'the initial state above the maximum bound.',
+       ),
        assert(precacheAdjacent >= 0),
        assert(
          pagerAxis != Axis.vertical || dismiss == null,
@@ -245,14 +257,17 @@ class Viewfinder extends StatefulWidget {
   /// own [ViewfinderItem.initialScale].
   final ViewfinderInitialScale defaultInitialScale;
 
-  /// Smallest allowed scale (relative to the initial-scale baseline).
+  /// Smallest allowed scale (relative to the initial-scale baseline;
+  /// must be `<= 1.0` so the initial state stays within bounds).
   final double minScale;
 
-  /// Largest allowed scale (relative to the initial-scale baseline).
+  /// Largest allowed scale (relative to the initial-scale baseline;
+  /// must be `>= 1.0` so the initial state stays within bounds).
   final double maxScale;
 
-  /// Ladder of scales cycled by double-tap. `[]` disables double-tap;
-  /// a two-element list behaves as a toggle; three or more cycle.
+  /// Ladder of scales cycled by double-tap, relative to the
+  /// initial-scale baseline. `[]` disables double-tap; a two-element
+  /// list behaves as a toggle; three or more cycle.
   final List<double> doubleTapScales;
 
   /// Color painted behind every page.
@@ -277,8 +292,14 @@ class Viewfinder extends StatefulWidget {
   final ScrollPhysics? scrollPhysics;
 
   /// When true, hardware keyboards can drive the gallery:
-  /// - Left / Right arrows: previous / next page
-  /// - Escape: fire the configured `dismiss.onDismiss` (if any)
+  /// - Left / Right arrows: the page visually to the left / right
+  ///   (follows [reverse] and, for horizontal pagers, the ambient
+  ///   [Directionality]). Up / Down arrows do the same for a
+  ///   vertical [pagerAxis].
+  /// - PageUp / PageDown: previous / next page in logical order.
+  /// - Escape: two-stage — the first press resets the current page's
+  ///   zoom (if zoomed); the next fires the configured
+  ///   `dismiss.onDismiss` (if any).
   ///
   /// Useful primarily on desktop and web.
   final bool enableKeyboardShortcuts;
@@ -335,7 +356,13 @@ class Viewfinder extends StatefulWidget {
   final Set<PointerDeviceKind> swipeDragDevices;
 
   /// Reverses the order pages are shown in. Forwarded to
-  /// [PageView.reverse]. Useful for right-to-left galleries.
+  /// [PageView.reverse].
+  ///
+  /// Note that a horizontal [PageView] already follows the ambient
+  /// [Directionality] — under [TextDirection.rtl] pages lay out
+  /// right-to-left without this flag. [reverse] flips whatever that
+  /// base direction is; the gallery's edge-handoff and arrow-key
+  /// mappings track the combination.
   final bool reverse;
 
   /// When `true` (default), a zoomed image's pan against its boundary
@@ -455,6 +482,11 @@ class _ViewfinderState extends State<Viewfinder> {
     _controller = widget.controller ?? ViewfinderController();
     _ownsController = widget.controller == null;
     _currentIndex = _clampIndex(_controller.currentIndex);
+    // Write the clamped index back silently (no notify — we're inside
+    // the build phase): PageView.onPageChanged does not fire for the
+    // initial page, so an out-of-range initialIndex would otherwise
+    // keep reading back unclamped through `controller.currentIndex`.
+    _controller._currentIndex = _currentIndex;
     _pageController = PageController(initialPage: _currentIndex);
     _controller._attach(this);
   }
@@ -474,6 +506,12 @@ class _ViewfinderState extends State<Viewfinder> {
       _controller = widget.controller ?? ViewfinderController();
       _ownsController = widget.controller == null;
       _controller._attach(this);
+      // Adopt the gallery's current page into the incoming controller
+      // (silently — we're inside the build phase). A swap is not a
+      // navigation request: without this, the new controller would
+      // keep reporting its construction-time index until the next
+      // user-driven page change.
+      _controller._currentIndex = _currentIndex;
     }
     if (oldWidget.itemCount != widget.itemCount) {
       // Dispose per-slot controllers that fell off the right edge.
@@ -574,6 +612,34 @@ class _ViewfinderState extends State<Viewfinder> {
     widget.dismiss?.onDismiss();
   }
 
+  /// Whether the pager's visual order is flipped relative to logical
+  /// indices. [Viewfinder.reverse] flips it explicitly; a horizontal
+  /// [PageView] additionally lays out right-to-left under an RTL
+  /// [Directionality], so the two XOR.
+  bool get _effectiveReverse {
+    final rtl =
+        widget.pagerAxis == .horizontal &&
+        Directionality.of(context) == TextDirection.rtl;
+    return widget.reverse != rtl;
+  }
+
+  /// Index of the page a drag with the given [sign] (+1 = finger
+  /// moving right/down) navigates to. May be out of range — callers
+  /// bounds-check.
+  int _dragTargetIndex(int sign) =>
+      _currentIndex + ((sign > 0) != _effectiveReverse ? -1 : 1);
+
+  /// Maps a drag along [axis] with [sign] (+1 = finger moving
+  /// right/down) to the finger-motion direction used by
+  /// [ViewfinderImageController.canSwipeToward].
+  static AxisDirection _dragDirection(Axis axis, int sign) =>
+      switch ((axis, sign > 0)) {
+        (.horizontal, true) => .right,
+        (.horizontal, false) => .left,
+        (.vertical, true) => .down,
+        (.vertical, false) => .up,
+      };
+
   /// Gate: reject single-pointer pan along the pager axis when the parent
   /// [PageView] should take over. Returning `false` yields the gesture so
   /// the pager's drag recognizer can claim it. Pinches (two-pointer
@@ -604,13 +670,32 @@ class _ViewfinderState extends State<Viewfinder> {
     // Zoomed: handoff disabled means the image consumes all pan even
     // at the edge — user must reset zoom before swiping.
     if (!widget.allowEdgeHandoff) return true;
-    // Zoomed and at the relevant edge: cede to PageView only if a
-    // page exists in the drag direction (otherwise stay inside).
-    if (!_canSwipeAlongPager(c)) return true;
-    final targetIndex = _currentIndex + (sign > 0 ? -1 : 1);
-    // sign > 0 = finger moved positive → content pulled right/down →
-    // user wants previous page. Mirror for sign < 0.
-    return targetIndex < 0 || targetIndex >= widget.itemCount;
+    // Zoomed: cede to PageView only when the content has no more room
+    // to pan in the drag's own direction. The check is directional —
+    // a photo flush against its left edge still pans (not swipes)
+    // when the finger moves left to reveal the photo's right side.
+    if (c.canSwipeToward(_dragDirection(axis, sign))) {
+      // At the directional edge: hand off only if a page exists in
+      // the drag's navigation direction (otherwise stay inside).
+      final targetIndex = _dragTargetIndex(sign);
+      return targetIndex < 0 || targetIndex >= widget.itemCount;
+    }
+    return true;
+  }
+
+  /// Claim gate: a zoomed page's pan that [_canPanForPage] keeps
+  /// inside must also *win* the arena — the pager's drag recognizer
+  /// (and the dismiss wrapper's) accept at hit-slop, before the scale
+  /// recognizer's pan-slop, and would steal the drag otherwise. Never
+  /// claims while unzoomed so taps/swipes/dismiss compete normally.
+  bool _claimPanForPage(
+    int index,
+    ViewfinderImageController c,
+    Axis axis,
+    int sign,
+  ) {
+    if (c.scaleState != .zoomed) return false;
+    return _canPanForPage(index, c, axis, sign);
   }
 
   @override
@@ -639,6 +724,8 @@ class _ViewfinderState extends State<Viewfinder> {
               controller: imageController,
               canPan: (axis, sign) =>
                   _canPanForPage(index, imageController, axis, sign),
+              claimPan: (axis, sign) =>
+                  _claimPanForPage(index, imageController, axis, sign),
               defaultInitialScale: widget.defaultInitialScale,
               doubleTapScales: widget.doubleTapScales,
               defaultMinScale: widget.minScale,
@@ -648,6 +735,7 @@ class _ViewfinderState extends State<Viewfinder> {
                   widget.interactionEndFrictionCoefficient,
               rubberBandPan: widget.rubberBandPan,
               pageSpacing: widget.pageSpacing,
+              pagerAxis: widget.pagerAxis,
             );
           },
         ),
@@ -729,12 +817,22 @@ class _ViewfinderState extends State<Viewfinder> {
     }
 
     if (widget.enableKeyboardShortcuts) {
+      // Arrow keys are spatial: they move to the page visually in that
+      // direction, so they track reverse / RTL. PageUp / PageDown stay
+      // logical (previous / next index).
+      final visualStep = _effectiveReverse ? -1 : 1;
       body = CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
           const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-              _goTo(_currentIndex - 1),
+              _goTo(_currentIndex - visualStep),
           const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-              _goTo(_currentIndex + 1),
+              _goTo(_currentIndex + visualStep),
+          if (widget.pagerAxis == .vertical) ...{
+            const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                _goTo(_currentIndex - visualStep),
+            const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+                _goTo(_currentIndex + visualStep),
+          },
           const SingleActivator(LogicalKeyboardKey.pageUp): () =>
               _goTo(_currentIndex - 1),
           const SingleActivator(LogicalKeyboardKey.pageDown): () =>

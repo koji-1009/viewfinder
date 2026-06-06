@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../image.dart';
 import '../initial_scale.dart';
 import '../item.dart';
-import 'zoomable_viewport.dart';
 
 /// One page of a `Viewfinder` gallery.
 ///
@@ -19,6 +18,7 @@ class ViewfinderPage extends StatelessWidget {
     required this.isCurrent,
     required this.controller,
     required this.canPan,
+    required this.claimPan,
     required this.defaultInitialScale,
     required this.doubleTapScales,
     required this.defaultMinScale,
@@ -27,12 +27,14 @@ class ViewfinderPage extends StatelessWidget {
     required this.interactionEndFrictionCoefficient,
     required this.rubberBandPan,
     required this.pageSpacing,
+    required this.pagerAxis,
   });
 
   final ViewfinderItem item;
   final bool isCurrent;
   final ViewfinderImageController controller;
   final ZoomableCanPan canPan;
+  final ZoomableClaimPan claimPan;
   final ViewfinderInitialScale defaultInitialScale;
   final List<double> doubleTapScales;
   final double defaultMinScale;
@@ -41,6 +43,7 @@ class ViewfinderPage extends StatelessWidget {
   final double interactionEndFrictionCoefficient;
   final bool rubberBandPan;
   final double pageSpacing;
+  final Axis pagerAxis;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +69,7 @@ class ViewfinderPage extends StatelessWidget {
         semanticLabel: item.semanticLabel,
         controller: controller,
         canPan: canPan,
+        claimPan: claimPan,
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
@@ -83,6 +87,7 @@ class ViewfinderPage extends StatelessWidget {
         semanticLabel: item.semanticLabel,
         controller: controller,
         canPan: canPan,
+        claimPan: claimPan,
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
         backgroundColor: Colors.transparent,
@@ -92,9 +97,13 @@ class ViewfinderPage extends StatelessWidget {
       ),
     };
 
+    // Spacing goes on the pager's own axis — horizontal gaps between
+    // horizontally-paged pages, vertical gaps for a vertical pager.
     return pageSpacing > 0
         ? Padding(
-            padding: .symmetric(horizontal: pageSpacing / 2),
+            padding: pagerAxis == .horizontal
+                ? .symmetric(horizontal: pageSpacing / 2)
+                : .symmetric(vertical: pageSpacing / 2),
             child: page,
           )
         : page;
