@@ -9,6 +9,12 @@ A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware g
 
 Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
 
+## Live demo
+
+[https://koji-1009.github.io/viewfinder/](https://koji-1009.github.io/viewfinder/)
+
+A hosted build of the example app — try the gallery, single-photo viewer, vertical pager, embedded zoom, and rotation scenarios in the browser.
+
 
 <p align="center">
   <img src="doc/screenshots/zoom.webp" alt="Pinch and double-tap zoom" width="280">
