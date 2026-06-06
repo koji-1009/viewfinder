@@ -209,7 +209,8 @@ void main() {
   });
 
   testWidgets(
-    'ViewfinderImage.contain(factor) initialScale applies the multiplier',
+    'ViewfinderImage.contain(factor) initialScale applies the multiplier '
+    'to the matrix while controller.scale stays relative (1.0 = initial)',
     (tester) async {
       final controller = ViewfinderImageController();
       await tester.pumpWidget(
@@ -225,7 +226,12 @@ void main() {
         ),
       );
       await _settleImages(tester);
-      expect(controller.scale, closeTo(2.0, 0.001));
+      // The matrix carries the absolute multiplier...
+      final m = controller.currentTransform.storage;
+      expect(m[0], closeTo(2.0, 0.001));
+      // ...while the public scale is relative to the initial baseline.
+      expect(controller.scale, closeTo(1.0, 0.001));
+      expect(controller.scaleState, ViewfinderScaleState.initial);
     },
   );
 
@@ -401,10 +407,14 @@ void main() {
     );
     await _settleImages(tester);
     expect(controller.scale, closeTo(1.0, 0.001));
+    expect(controller.currentTransform.storage[0], closeTo(1.0, 0.001));
 
     setScale(() => scale = const ViewfinderInitialScale.contain(2.5));
     await tester.pumpAndSettle();
-    expect(controller.scale, closeTo(2.5, 0.001));
+    // The transform snaps to the new baseline; the relative scale
+    // reads 1.0 again because the baseline itself moved.
+    expect(controller.scale, closeTo(1.0, 0.001));
+    expect(controller.currentTransform.storage[0], closeTo(2.5, 0.001));
   });
 
   testWidgets(
@@ -3841,5 +3851,623 @@ void main() {
     await tester.dragFrom(center, const Offset(0, 500));
     await tester.pumpAndSettle();
     expect(dismissed, 1);
+  });
+
+  // -------------------------------------------------------------------
+  // Directional edge handoff
+  // -------------------------------------------------------------------
+
+  // Pinches the current page to a deep zoom and anchors its content
+  // against the viewport's left edge.
+  Future<void> zoomAndAnchorLeft(WidgetTester tester) async {
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final a = await tester.startGesture(
+      center - const Offset(5, 0),
+      pointer: 1,
+    );
+    final b = await tester.startGesture(
+      center + const Offset(5, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await a.moveBy(const Offset(-150, 0));
+    await b.moveBy(const Offset(150, 0));
+    await tester.pump();
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+
+    // Pan rightward until the content's left edge clamps to the
+    // viewport's left. The pinch lands at the 8.0 maxScale (content
+    // 3200 px wide, initially centered → left edge ~1400 px out), so
+    // pan well past that; the rubber band eats the excess.
+    final anchor = await tester.startGesture(center);
+    for (var i = 0; i < 40; i++) {
+      await anchor.moveBy(const Offset(80, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await anchor.up();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Viewfinder: zoomed at the LEFT edge, dragging LEFT pans the '
+      'image instead of swiping to the next page (directional handoff)', (
+    tester,
+  ) async {
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(controller.currentIndex, 1);
+
+    await zoomAndAnchorLeft(tester);
+    expect(controller.currentIndex, 1);
+
+    // Drag LEFT at the left edge: hidden content lies to the right, so
+    // the pan must stay inside the page. Before the directional check,
+    // "at either edge" handed the gesture to the pager and this swipe
+    // advanced to page 2.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final p = await tester.startGesture(center);
+    await p.moveBy(const Offset(-80, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await p.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+
+    // Keep dragging left until the content's RIGHT edge is exhausted…
+    final p2 = await tester.startGesture(center);
+    for (var i = 0; i < 30; i++) {
+      await p2.moveBy(const Offset(-200, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await p2.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+
+    // …now a leftward drag is at its own directional edge → hand off
+    // to the pager, which advances to the next page. Drag past half
+    // the 400-px page so the release settles on the neighbor (test
+    // gestures carry no timestamps, so there is no fling velocity).
+    final p3 = await tester.startGesture(center);
+    for (var i = 0; i < 8; i++) {
+      await p3.moveBy(const Offset(-40, 0));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await p3.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 2);
+  });
+
+  testWidgets('Viewfinder: zoomed at the left edge, dragging RIGHT hands '
+      'off to the previous page', (tester) async {
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    await zoomAndAnchorLeft(tester);
+    expect(controller.currentIndex, 1);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final p = await tester.startGesture(center);
+    for (var i = 0; i < 8; i++) {
+      await p.moveBy(const Offset(40, 0));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await p.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 0);
+  });
+
+  testWidgets('Viewfinder: reverse=true flips the handoff target page', (
+    tester,
+  ) async {
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              reverse: true,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    await zoomAndAnchorLeft(tester);
+    expect(controller.currentIndex, 1);
+
+    // In a reversed gallery page 2 sits visually to the LEFT of page 1,
+    // so a rightward drag at the left edge navigates to index 2 — the
+    // non-reversed mapping would (incorrectly) try index 0.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final p = await tester.startGesture(center);
+    for (var i = 0; i < 8; i++) {
+      await p.moveBy(const Offset(40, 0));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await p.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 2);
+  });
+
+  testWidgets('Viewfinder: a 2→1 finger transition still engages the '
+      'directional gate for the remaining finger', (tester) async {
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    await zoomAndAnchorLeft(tester);
+    expect(controller.currentIndex, 1);
+
+    // Finger A down, finger B taps down+up without moving (no arena
+    // acceptance), then A drags left at the left edge. The stale
+    // tracking of B used to skip the gate entirely, letting the pager
+    // steal the drag and advance the page.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final fingerA = await tester.startGesture(center, pointer: 7);
+    final fingerB = await tester.startGesture(
+      center + const Offset(40, 0),
+      pointer: 8,
+    );
+    await tester.pump();
+    await fingerB.up();
+    await tester.pump();
+    await fingerA.moveBy(const Offset(-80, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await fingerA.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+  });
+
+  testWidgets('Viewfinder: vertical drag on a zoomed page pans the image, '
+      'not the drag-to-dismiss wrapper', (tester) async {
+    var dismissed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 1,
+              dismiss: ViewfinderDismiss(
+                onDismiss: () => dismissed++,
+                threshold: 0.1,
+              ),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Zoom in deeply, then anchor against the left edge so the pager
+    // axis reports "at an edge" (the dismiss wrapper used to stay
+    // enabled in exactly this state).
+    await zoomAndAnchorLeft(tester);
+
+    // Drag in realistic small steps: the first 30-px move crosses the
+    // dismiss wrapper's hit-slop (18 px) before the scale recognizer's
+    // own pan-slop (36 px), so without the zoomed claim the wrapper
+    // would win this arena.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final p = await tester.startGesture(center);
+    for (var i = 0; i < 4; i++) {
+      await p.moveBy(const Offset(0, 30));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await p.up();
+    await tester.pumpAndSettle();
+    expect(dismissed, 0);
+
+    // After resetting the zoom the same drag dismisses again.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    final p2 = await tester.startGesture(center);
+    for (var i = 0; i < 4; i++) {
+      await p2.moveBy(const Offset(0, 30));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await p2.up();
+    await tester.pumpAndSettle();
+    expect(dismissed, 1);
+  });
+
+  // -------------------------------------------------------------------
+  // canSwipeToward
+  // -------------------------------------------------------------------
+
+  testWidgets('ViewfinderImageController.canSwipeToward distinguishes the '
+      'two edges of an axis', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(image: _memoryImage(), controller: controller),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Scale 3 with origin pinned at (0,0): content spans 0..3w, so the
+    // left edge is flush (no room to the left) while plenty of content
+    // hides past the right edge.
+    controller.jumpToTransform(Matrix4.identity()..scaleByDouble(3, 3, 1, 1));
+    await tester.pump();
+
+    expect(controller.canSwipeToward(AxisDirection.right), isTrue);
+    expect(controller.canSwipeToward(AxisDirection.left), isFalse);
+    expect(controller.canSwipeToward(AxisDirection.down), isTrue);
+    expect(controller.canSwipeToward(AxisDirection.up), isFalse);
+    // The axis-level query ORs the two directions.
+    expect(controller.canSwipe(Axis.horizontal), isTrue);
+    expect(controller.canSwipe(Axis.vertical), isTrue);
+  });
+
+  // -------------------------------------------------------------------
+  // Relative scale semantics
+  // -------------------------------------------------------------------
+
+  testWidgets('ViewfinderImage: doubleTapScales are relative to the '
+      'initial baseline', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            controller: controller,
+            initialScale: const ViewfinderInitialScale.contain(2.0),
+            doubleTapScales: const [1.0, 2.5],
+            maxScale: 10,
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(controller.scale, closeTo(1.0, 0.001));
+
+    final center = tester.getCenter(find.byType(ZoomableViewport));
+    await tester.tapAt(center);
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+
+    // Relative 2.5 → absolute 5.0 on a 2.0 baseline.
+    expect(controller.scale, closeTo(2.5, 0.01));
+    expect(controller.currentTransform.storage[0], closeTo(5.0, 0.01));
+  });
+
+  testWidgets('ViewfinderImage: pinch shrink clamps at minScale relative '
+      'to a sub-1.0 initial baseline', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: _memoryImage(),
+            controller: controller,
+            initialScale: const ViewfinderInitialScale.contain(0.8),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(controller.currentTransform.storage[0], closeTo(0.8, 0.001));
+
+    // Aggressive pinch-shrink: the absolute floor is minScale(1.0) ×
+    // baseline(0.8) = 0.8 — the initial state itself, which the old
+    // absolute clamp (floor 1.0) made unreachable after any gesture.
+    final viewer = find.byType(ZoomableViewport);
+    final center = tester.getCenter(viewer);
+    final a = await tester.startGesture(
+      center - const Offset(150, 0),
+      pointer: 1,
+    );
+    final b = await tester.startGesture(
+      center + const Offset(150, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await a.moveBy(const Offset(140, 0));
+    await b.moveBy(const Offset(-140, 0));
+    await tester.pump();
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+
+    expect(controller.currentTransform.storage[0], closeTo(0.8, 0.01));
+    expect(controller.scale, closeTo(1.0, 0.01));
+  });
+
+  test('ViewfinderImage: minScale above 1.0 is rejected at construction', () {
+    expect(
+      () => ViewfinderImage(image: _memoryImage(), minScale: 2.0),
+      throwsAssertionError,
+    );
+  });
+
+  test('Viewfinder: maxScale below 1.0 is rejected at construction', () {
+    expect(
+      () => Viewfinder(
+        itemCount: 1,
+        maxScale: 0.5,
+        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+      ),
+      throwsAssertionError,
+    );
+  });
+
+  // -------------------------------------------------------------------
+  // Controller index synchronization
+  // -------------------------------------------------------------------
+
+  testWidgets('ViewfinderController.currentIndex reflects the clamped '
+      'index after an out-of-range initialIndex', (tester) async {
+    final controller = ViewfinderController(initialIndex: 99);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 3,
+            controller: controller,
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    expect(controller.currentIndex, 2);
+  });
+
+  testWidgets('Viewfinder: a swapped-in controller adopts the gallery\'s '
+      'current page', (tester) async {
+    final a = ViewfinderController();
+    final b = ViewfinderController();
+    ViewfinderController active = a;
+    late StateSetter setController;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (_, setState) {
+            setController = setState;
+            return Scaffold(
+              body: Viewfinder(
+                itemCount: 3,
+                controller: active,
+                itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await _settleImages(tester);
+    a.jumpTo(2);
+    await tester.pumpAndSettle();
+    expect(a.currentIndex, 2);
+
+    setController(() => active = b);
+    await tester.pumpAndSettle();
+    expect(b.currentIndex, 2);
+  });
+
+  // -------------------------------------------------------------------
+  // pageSpacing on a vertical pager
+  // -------------------------------------------------------------------
+
+  testWidgets('Viewfinder: pageSpacing pads along the pager axis for a '
+      'vertical pager', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 2,
+            pagerAxis: Axis.vertical,
+            pageSpacing: 10,
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    final padding = tester.widgetList<Padding>(
+      find.ancestor(
+        of: find.byWidgetPredicate((w) => w is ViewfinderImage),
+        matching: find.byType(Padding),
+      ),
+    );
+    expect(
+      padding.any((p) => p.padding == const EdgeInsets.symmetric(vertical: 5)),
+      isTrue,
+    );
+  });
+
+  // -------------------------------------------------------------------
+  // Thumbnail strip initial scroll
+  // -------------------------------------------------------------------
+
+  testWidgets('ViewfinderThumbnails: opening at a non-zero index scrolls '
+      'the selected tile into view on first render', (tester) async {
+    final controller = ViewfinderController(initialIndex: 29);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 30,
+              controller: controller,
+              thumbnails: ViewfinderThumbnails.custom(
+                size: 40,
+                itemBuilder: (_, i, _) => Text('t$i'),
+              ),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // The last tile is only buildable when the strip scrolled to it;
+    // tile 0 must have been scrolled (and disposed) out of view.
+    expect(find.text('t29'), findsOneWidget);
+    expect(find.text('t0'), findsNothing);
+  });
+
+  // -------------------------------------------------------------------
+  // Dismiss threshold denominator
+  // -------------------------------------------------------------------
+
+  testWidgets('ViewfinderDismiss: threshold and onProgress divide by the '
+      'viewport height, not the shrunken onlyImage box', (tester) async {
+    var dismissed = 0;
+    final progress = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 2,
+            thumbnails: const ViewfinderThumbnails(size: 100),
+            dismiss: ViewfinderDismiss(
+              onDismiss: () => dismissed++,
+              slideType: ViewfinderDismissSlideType.onlyImage,
+              onProgress: progress.add,
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // Viewport height 600; pager box is shrunk by the 116-px thumbnail
+    // bar. A 134-px offset is 0.223 of the viewport (below the 0.25
+    // threshold) but 0.277 of the shrunken box (above it) — the old
+    // denominator dismissed here. First cross the 18-px touch slop
+    // (consumed by DragStartBehavior.start), then move the precise
+    // offset.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final g = await tester.startGesture(center);
+    await g.moveBy(const Offset(0, 19));
+    await tester.pump(const Duration(milliseconds: 16));
+    await g.moveBy(const Offset(0, 134));
+    await tester.pump(const Duration(milliseconds: 16));
+    await g.up();
+    await tester.pumpAndSettle();
+
+    expect(dismissed, 0);
+    expect(progress, isNotEmpty);
+    expect(progress.reduce((a, b) => a > b ? a : b), closeTo(0.223, 0.03));
+  });
+
+  // -------------------------------------------------------------------
+  // Keyboard: spatial arrows
+  // -------------------------------------------------------------------
+
+  testWidgets('Viewfinder: under RTL, arrow keys follow the visual page '
+      'order', (tester) async {
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            body: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    // RTL lays page 2 visually to the left of page 1.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 2);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+  });
+
+  testWidgets('Viewfinder: vertical pager binds Up/Down arrows', (
+    tester,
+  ) async {
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 3,
+            pagerAxis: Axis.vertical,
+            controller: controller,
+            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 0);
   });
 }

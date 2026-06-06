@@ -15,7 +15,11 @@ sealed class ViewfinderItem {
     this.initialScale,
     this.minScale,
     this.maxScale,
+    this.doubleTapScales,
     this.semanticLabel,
+    this.onLongPress,
+    this.onLongPressStart,
+    this.onSecondaryTapUp,
   });
 
   /// `ImageProvider`-backed page. The provider is fed straight to
@@ -30,7 +34,11 @@ sealed class ViewfinderItem {
     ViewfinderInitialScale? initialScale,
     double? minScale,
     double? maxScale,
+    List<double>? doubleTapScales,
     String? semanticLabel,
+    GestureLongPressCallback? onLongPress,
+    GestureLongPressStartCallback? onLongPressStart,
+    GestureTapUpCallback? onSecondaryTapUp,
     Duration thumbCrossFadeDuration,
     Curve thumbCrossFadeCurve,
     bool gaplessPlayback,
@@ -54,7 +62,11 @@ sealed class ViewfinderItem {
     ViewfinderInitialScale? initialScale,
     double? minScale,
     double? maxScale,
+    List<double>? doubleTapScales,
     String? semanticLabel,
+    GestureLongPressCallback? onLongPress,
+    GestureLongPressStartCallback? onLongPressStart,
+    GestureTapUpCallback? onSecondaryTapUp,
   }) = ViewfinderChildItem;
 
   /// Per-item Hero configuration. Null opts out.
@@ -69,8 +81,26 @@ sealed class ViewfinderItem {
   /// Per-item override of the gallery's `maxScale`.
   final double? maxScale;
 
+  /// Per-item override of the gallery's `doubleTapScales`. Pass `[]`
+  /// to disable double-tap zoom (both flavors) for this page only —
+  /// useful for pages whose child handles its own taps, e.g. a video
+  /// player where a double-tap should seek instead of zoom.
+  final List<double>? doubleTapScales;
+
   /// Semantic label for screen readers.
   final String? semanticLabel;
+
+  /// Per-item long-press callback — the standard mobile entry point
+  /// for save / share / context actions.
+  final GestureLongPressCallback? onLongPress;
+
+  /// Like [onLongPress], with the press position for anchoring a
+  /// context menu.
+  final GestureLongPressStartCallback? onLongPressStart;
+
+  /// Secondary-button (mouse right-click) tap with position — the
+  /// desktop / web counterpart of [onLongPress].
+  final GestureTapUpCallback? onSecondaryTapUp;
 }
 
 /// `ImageProvider`-backed [ViewfinderItem] variant.
@@ -86,7 +116,11 @@ final class ViewfinderImageItem extends ViewfinderItem {
     super.initialScale,
     super.minScale,
     super.maxScale,
+    super.doubleTapScales,
     super.semanticLabel,
+    super.onLongPress,
+    super.onLongPressStart,
+    super.onSecondaryTapUp,
     this.thumbCrossFadeDuration = const .new(milliseconds: 200),
     this.thumbCrossFadeCurve = Curves.easeOut,
     this.gaplessPlayback = true,
@@ -128,7 +162,11 @@ final class ViewfinderChildItem extends ViewfinderItem {
     super.initialScale,
     super.minScale,
     super.maxScale,
+    super.doubleTapScales,
     super.semanticLabel,
+    super.onLongPress,
+    super.onLongPressStart,
+    super.onSecondaryTapUp,
   }) : super._();
 
   /// The widget rendered for this page.

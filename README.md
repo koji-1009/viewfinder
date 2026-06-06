@@ -5,7 +5,7 @@
 [![CI](https://github.com/koji-1009/viewfinder/actions/workflows/ci.yaml/badge.svg)](https://github.com/koji-1009/viewfinder/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/koji-1009/viewfinder/graph/badge.svg)](https://codecov.io/gh/koji-1009/viewfinder)
 
-A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware gesture layer that hands off edge pans to a parent `PageView`, drag-to-dismiss, a synchronized thumbnail strip, a page indicator, keyboard shortcuts, and a chrome controller for tap-to-toggle UX.
+A photo viewer for Flutter. Pinch / double-tap / rotation zoom, an arena-aware gesture layer that hands off edge pans to a parent `PageView`, drag-to-dismiss, loop paging, a synchronized thumbnail strip, a page indicator, keyboard shortcuts, screen-reader announcements, and a chrome controller for tap-to-toggle UX.
 
 Accepts any `ImageProvider` (`NetworkImage`, `AssetImage`, `FileImage`, `MemoryImage`, …) and feeds it straight to `Image()`. No runtime dependencies beyond the Flutter SDK.
 
@@ -24,10 +24,11 @@ A hosted build of the example app — try the gallery, single-photo viewer, vert
 
 ## Highlights
 
-* **Native-feel gestures** — pinch, pan, fling on translation and scale, double-tap ladder, double-tap-and-drag continuous zoom (iOS Photos style), opt-in two-finger rotation, rubber-band over-pan with snap-back on release.
-* **Built for every input** — touch, stylus, trackpad, mouse, mouse wheel, hardware keyboard. Mouse-drag swipes pages on web and desktop out of the box.
-* **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis.
-* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss, tap-to-toggle chrome controller. All opt-in.
+* **Native-feel gestures** — pinch, pan, fling on translation and scale, double-tap ladder, double-tap-and-drag continuous zoom (iOS Photos style), opt-in two-finger rotation, rubber-band over-pan with snap-back on release, long-press / right-click hooks for save-and-share menus.
+* **Built for every input** — touch, stylus, trackpad, mouse, mouse wheel (zoom or page-turn), hardware keyboard. Mouse-drag swipes pages on web and desktop out of the box.
+* **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis — and only in the direction the photo has actually run out of content.
+* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss with overscroll-to-dismiss, loop paging, tap-to-toggle chrome controller with optional immersive system UI. All opt-in.
+* **Accessible by default** — page changes are announced to screen readers, thumbnails and indicators carry semantics, the platform reduce-motion setting is honored, and RTL locales get correctly mirrored paging and arrow keys.
 * **Robust pop / back-button** — pop while zoomed snaps every page back to its initial transform first, so any Hero flight starts from a sensible source rect; the first back / Esc on a zoomed photo resets the zoom, the second pops.
 * **No runtime dependencies** beyond the Flutter SDK.
 
@@ -101,32 +102,47 @@ For an "always 2×" feel, use `contain(2.0)`.
 
 Knobs on `ViewfinderImage` that control how a single image responds to gestures. `Viewfinder` forwards the same knobs (`defaultInitialScale` / `minScale` / `maxScale` / `doubleTapScales` / `rotateEnabled` / `rubberBandPan` / `interactionEndFrictionCoefficient`) to every page.
 
-| Knob                                | Default                       | What it does                                                                                                                                 |
-| ----------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `minScale` / `maxScale`             | `1.0` / `8.0`                 | Hard zoom bounds. Pinch past either is rubber-banded toward the limit.                                                                       |
-| `doubleTapScales`                   | `[1.0, 2.5, 5.0]`             | Cycle through these on each double-tap. Pass `[]` to disable double-tap zoom.                                                                |
-| `rubberBandPan`                     | `true`                        | When zoomed and panned past an edge, the displacement diminishes elastically and snaps back on release. Pass `false` for hard edge clamping. |
-| `rotateEnabled`                     | `false`                       | Two-finger rotation. Off by default because Flutter's `ScaleGestureRecognizer` reports rotation only when explicitly enabled.                |
-| `interactionEndFrictionCoefficient` | `kViewfinderDefaultFlingDrag` | Friction for post-release fling on translation and scale. Lower = longer glide. Defaults to `0.0000135`.                                     |
-| `panEnabled` / `scaleEnabled`       | `true` / `true`               | Disable pan or scale individually. Useful for embedded read-only zoom.                                                                       |
-| `onScaleStart` / `onScaleEnd`       | —                             | Gesture lifecycle callbacks. Useful for haptics and analytics.                                                                               |
-| `onScaleChanged`                    | —                             | Fires on every scale update with the current state.                                                                                          |
-| `onTap` / `onTapUp` / `onTapDown`   | —                             | Tap callbacks; `onTap` waits for double-tap disambiguation.                                                                                  |
+All scale knobs are **relative to the initial scale** — `1.0` always means "exactly as first shown", whatever `initialScale` resolves to.
+
+| Knob                                | Default                       | What it does                                                                                                                                                                                     |
+| ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `minScale` / `maxScale`             | `1.0` / `8.0`                 | Hard zoom bounds, relative to the initial scale. `minScale` must be `<= 1.0` and `maxScale >= 1.0` so the initial state stays in bounds.                                                         |
+| `doubleTapScales`                   | `[1.0, 2.5, 5.0]`             | Cycle through these on each double-tap, relative to the initial scale. Pass `[]` to disable double-tap zoom (including double-tap-drag). Per-item override via `ViewfinderItem.doubleTapScales`. |
+| `rubberBandPan`                     | `true`                        | When zoomed and panned past an edge, the displacement diminishes elastically and snaps back on release. Pass `false` for hard edge clamping.                                                     |
+| `rotateEnabled`                     | `false`                       | Two-finger rotation. Off by default because Flutter's `ScaleGestureRecognizer` reports rotation only when explicitly enabled.                                                                    |
+| `interactionEndFrictionCoefficient` | `kViewfinderDefaultFlingDrag` | Friction for post-release fling on translation and scale. Lower = longer glide. Defaults to `0.0000135`.                                                                                         |
+| `panEnabled` / `scaleEnabled`       | `true` / `true`               | Disable pan or scale individually. Useful for embedded read-only zoom.                                                                                                                           |
+| `doubleTapDragZoom`                 | `true`                        | Double-tap-and-hold, then slide to zoom continuously (iOS Photos style).                                                                                                                         |
+| `enableMouseWheelZoom`              | `true`                        | Wheel zooms around the pointer. Disable for viewers embedded in scrollable pages.                                                                                                                |
+| `onScaleStart` / `onScaleEnd`       | —                             | Gesture lifecycle callbacks. Useful for haptics and analytics.                                                                                                                                   |
+| `onScaleChanged`                    | —                             | Fires on every scale update with the current scale relative to the initial (1.0 = initial).                                                                                                      |
+| `onTap` / `onTapUp` / `onTapDown`   | —                             | Tap callbacks; `onTap` waits for double-tap disambiguation.                                                                                                                                      |
+| `onLongPress` / `onLongPressStart`  | —                             | Long-press hooks — the standard mobile entry point for save / share / context menus. `onLongPressStart` carries the press position.                                                              |
+| `onSecondaryTapUp`                  | —                             | Mouse right-click with position — the desktop / web counterpart of `onLongPress`. Also available per-item and (index-aware) on `Viewfinder.images`.                                              |
 
 ## Gallery & paging
 
 Knobs on `Viewfinder` that control how pages flow.
 
-| Knob                      | Default                              | What it does                                                                                                                                                        |
-| ------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pagerAxis`               | `Axis.horizontal`                    | Page direction. Vertical galleries also work, with the edge-handoff axis flipped accordingly.                                                                       |
-| `reverse`                 | `false`                              | Forwarded to `PageView.reverse`. Use `true` for right-to-left galleries.                                                                                            |
-| `pageSpacing`             | `0`                                  | Pixels between pages.                                                                                                                                               |
-| `precacheAdjacent`        | `1`                                  | Warm the `imageCache` for ±N pages around the current one. Uses the user's `ImageProvider` directly, so cache keys match what `Image()` will resolve at paint time. |
-| `allowEdgeHandoff`        | `true`                               | When zoomed and panned to the edge, yields to the parent `PageView` so the user can swipe to the next page without lifting. `false` clamps inside the current page. |
-| `swipeDragDevices`        | `kViewfinderDefaultSwipeDragDevices` | Pointer kinds allowed to swipe the underlying `PageView`. Default includes mouse / trackpad / touch / stylus. Pass a narrower set to opt out.                       |
-| `enableKeyboardShortcuts` | `true`                               | Arrow Left/Right, PageUp/Down, Esc (two-stage). Disable to take over the keyboard.                                                                                  |
-| `allowImplicitScrolling`  | `true`                               | Forwarded to `PageView.allowImplicitScrolling` for accessible focus traversal.                                                                                      |
+| Knob                      | Default                              | What it does                                                                                                                                                                                                              |
+| ------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pagerAxis`               | `Axis.horizontal`                    | Page direction. Vertical galleries also work, with the edge-handoff axis flipped accordingly (and Up/Down arrow keys bound).                                                                                              |
+| `reverse`                 | `false`                              | Forwarded to `PageView.reverse`. Note a horizontal pager already mirrors under RTL `Directionality`; `reverse` flips whatever the base direction is.                                                                      |
+| `loop`                    | `false`                              | Wrap-around paging: swiping past the last page lands on the first and vice versa. `jumpTo` / `animateTo` travel the shortest way around. Needs ≥ 2 items.                                                                 |
+| `pageSpacing`             | `0`                                  | Pixels between pages, along the pager axis.                                                                                                                                                                               |
+| `precacheAdjacent`        | `1`                                  | Warm the `imageCache` for ±N pages around the current one. Image-backed items only (`.child` pages are skipped); cache keys match what `Image()` resolves at paint.                                                       |
+| `allowEdgeHandoff`        | `true`                               | When zoomed and panned to the edge, yields to the parent `PageView` so the user can swipe to the next page without lifting — only in the direction the photo has no content left. `false` clamps inside the current page. |
+| `swipeDragDevices`        | `kViewfinderDefaultSwipeDragDevices` | Pointer kinds allowed to swipe the underlying `PageView`. Default includes mouse / trackpad / touch / stylus. Pass a narrower set to opt out.                                                                             |
+| `enableKeyboardShortcuts` | `true`                               | Arrow keys (visual order — RTL/`reverse`-aware), PageUp/Down (logical order), Esc (two-stage). Disable to take over the keyboard.                                                                                         |
+| `allowImplicitScrolling`  | `true`                               | Forwarded to `PageView.allowImplicitScrolling` for accessible focus traversal.                                                                                                                                            |
+| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` turns the wheel into page navigation (pinch / double-tap still zoom).                                                                                                         |
+| `onScaleStateChanged`     | —                                    | Fires when the current page transitions initial ⇄ zoomed — the hook for app chrome that reacts to zoom. Coalesced, not per-frame.                                                                                         |
+| `keepAlivePages`          | `false`                              | Keep off-screen pages' `State` alive (e.g. a `.child` page's video position). The pan/zoom transform still resets on page leave.                                                                                          |
+| `restorationId`           | —                                    | Forwarded to `PageView.restorationId`; the page position survives state restoration.                                                                                                                                      |
+| `immersiveSystemUi`       | `false`                              | Manage system status/navigation bars: follows chrome visibility with a `chromeController`, plain immersive otherwise; restores edge-to-edge on unmount.                                                                   |
+| `decodeSizeMultiplier`    | `null`                               | Decode every image-backed page at viewport size × N physical pixels instead of native resolution. See [Decode size and memory](#decode-size-and-memory).                                                                  |
+| `dismissOnOverscroll`     | `false`                              | Pulling ~100 px past the first/last page fires `dismiss.onDismiss` — the "swipe out of the gallery" gesture. Requires `dismiss`; incompatible with `loop`.                                                                |
+| `announcePageChanges`     | `true`                               | Announce page changes to screen readers. Localize via `pageAnnouncementBuilder`.                                                                                                                                          |
 
 ## Image loading
 
@@ -143,29 +159,40 @@ Knobs on `Viewfinder` that control how pages flow.
 
 > Drag-to-dismiss reads vertical drags, so pairing it with `pagerAxis: Axis.vertical` would put both into the same gesture arena. The combination is rejected at construction time (debug assert). Pick one — horizontal pager + dismiss, or vertical pager without dismiss.
 
-| Knob             | Default      | What it does                                                                                     |
-| ---------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| `direction`      | `.vertical`  | `.vertical` accepts both, or restrict to `.up` / `.down`.                                        |
-| `threshold`      | `0.25`       | Fraction of viewport height past which release triggers dismissal.                               |
-| `slideType`      | `.wholePage` | `wholePage` slides thumbnails too; `onlyImage` keeps thumbnails / indicator / overlays anchored. |
-| `fadeBackground` | `true`       | Fade the background color in step with the drag.                                                 |
-| `onProgress`     | —            | Reports normalized drag progress (incl. spring-back). Useful for fading external chrome in sync. |
+| Knob                 | Default      | What it does                                                                                                                        |
+| -------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `direction`          | `.vertical`  | `.vertical` accepts both, or restrict to `.up` / `.down`.                                                                           |
+| `threshold`          | `0.25`       | Fraction of viewport height past which release triggers dismissal.                                                                  |
+| `slideType`          | `.wholePage` | `wholePage` slides thumbnails too; `onlyImage` keeps thumbnails / indicator / overlays anchored.                                    |
+| `fadeBackground`     | `true`       | Fade the background color in step with the drag.                                                                                    |
+| `onProgress`         | —            | Reports normalized drag progress (incl. spring-back). Useful for fading external chrome in sync.                                    |
+| `onThresholdCrossed` | —            | Edge-triggered: `true` when the drag crosses `threshold`, `false` when it recedes. The natural hook for a haptic "far enough" tick. |
+
+For the complementary "swipe past the last page to leave" gesture, see `dismissOnOverscroll` in [Gallery & paging](#gallery--paging).
 
 ## Page indicator
 
 Sealed `ViewfinderPageIndicator`, three variants:
 
-* `ViewfinderPageIndicatorDots` — one dot per page.
+* `ViewfinderPageIndicatorDots` — one dot per page. Exposes a "Page i of N" label to screen readers (`semanticLabelBuilder` to localize).
 * `ViewfinderPageIndicatorLabel` — single text label, default `"i / N"`. Pass `labelBuilder` for full control.
 * `ViewfinderPageIndicatorAdaptive` — dots up to `maxDots`, then falls back to the label. The most common pick.
 
 ## Inputs
 
 * **Touch / stylus / trackpad / mouse** — wired by default.
-* **Mouse wheel** — zooms around the pointer location.
+* **Mouse wheel** — zooms around the pointer location; switch to page-turning with `mouseWheelBehavior: .paging`.
 * **Trackpad pinch (macOS)** — wired in.
 * **Mouse drag on web/desktop** — swipes pages out of the box (`swipeDragDevices` includes mouse).
-* **Hardware keyboard** — Arrow Left/Right, PageUp/Down, Escape. Escape and Android back are two-stage: first press resets zoom on a zoomed photo, second press pops / dismisses.
+* **Mouse right-click / long-press** — `onSecondaryTapUp` / `onLongPress` hooks for context menus and save/share actions.
+* **Hardware keyboard** — Arrow keys move to the page visually in that direction (RTL / `reverse`-aware; Up/Down for vertical pagers), PageUp/Down move in logical order, Escape is two-stage: first press resets zoom on a zoomed photo, second press pops / dismisses. Android back behaves the same.
+
+## Accessibility
+
+* **Page announcements** — every page change is spoken by TalkBack / VoiceOver (`'Photo 2 of 12'` by default; localize with `pageAnnouncementBuilder`, silence with `announcePageChanges: false`).
+* **Semantics everywhere** — pages take `semanticLabel`, thumbnail tiles are buttons with a selected state (`ViewfinderThumbnails.semanticLabelBuilder` to localize), the dots indicator carries a position label.
+* **Reduce motion** — when the platform requests reduced motion (`MediaQuery.disableAnimations`), double-tap zoom, page animations, flings, rubber-band snap-backs, thumbnail scrolling, and chrome fades all jump instead of animating.
+* **RTL** — a horizontal pager follows the ambient `Directionality`; edge handoff and arrow keys track the visual order.
 
 ## Imperative control
 
@@ -187,22 +214,26 @@ controller.resetCurrentImage();   // returns true if a zoom was reset
 ```dart
 final controller = ViewfinderImageController();
 
-// Zoom.
+// Zoom. Scales are relative to the initial scale (1.0 = as first shown).
 controller.animateToScale(3.0);
 controller.animateToScale(2.0, focal: tapPosition);
 controller.reset();
+controller.scale;                     // double, 1.0 = initial
 
-// Direct matrix control.
+// Direct matrix control (absolute matrices).
 final m = controller.currentTransform;
 controller.jumpToTransform(m..translate(20.0, 0.0));
 controller.animateToTransform(targetMatrix);
 
 // Edge-state introspection.
-controller.canSwipe(Axis.horizontal); // bool — at an edge of the screen-axis viewport
+controller.canSwipe(Axis.horizontal); // bool — at either edge of that axis
 controller.canSwipe(Axis.vertical);   // bool
+controller.canSwipeToward(AxisDirection.left); // direction-aware: no more room for a leftward drag
 controller.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content); // photo-frame edge instead
 controller.scaleState;                // ViewfinderScaleState
 ```
+
+`canSwipeToward` takes the direction of the _finger motion_: a finger moving right pulls the content right and is exhausted once the content's left edge meets the viewport's left. The bundled gallery uses exactly this to hand off pans to the pager only in the direction the photo has run out of content.
 
 The default `mode: SwipeEdgeMode.screen` matches the bundled gallery — a screen-axis pager. Pass `SwipeEdgeMode.content` when you have a custom pager that should follow the photo's own axes through rotation (e.g., a pager that stays aligned with the photo's logical horizontal even at 90° rotation). At zero rotation both modes agree.
 
@@ -265,9 +296,18 @@ ViewfinderItem(
 
 ## Decode size and memory
 
-The library does **not** wrap your `ImageProvider` with `ResizeImage`. The provider you pass is the provider that decodes — at the source's native resolution. For a zoom-capable photo viewer that's usually what you want, because zoom past 1× immediately runs out of pixels otherwise.
+By default the library does **not** wrap your `ImageProvider` with `ResizeImage`. The provider you pass is the provider that decodes — at the source's native resolution. For a zoom-capable photo viewer that's usually what you want, because zoom past 1× immediately runs out of pixels otherwise.
 
-If memory matters more than zoom quality, wrap on your side:
+When memory matters more than maximum zoom quality, set `decodeSizeMultiplier` on the gallery: every image-backed page (and its adjacent-page precache, with matching cache keys) decodes at viewport size × N physical pixels instead:
+
+```dart
+Viewfinder(
+  decodeSizeMultiplier: 2.0, // 2× viewport: sharp up to ~2× zoom
+  // …
+)
+```
+
+Upscaling is never forced (`ResizeImagePolicy.fit`), so small sources keep decoding at their native size. For full manual control — or for a standalone `ViewfinderImage` — wrap the provider yourself:
 
 ```dart
 ViewfinderItem(
@@ -280,6 +320,10 @@ ViewfinderItem(
 ```
 
 For thumbnail-style usage at small sizes, multiply your logical pixel size by `MediaQuery.devicePixelRatioOf(context)` — `ResizeImage.width` / `.height` are interpreted as physical pixels in current Flutter.
+
+Other levers for very large galleries: `precacheAdjacent: 0` disables warm-up decodes entirely, and `allowImplicitScrolling: false` stops `PageView` from keeping neighbor pages built. The defaults (`1` / `true`) hold up to three decoded full-size neighbors alive around the current page — multiply that by your source resolution to estimate peak decode memory.
+
+A note on orientation: the provider is handed to `Image()` untouched, so EXIF orientation is applied (or not) by the codec exactly as it would be in any other Flutter `Image`. A sideways `FileImage` of a phone photo is an EXIF question, not a viewer one.
 
 ## Network images: pair with a byte-caching provider
 
@@ -302,6 +346,53 @@ The layers compose cleanly:
 | Decode size   | Decode at the requested size | your `ResizeImage` (or none) |
 | Decoded frame | Reuse across same cache key  | Flutter `imageCache`         |
 | Bytes / HTTP  | Reuse across decode sizes    | your byte-caching provider   |
+
+## Video and other non-image pages
+
+`ViewfinderItem.child` gives any widget the same zoom / pan / dismiss machinery as a photo. For a page that handles its own taps — a video player whose single tap toggles play/pause and whose double-tap seeks — disable the viewer's double-tap zoom for that page only and let the child's own gesture detectors win the arena (they sit deeper, so they do):
+
+```dart
+ViewfinderItem.child(
+  contentKey: video.id,
+  doubleTapScales: const [], // double-tap (and double-tap-drag) zoom off for this page
+  child: MyVideoPlayer(video),
+)
+```
+
+Pinch-zoom still works on the page; drags inside the child's own controls (a scrub bar, for instance) stay with the child because its recognizers accept at the same slop as the pager's but sit closer to the pointer. Pair with `keepAlivePages: true` so playback position survives swiping away and back.
+
+## Browser back / URL sync (web)
+
+The gallery doesn't write to the browser history itself — which router owns the URL is an app decision. Syncing is two lines in each direction: report page changes to your router, and drive the controller from the route:
+
+```dart
+final controller = ViewfinderController(initialIndex: initialFromUrl);
+
+Viewfinder(
+  controller: controller,
+  onPageChanged: (index) {
+    // e.g. go_router: context.replace('/photos/$index');
+    // or:  Router.neglect(context, () => context.go('/photos/$index'));
+  },
+  // …
+)
+
+// When the route changes (browser back / deep link):
+controller.jumpTo(indexFromUrl);
+```
+
+Use your router's "replace, don't push" flavor per swipe so the back button leaves the gallery rather than replaying every photo.
+
+## Testing your gallery
+
+Stable keys are attached for widget tests — no fishing through internal types:
+
+```dart
+await tester.tap(find.byKey(ViewfinderKeys.thumbnail(3)));
+expect(find.byKey(ViewfinderKeys.page(3)), findsOneWidget);
+```
+
+`ViewfinderImage`'s runtime type is a package-internal subclass, so `find.byType(ViewfinderImage)` does not match; when you need the widget itself use `find.byWidgetPredicate((w) => w is ViewfinderImage)`. To drive zoom programmatically in a test, pass a `ViewfinderImageController` and call `animateToScale` / `jumpToTransform`.
 
 ## License
 

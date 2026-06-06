@@ -21,6 +21,11 @@ enum ViewfinderThumbnailPosition {
 typedef ViewfinderThumbnailItemBuilder =
     Widget Function(BuildContext context, int index, bool selected);
 
+/// Builds the screen-reader label for a thumbnail tile. See
+/// [ViewfinderThumbnails.semanticLabelBuilder].
+typedef ViewfinderThumbnailSemanticLabelBuilder =
+    String Function(int index, bool selected);
+
 /// Configures the optional thumbnail strip shown alongside a [Viewfinder].
 @immutable
 class ViewfinderThumbnails {
@@ -39,6 +44,7 @@ class ViewfinderThumbnails {
     this.backgroundColor = const .new(0x8A000000),
     this.errorBuilder,
     this.itemBuilder,
+    this.semanticLabelBuilder,
   });
 
   /// Convenience constructor for callers that always provide a custom
@@ -52,6 +58,7 @@ class ViewfinderThumbnails {
     this.safeArea = true,
     this.backgroundColor = const .new(0x8A000000),
     required ViewfinderThumbnailItemBuilder this.itemBuilder,
+    this.semanticLabelBuilder,
   }) : selectedBorder = const Border.fromBorderSide(
          BorderSide(color: Colors.white, width: 2),
        ),
@@ -102,29 +109,21 @@ class ViewfinderThumbnails {
   /// `selected` flag and renders the tile exactly as returned.
   final ViewfinderThumbnailItemBuilder? itemBuilder;
 
+  /// Builds the screen-reader label for each tile. Defaults to
+  /// `'Thumbnail ${index + 1}'` — supply your own for localization.
+  /// Tiles are exposed as buttons with the selected state either way.
+  final ViewfinderThumbnailSemanticLabelBuilder? semanticLabelBuilder;
+
   /// True when the strip lays out horizontally (top or bottom).
   bool get isHorizontal => switch (position) {
     .top || .bottom => true,
     .left || .right => false,
   };
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ViewfinderThumbnails &&
-          position == other.position &&
-          size == other.size &&
-          spacing == other.spacing &&
-          padding == other.padding &&
-          safeArea == other.safeArea &&
-          selectedBorder == other.selectedBorder &&
-          unselectedOpacity == other.unselectedOpacity &&
-          backgroundColor == other.backgroundColor &&
-          errorBuilder == other.errorBuilder &&
-          itemBuilder == other.itemBuilder;
-
-  @override
-  int get hashCode => Object.hash(
+  /// Identity tuple backing [==] and [hashCode] — one field list
+  /// instead of two parallel ones (records compare and hash
+  /// structurally).
+  Object get _props => (
     position,
     size,
     spacing,
@@ -135,5 +134,14 @@ class ViewfinderThumbnails {
     backgroundColor,
     errorBuilder,
     itemBuilder,
+    semanticLabelBuilder,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderThumbnails && other._props == _props;
+
+  @override
+  int get hashCode => _props.hashCode;
 }

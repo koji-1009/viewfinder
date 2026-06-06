@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../item.dart';
+import '../keys.dart';
 import '../thumbnails.dart';
 
 /// Thumbnail strip — internal renderer driven by `Viewfinder` from the
@@ -29,6 +30,18 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
   final _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // Bring the initially-selected tile into view on first render —
+    // a gallery opened at a non-zero index would otherwise show the
+    // strip scrolled to offset 0 with the highlight off-screen. Jump
+    // (no animation): there is no previous position to animate from.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToCurrent(animate: false);
+    });
+  }
+
+  @override
   void didUpdateWidget(covariant ViewfinderThumbnailBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentIndex != widget.currentIndex) {
@@ -44,7 +57,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     super.dispose();
   }
 
-  void _scrollToCurrent() {
+  void _scrollToCurrent({bool animate = true}) {
     if (!_scrollController.hasClients) return;
     final cfg = widget.config;
     final extent = cfg.size + cfg.spacing;
@@ -55,6 +68,10 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
       0.0,
       maxScroll,
     );
+    if (!animate || MediaQuery.maybeDisableAnimationsOf(context) == true) {
+      _scrollController.jumpTo(desired);
+      return;
+    }
     _scrollController.animateTo(
       desired,
       duration: const .new(milliseconds: 200),
@@ -74,6 +91,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
       itemCount: widget.itemCount,
       itemExtent: cfg.size + cfg.spacing,
       itemBuilder: (context, i) => _ThumbnailTile(
+        key: ViewfinderKeys.thumbnail(i),
         config: cfg,
         item: widget.itemAt(i),
         index: i,
@@ -113,6 +131,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
 
 class _ThumbnailTile extends StatelessWidget {
   const _ThumbnailTile({
+    super.key,
     required this.config,
     required this.item,
     required this.index,
@@ -143,7 +162,14 @@ class _ThumbnailTile extends StatelessWidget {
       padding: config.isHorizontal
           ? .only(right: config.spacing)
           : .only(bottom: config.spacing),
-      child: GestureDetector(behavior: .opaque, onTap: onTap, child: inner),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label:
+            config.semanticLabelBuilder?.call(index, selected) ??
+            'Thumbnail ${index + 1}',
+        child: GestureDetector(behavior: .opaque, onTap: onTap, child: inner),
+      ),
     );
   }
 }

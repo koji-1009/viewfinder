@@ -22,6 +22,11 @@ sealed class ViewfinderPageIndicator {
   final EdgeInsets padding;
 }
 
+/// Builds the screen-reader label for a dots indicator. See
+/// [ViewfinderPageIndicatorDots.semanticLabelBuilder].
+typedef ViewfinderPageIndicatorSemanticLabelBuilder =
+    String Function(int currentIndex, int itemCount);
+
 /// Renders one dot per item, highlighting the current page.
 final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   /// Creates a dots indicator.
@@ -33,6 +38,7 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     this.spacing = 8,
     this.color = Colors.white54,
     this.activeColor = Colors.white,
+    this.semanticLabelBuilder,
   });
 
   /// Diameter of inactive dots.
@@ -50,20 +56,16 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   /// Color of the dot for the current page.
   final Color activeColor;
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ViewfinderPageIndicatorDots &&
-          alignment == other.alignment &&
-          padding == other.padding &&
-          dotSize == other.dotSize &&
-          activeDotSize == other.activeDotSize &&
-          spacing == other.spacing &&
-          color == other.color &&
-          activeColor == other.activeColor;
+  /// Builds the screen-reader label for the dot row, which is
+  /// otherwise purely visual. Defaults to
+  /// `'Page ${currentIndex + 1} of $itemCount'` — supply your own for
+  /// localization.
+  final ViewfinderPageIndicatorSemanticLabelBuilder? semanticLabelBuilder;
 
-  @override
-  int get hashCode => Object.hash(
+  /// Identity tuple backing [==] and [hashCode] — one field list
+  /// instead of two parallel ones (records compare and hash
+  /// structurally).
+  Object get _props => (
     alignment,
     padding,
     dotSize,
@@ -71,7 +73,16 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     spacing,
     color,
     activeColor,
+    semanticLabelBuilder,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewfinderPageIndicatorDots && other._props == _props;
+
+  @override
+  int get hashCode => _props.hashCode;
 }
 
 /// Signature for [ViewfinderPageIndicatorLabel.labelBuilder] and the label
@@ -95,16 +106,15 @@ final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
   /// Builds the rendered label. When `null`, a default pill is used.
   final ViewfinderPageIndicatorLabelBuilder? labelBuilder;
 
+  Object get _props => (alignment, padding, labelBuilder);
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ViewfinderPageIndicatorLabel &&
-          alignment == other.alignment &&
-          padding == other.padding &&
-          labelBuilder == other.labelBuilder;
+      other is ViewfinderPageIndicatorLabel && other._props == _props;
 
   @override
-  int get hashCode => Object.hash(alignment, padding, labelBuilder);
+  int get hashCode => _props.hashCode;
 }
 
 /// Renders [dots] when `itemCount <= maxDots`; switches to [label] beyond it.
@@ -134,16 +144,13 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   /// variant takes over.
   final int maxDots;
 
+  Object get _props => (alignment, padding, dots, label, maxDots);
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ViewfinderPageIndicatorAdaptive &&
-          alignment == other.alignment &&
-          padding == other.padding &&
-          dots == other.dots &&
-          label == other.label &&
-          maxDots == other.maxDots;
+      other is ViewfinderPageIndicatorAdaptive && other._props == _props;
 
   @override
-  int get hashCode => Object.hash(alignment, padding, dots, label, maxDots);
+  int get hashCode => _props.hashCode;
 }
