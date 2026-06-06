@@ -58,7 +58,7 @@ class _VerticalViewerState extends State<_VerticalViewer> {
   @override
   void initState() {
     super.initState();
-    _controller = ViewfinderController(initialIndex: 0);
+    _controller = ViewfinderController();
   }
 
   @override
@@ -83,13 +83,7 @@ class _VerticalViewerState extends State<_VerticalViewer> {
             itemBuilder: (context, index) => ViewfinderItem(
               image: images[index],
               semanticLabel: 'Photo ${index + 1}',
-              errorBuilder: (_, _, _) => const Center(
-                child: Icon(
-                  Icons.broken_image,
-                  color: Colors.white54,
-                  size: 48,
-                ),
-              ),
+              errorBuilder: (_, _, _) => const DemoBrokenImage(),
               loadingBuilder: (_, child, progress) => progress == null
                   ? child
                   : const Center(child: CircularProgressIndicator()),

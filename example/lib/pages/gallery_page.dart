@@ -196,11 +196,11 @@ class _GalleryViewerState extends State<_GalleryViewer> {
       body: Viewfinder(
         itemCount: images.length,
         controller: _controller,
-        defaultInitialScale: s.initialScale.resolve(),
+        defaultInitialScale: s.initialScale,
         precacheAdjacent: s.precacheAdjacent,
         pagerAxis: s.pagerAxis,
         rotateEnabled: s.rotateEnabled,
-        swipeDragDevices: s.dragDevices.resolve(),
+        swipeDragDevices: s.dragDevices,
         doubleTapScales: const [1.0, 2.5, 5.0],
         indicator: _buildIndicator(s),
         thumbnails: _buildThumbnails(s),
@@ -220,9 +220,7 @@ class _GalleryViewerState extends State<_GalleryViewer> {
           image: images[index],
           hero: s.heroEnabled ? ViewfinderHero('gallery-photo-$index') : null,
           semanticLabel: 'Photo ${index + 1}',
-          errorBuilder: (_, _, _) => const Center(
-            child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
-          ),
+          errorBuilder: (_, _, _) => const DemoBrokenImage(),
           loadingBuilder: (_, child, progress) => progress == null
               ? child
               : const Center(child: CircularProgressIndicator()),
@@ -322,12 +320,22 @@ class _SettingsSheet extends StatelessWidget {
         ListTile(
           dense: true,
           title: const Text('swipeDragDevices'),
-          subtitle: DropdownButton<_DragDevicesPreset>(
+          subtitle: DropdownButton<Set<PointerDeviceKind>>(
             isExpanded: true,
             value: settings.dragDevices,
-            items: [
-              for (final p in _DragDevicesPreset.values)
-                DropdownMenuItem(value: p, child: Text(p.label)),
+            items: const [
+              DropdownMenuItem(
+                value: kViewfinderDefaultSwipeDragDevices,
+                child: Text('all kinds (default)'),
+              ),
+              DropdownMenuItem(
+                value: _touchLikeDevices,
+                child: Text('touch / stylus only'),
+              ),
+              DropdownMenuItem(
+                value: _allButMouseDevices,
+                child: Text('all except mouse'),
+              ),
             ],
             onChanged: (v) => v == null
                 ? null
@@ -353,19 +361,19 @@ class _SettingsSheet extends StatelessWidget {
         ListTile(
           dense: true,
           title: const Text('defaultInitialScale'),
-          subtitle: SegmentedButton<_InitialScalePreset>(
+          subtitle: SegmentedButton<ViewfinderInitialScale>(
             segments: const [
               ButtonSegment(
-                value: _InitialScalePreset.contain,
+                value: ViewfinderInitialScale.contain(),
                 label: Text('contain'),
               ),
               ButtonSegment(
-                value: _InitialScalePreset.cover,
+                value: ViewfinderInitialScale.cover(),
                 label: Text('cover'),
               ),
               ButtonSegment(
-                value: _InitialScalePreset.contain15,
-                label: Text('1.5x'),
+                value: ViewfinderInitialScale.contain(1.5),
+                label: Text('contain(1.5)'),
               ),
             ],
             selected: {settings.initialScale},
@@ -542,9 +550,9 @@ class _Settings extends ChangeNotifier {
 
   Axis pagerAxis = Axis.horizontal;
   int precacheAdjacent = 2;
-  _DragDevicesPreset dragDevices = _DragDevicesPreset.all;
+  Set<PointerDeviceKind> dragDevices = kViewfinderDefaultSwipeDragDevices;
   bool rotateEnabled = false;
-  _InitialScalePreset initialScale = _InitialScalePreset.contain;
+  ViewfinderInitialScale initialScale = const ViewfinderInitialScale.contain();
   bool heroEnabled = true;
 
   bool thumbnailsEnabled = true;
@@ -570,38 +578,18 @@ class _Settings extends ChangeNotifier {
   }
 }
 
-enum _DragDevicesPreset { all, touchOnly, noMouse }
+/// Preset device sets for the swipeDragDevices dropdown. Const so the
+/// dropdown's identity-based selection works.
+const Set<PointerDeviceKind> _touchLikeDevices = {
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+};
 
-extension on _DragDevicesPreset {
-  Set<PointerDeviceKind> resolve() => switch (this) {
-    _DragDevicesPreset.all => kViewfinderDefaultSwipeDragDevices,
-    _DragDevicesPreset.touchOnly => const {
-      PointerDeviceKind.touch,
-      PointerDeviceKind.stylus,
-      PointerDeviceKind.invertedStylus,
-    },
-    _DragDevicesPreset.noMouse => const {
-      PointerDeviceKind.touch,
-      PointerDeviceKind.stylus,
-      PointerDeviceKind.invertedStylus,
-      PointerDeviceKind.trackpad,
-      PointerDeviceKind.unknown,
-    },
-  };
-
-  String get label => switch (this) {
-    _DragDevicesPreset.all => 'all kinds (default)',
-    _DragDevicesPreset.touchOnly => 'touch / stylus only',
-    _DragDevicesPreset.noMouse => 'all except mouse',
-  };
-}
-
-enum _InitialScalePreset { contain, cover, contain15 }
-
-extension on _InitialScalePreset {
-  ViewfinderInitialScale resolve() => switch (this) {
-    _InitialScalePreset.contain => const ViewfinderInitialScale.contain(),
-    _InitialScalePreset.cover => const ViewfinderInitialScale.cover(),
-    _InitialScalePreset.contain15 => const ViewfinderInitialScale.contain(1.5),
-  };
-}
+const Set<PointerDeviceKind> _allButMouseDevices = {
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+  PointerDeviceKind.trackpad,
+  PointerDeviceKind.unknown,
+};

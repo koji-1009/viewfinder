@@ -50,29 +50,20 @@ class DemoPhotos {
 /// Rendered above the live demo area so visitors know which gesture or
 /// shortcut the scenario is showing off.
 class DemoHint extends StatelessWidget {
-  const DemoHint({
-    super.key,
-    required this.icon,
-    required this.message,
-    this.background,
-    this.foreground,
-  });
+  const DemoHint({super.key, required this.icon, required this.message});
 
   final IconData icon;
   final String message;
-  final Color? background;
-  final Color? foreground;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final bg = background ?? scheme.surfaceContainerHighest;
-    final fg = foreground ?? scheme.onSurfaceVariant;
+    final fg = scheme.onSurfaceVariant;
     return SafeArea(
       bottom: false,
       child: Container(
         width: double.infinity,
-        color: bg,
+        color: scheme.surfaceContainerHighest,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
@@ -91,6 +82,17 @@ class DemoHint extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Full-screen error placeholder shared by the viewer scenarios'
+/// `errorBuilder`s.
+class DemoBrokenImage extends StatelessWidget {
+  const DemoBrokenImage({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
+  );
 }
 
 /// A compact list of keyboard / pointer affordances, shown on scenarios

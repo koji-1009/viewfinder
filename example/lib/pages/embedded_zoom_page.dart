@@ -164,7 +164,7 @@ class _ZoomableCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'ViewfinderImage knobs',
+            'ViewfinderImage knobs (package defaults)',
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
@@ -206,11 +206,11 @@ class _ZoomableCard extends StatelessWidget {
 }
 
 class _Cell extends StatelessWidget {
-  const _Cell(this.text, {this.mono = false, this.color});
+  const _Cell(this.text, {this.mono = false, required this.color});
 
   final String text;
   final bool mono;
-  final Color? color;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {

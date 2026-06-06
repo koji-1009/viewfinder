@@ -90,9 +90,7 @@ class _SinglePhotoViewer extends StatelessWidget {
         dismiss: ViewfinderDismiss(
           onDismiss: () => Navigator.of(context).maybePop(),
         ),
-        errorBuilder: (_, _, _) => const Center(
-          child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
-        ),
+        errorBuilder: (_, _, _) => const DemoBrokenImage(),
         loadingBuilder: (_, child, progress) => progress == null
             ? child
             : const Center(child: CircularProgressIndicator()),
