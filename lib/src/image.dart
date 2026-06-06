@@ -66,6 +66,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.rubberBandPan = true,
     this.doubleTapDragZoom = true,
     this.enableMouseWheelZoom = true,
+    this.wheelPagingAxis,
   }) : assert(minScale > 0),
        assert(maxScale >= minScale),
        assert(
@@ -118,6 +119,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     bool rubberBandPan,
     bool doubleTapDragZoom,
     bool enableMouseWheelZoom,
+    Axis? wheelPagingAxis,
   }) = ViewfinderProviderImage;
 
   /// Displays an arbitrary [child] widget instead of an image.
@@ -159,6 +161,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     bool rubberBandPan,
     bool doubleTapDragZoom,
     bool enableMouseWheelZoom,
+    Axis? wheelPagingAxis,
   }) = ViewfinderChildImage;
 
   /// Initial scale applied before any user interaction.
@@ -268,10 +271,15 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// Whether scroll-style input — mouse wheel and trackpad two-finger
   /// scroll — zooms around the pointer. Disable when embedding the
   /// viewer in a scrollable page that should keep receiving scroll
-  /// events, or when a surrounding gallery repurposes the wheel for
-  /// page navigation. Pinch (touch, trackpad, or browser pinch) zooms
+  /// events. Pinch (touch, trackpad, or browser pinch) zooms
   /// regardless.
   final bool enableMouseWheelZoom;
+
+  /// Axis a surrounding pager scrolls on. When set, scroll events
+  /// dominant along it pass through untouched — the pager turns pages
+  /// on them — and zoom reads the cross-axis component. The gallery
+  /// sets this in `ViewfinderMouseWheelBehavior.paging` mode.
+  final Axis? wheelPagingAxis;
 
   @override
   State<ViewfinderImage> createState() => _ViewfinderImageState();
@@ -313,6 +321,7 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     super.rubberBandPan,
     super.doubleTapDragZoom,
     super.enableMouseWheelZoom,
+    super.wheelPagingAxis,
     this.thumbCrossFadeDuration = const .new(milliseconds: 200),
     this.thumbCrossFadeCurve = Curves.easeOut,
     this.gaplessPlayback = true,
@@ -385,6 +394,7 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.rubberBandPan,
     super.doubleTapDragZoom,
     super.enableMouseWheelZoom,
+    super.wheelPagingAxis,
   }) : super._();
 
   /// Widget rendered for this view.
@@ -786,6 +796,7 @@ class _ImageBody extends StatelessWidget {
           doubleTapDragZoom:
               spec.doubleTapDragZoom && spec.doubleTapScales.isNotEmpty,
           enableMouseWheelZoom: spec.enableMouseWheelZoom,
+          wheelPagingAxis: spec.wheelPagingAxis,
           onScaleStart: spec.onScaleStart,
           onScaleEnd: spec.onScaleEnd,
           child: content,

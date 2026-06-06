@@ -551,9 +551,10 @@ enum ViewfinderMouseWheelBehavior {
   /// Scrolling zooms the photo around the pointer (default).
   zoom,
 
-  /// Scrolling navigates pages: down/right goes to the next page,
-  /// up/left to the previous. Scroll zoom is disabled; pinch,
-  /// double-tap, and double-tap-drag still zoom.
+  /// Scrolling along the pager axis navigates pages (toward the next
+  /// page on down/right); scrolling across it zooms. One scroll
+  /// gesture turns one page. Pinch, double-tap, and double-tap-drag
+  /// still zoom.
   paging,
 }
 
@@ -598,6 +599,7 @@ class _ViewfinderState extends State<Viewfinder> {
   // Wheel-paging bookkeeping (see _onWheelPageDelta).
   double _wheelAccum = 0;
   bool _wheelLocked = false;
+  bool _wheelSettling = false;
   Timer? _wheelCooldown;
   // The chrome controller the system-UI sync is currently listening to.
   ViewfinderChromeController? _systemUiChrome;
@@ -960,8 +962,8 @@ class _ViewfinderState extends State<Viewfinder> {
     _chrome?.bumpAutoHide();
   }
 
-  void _goTo(int index, {bool animate = true}) {
-    if (!_pageController.hasClients) return;
+  Future<void> _goTo(int index, {bool animate = true}) {
+    if (!_pageController.hasClients) return Future<void>.value();
     final int targetRaw;
     if (_loopEnabled) {
       // Wrap the target and travel the shortest way around the loop.
@@ -977,14 +979,14 @@ class _ViewfinderState extends State<Viewfinder> {
     }
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) == true;
     if (animate && !reduceMotion) {
-      _pageController.animateToPage(
+      return _pageController.animateToPage(
         targetRaw,
         duration: const .new(milliseconds: 280),
         curve: Curves.easeOutCubic,
       );
-    } else {
-      _pageController.jumpToPage(targetRaw);
     }
+    _pageController.jumpToPage(targetRaw);
+    return Future<void>.value();
   }
 
   /// Accumulated scroll distance that turns one page. A discrete wheel
@@ -1016,14 +1018,16 @@ class _ViewfinderState extends State<Viewfinder> {
     _wheelAccum += delta;
     if (_wheelAccum.abs() < _kWheelPageThreshold) return;
     _wheelAccum = 0;
-    // The lock also flips the pager to NeverScrollableScrollPhysics:
-    // while the page transition animates, the Scrollable's children
-    // are not hit-testable, so the events of the momentum tail would
-    // otherwise reach the PageView's own wheel handler and raw-scroll
-    // the settling pager.
-    setState(() => _wheelLocked = true);
+    _wheelLocked = true;
     _armWheelCooldown();
-    _goTo(_currentIndex + (delta > 0 ? 1 : -1));
+    // While the transition animates, the Scrollable's children are not
+    // hit-testable and the momentum tail would reach the PageView's
+    // own wheel handler and raw-scroll the settling pager — flip to
+    // NeverScrollableScrollPhysics for exactly that window.
+    setState(() => _wheelSettling = true);
+    _goTo(_currentIndex + (delta > 0 ? 1 : -1)).whenComplete(() {
+      if (mounted) setState(() => _wheelSettling = false);
+    });
   }
 
   void _armWheelCooldown() {
@@ -1172,7 +1176,7 @@ class _ViewfinderState extends State<Viewfinder> {
       onPageChanged: _onPageChanged,
       allowImplicitScrolling: widget.allowImplicitScrolling,
       restorationId: widget.restorationId,
-      physics: _swipeLocked || _wheelLocked
+      physics: _swipeLocked || _wheelSettling
           ? const NeverScrollableScrollPhysics()
           : widget.scrollPhysics ?? const PageScrollPhysics(),
       itemBuilder: (context, rawIndex) {
@@ -1195,7 +1199,6 @@ class _ViewfinderState extends State<Viewfinder> {
           pageSpacing: widget.pageSpacing,
           pagerAxis: widget.pagerAxis,
           filterQuality: widget.filterQuality,
-          enableMouseWheelZoom: widget.mouseWheelBehavior == .zoom,
           onWheelDelta: widget.mouseWheelBehavior == .paging
               ? _onWheelPageDelta
               : null,
@@ -1235,9 +1238,11 @@ class _ViewfinderState extends State<Viewfinder> {
       // through the momentum tail.
       pageView = Listener(
         onPointerSignal: (event) {
-          if (event is PointerScrollEvent && _wheelLocked) {
-            _armWheelCooldown();
-          }
+          if (event is! PointerScrollEvent || !_wheelLocked) return;
+          final d = event.scrollDelta;
+          final along = widget.pagerAxis == .horizontal ? d.dx : d.dy;
+          final cross = widget.pagerAxis == .horizontal ? d.dy : d.dx;
+          if (along.abs() > cross.abs()) _armWheelCooldown();
         },
         child: pageView,
       );

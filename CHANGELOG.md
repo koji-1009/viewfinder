@@ -31,7 +31,7 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 * `pageSpacing` pads along the pager axis on vertical pagers.
 * Dismiss `threshold` / `onProgress` divide by the viewport height in `slideType: onlyImage`, matching the visuals.
 * Browser pinch zoom (`PointerScaleEvent`) is handled; trackpad two-finger scroll follows the wheel-zoom setting, so `mouseWheelBehavior: paging` pages on trackpads too.
-* `mouseWheelBehavior: paging` turns one page per scroll gesture — a trackpad stream and its momentum tail no longer stutter the transition or skip pages.
+* `mouseWheelBehavior: paging` splits scrolling by axis: along the pager turns one page per scroll gesture (the momentum tail no longer stutters the transition or skips pages), across it zooms.
 * A tap followed by a horizontal drag swipes the page; double-tap-drag zoom claims only vertically dominant drags.
 
 ### API additions

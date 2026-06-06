@@ -347,8 +347,9 @@ void main() {
   // Mouse wheel behavior
   // -------------------------------------------------------------------
 
-  testWidgets('mouseWheelBehavior.paging: wheel turns pages instead of '
-      'zooming', (tester) async {
+  testWidgets('mouseWheelBehavior.paging: pager-axis scroll turns pages', (
+    tester,
+  ) async {
     final controller = ViewfinderController();
     await tester.pumpWidget(
       MaterialApp(
@@ -371,13 +372,46 @@ void main() {
     final center = tester.getCenter(find.byType(ZoomableViewport).first);
     final pointer = TestPointer(1, PointerDeviceKind.mouse);
     pointer.hover(center);
-    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(120, 0)));
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 1);
 
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(-120, 0)));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 0);
+  });
+
+  testWidgets('mouseWheelBehavior.paging: cross-axis scroll zooms the '
+      'current page', (tester) async {
+    final controller = ViewfinderController();
+    final scaleEvents = <ViewfinderScaleState>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
+              onScaleStateChanged: (_, s) => scaleEvents.add(s),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(center);
     await tester.sendEventToBinding(pointer.scroll(const Offset(0, -120)));
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 0);
+    expect(scaleEvents, [ViewfinderScaleState.zoomed]);
   });
 
   testWidgets('mouseWheelBehavior.paging: a trackpad scroll stream with '
@@ -407,7 +441,7 @@ void main() {
     // A swipe plus its momentum tail: many small deltas over ~400 ms,
     // far exceeding the page threshold in total.
     for (var i = 0; i < 50; i++) {
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, 24)));
+      await tester.sendEventToBinding(pointer.scroll(const Offset(24, 0)));
       await tester.pump(const Duration(milliseconds: 8));
     }
     await tester.pumpAndSettle();
@@ -415,7 +449,7 @@ void main() {
 
     // After the stream pauses, the next gesture pages again.
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(120, 0)));
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 2);
   });

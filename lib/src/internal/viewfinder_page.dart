@@ -31,7 +31,6 @@ class ViewfinderPage extends StatelessWidget {
     required this.pageSpacing,
     required this.pagerAxis,
     required this.filterQuality,
-    this.enableMouseWheelZoom = true,
     this.onWheelDelta,
     this.wrapProvider,
   });
@@ -51,12 +50,9 @@ class ViewfinderPage extends StatelessWidget {
   final Axis pagerAxis;
   final FilterQuality filterQuality;
 
-  /// Forwarded to [ViewfinderImage.enableMouseWheelZoom]; `false` when
-  /// the gallery repurposes the wheel for page navigation.
-  final bool enableMouseWheelZoom;
-
-  /// When non-null, scroll-wheel events over this page are consumed
-  /// and reported here (the gallery's wheel-paging mode).
+  /// When non-null, pager-axis-dominant scroll-wheel events over this
+  /// page are consumed and reported here (the gallery's wheel-paging
+  /// mode); cross-axis scroll keeps zooming.
   final ValueChanged<double>? onWheelDelta;
 
   /// Applied to an image-backed item's main provider before display —
@@ -100,7 +96,7 @@ class ViewfinderPage extends StatelessWidget {
         thumbCrossFadeCurve: item.thumbCrossFadeCurve,
         gaplessPlayback: item.gaplessPlayback,
         rubberBandPan: rubberBandPan,
-        enableMouseWheelZoom: enableMouseWheelZoom,
+        wheelPagingAxis: onWheelDelta != null ? pagerAxis : null,
       ),
       final ViewfinderChildItem item => ViewfinderImage.child(
         initialScale: initialScale,
@@ -118,26 +114,28 @@ class ViewfinderPage extends StatelessWidget {
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
         backgroundColor: colors.transparent,
         rubberBandPan: rubberBandPan,
-        enableMouseWheelZoom: enableMouseWheelZoom,
+        wheelPagingAxis: onWheelDelta != null ? pagerAxis : null,
         contentKey: item.contentKey,
         child: item.child,
       ),
     };
 
-    // Wheel-paging mode: consume scroll-wheel events over the page and
-    // report them to the gallery. Registered through the pointer-signal
-    // resolver from this leaf-side Listener, so it wins over the
-    // enclosing scrollable's own wheel handling.
+    // Wheel-paging mode: scroll dominant along the pager axis turns
+    // pages; cross-axis scroll falls to the viewer's zoom (the deeper
+    // ZoomableViewport skips pager-axis-dominant events, so the two
+    // split the resolver cleanly). Registered from this leaf-side
+    // Listener, so it wins over the enclosing scrollable's own wheel
+    // handling.
     if (onWheelDelta case final onWheel?) {
       page = Listener(
         onPointerSignal: (event) {
           if (event is! PointerScrollEvent) return;
-          GestureBinding.instance.pointerSignalResolver.register(event, (e) {
-            final scroll = e as PointerScrollEvent;
-            final delta = scroll.scrollDelta.dy != 0
-                ? scroll.scrollDelta.dy
-                : scroll.scrollDelta.dx;
-            if (delta != 0) onWheel(delta);
+          final d = event.scrollDelta;
+          final along = pagerAxis == .horizontal ? d.dx : d.dy;
+          final cross = pagerAxis == .horizontal ? d.dy : d.dx;
+          if (along.abs() <= cross.abs()) return;
+          GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+            onWheel(along);
           });
         },
         child: page,

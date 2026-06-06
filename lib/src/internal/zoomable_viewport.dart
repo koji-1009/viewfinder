@@ -62,6 +62,7 @@ class ZoomableViewport extends StatefulWidget {
     this.doubleTapDragZoom = true,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.enableMouseWheelZoom = true,
+    this.wheelPagingAxis,
     this.rubberBandPan = true,
     this.onScaleStart,
     this.onScaleEnd,
@@ -100,6 +101,11 @@ class ZoomableViewport extends StatefulWidget {
   /// can disable it to let scrolling bubble. Pinch (touch, trackpad,
   /// or browser pinch) zooms regardless.
   final bool enableMouseWheelZoom;
+
+  /// Axis a surrounding pager owns. When set, scroll events dominant
+  /// along it pass through untouched (the pager turns pages on them)
+  /// and zoom reads the cross-axis component instead of `dy`.
+  final Axis? wheelPagingAxis;
 
   /// When `true` (default), pulling a zoomed image past its boundary
   /// shows live elastic over-pan that diminishes with distance, then
@@ -429,8 +435,22 @@ class _ZoomableViewportState extends State<ZoomableViewport>
         factor = scale;
       case PointerScrollEvent(:final scrollDelta)
           when widget.enableMouseWheelZoom:
+        final double zoomDelta;
+        if (widget.wheelPagingAxis case final axis?) {
+          final along = axis == Axis.horizontal
+              ? scrollDelta.dx
+              : scrollDelta.dy;
+          final cross = axis == Axis.horizontal
+              ? scrollDelta.dy
+              : scrollDelta.dx;
+          // Pager-axis-dominant scroll belongs to the pager.
+          if (along.abs() > cross.abs()) return;
+          zoomDelta = cross;
+        } else {
+          zoomDelta = scrollDelta.dy;
+        }
         factor = math
-            .pow(2.0, -scrollDelta.dy / _kMouseWheelPixelsPerUnit)
+            .pow(2.0, -zoomDelta / _kMouseWheelPixelsPerUnit)
             .toDouble();
       default:
         return;
