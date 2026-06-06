@@ -1,3 +1,46 @@
+## 0.4.0
+
+### Breaking changes
+
+* `minScale` / `maxScale` / `doubleTapScales`, `ViewfinderImageController.scale` / `animateToScale`, and `onScaleChanged` are now relative to the initial scale (`1.0` = initial), as documented. Galleries using the default `contain()` are unaffected; raw-matrix APIs stay absolute.
+* `minScale > 1.0` / `maxScale < 1.0` are rejected at construction.
+* An empty `doubleTapScales` also disables double-tap-drag zoom.
+
+### Bug fixes
+
+* Edge handoff is direction-aware: a zoomed photo flush against one edge pans toward its hidden side instead of swiping pages, and such pans are no longer stolen by the pager or dismiss recognizers. Drag-to-dismiss is now reliably disabled while zoomed.
+* `reverse: true` and RTL layouts hand off to the correct neighbor page.
+* Lifting one finger of a two-finger gesture no longer disables edge handoff for the remaining finger.
+* Programmatic transform writes stop an in-flight fling/snap-back; starting a gesture stops an in-flight double-tap animation.
+* The transform is re-clamped when the viewport is resized (rotation, split screen).
+* `ViewfinderController.currentIndex` is clamped after an out-of-range `initialIndex`; a swapped-in controller adopts the current page.
+* `pageSpacing` pads along the pager axis on vertical pagers.
+* The thumbnail strip scrolls the selected tile into view on first render.
+* Dismiss `threshold` / `onProgress` divide by the viewport height in `slideType: onlyImage`, matching the visuals.
+
+### API additions
+
+* `loop: true` — wrap-around paging; `jumpTo` / `animateTo` travel the shortest direction.
+* `onLongPress` / `onLongPressStart` / `onSecondaryTapUp` on `ViewfinderImage` and `ViewfinderItem`; forwarded by `Viewfinder.images` (index-aware) and `Viewfinder.single`.
+* `Viewfinder.onScaleStateChanged` — coalesced initial ⇄ zoomed transitions of the current page.
+* `ViewfinderImageController.canSwipeToward(AxisDirection, {SwipeEdgeMode mode})`.
+* Screen-reader page announcements (`announcePageChanges`, `pageAnnouncementBuilder`); semantics on thumbnail tiles and the dots indicator (`semanticLabelBuilder`).
+* Reduce-motion support: animations jump when `MediaQuery.disableAnimations` is set.
+* `mouseWheelBehavior` (`.zoom` / `.paging`); `ViewfinderImage.enableMouseWheelZoom` and `doubleTapDragZoom` are now public.
+* `decodeSizeMultiplier` — decode pages and their precache at viewport × N physical pixels.
+* `dismissOnOverscroll` — overscrolling past the first/last page dismisses.
+* `ViewfinderDismiss.onThresholdCrossed` — edge-triggered threshold signal for haptics.
+* `keepAlivePages`, `restorationId`, `immersiveSystemUi`.
+* Per-item `doubleTapScales` override.
+* `ViewfinderKeys` — stable `page(i)` / `thumbnail(i)` keys for widget tests.
+* Up/Down arrow keys navigate vertical pagers.
+* `ZoomableCanPan` / `ZoomableClaimPan` typedefs are exported.
+
+### Documentation
+
+* `enableKeyboardShortcuts` dartdoc lists PageUp/PageDown and the two-stage Escape.
+* New README sections: accessibility, video / non-image pages, browser-back / URL sync, testing, decode size and memory.
+
 ## 0.3.2
 
 ### Bug fixes
