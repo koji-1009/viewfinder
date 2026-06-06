@@ -69,6 +69,9 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.onTap,
     this.onTapUp,
     this.onTapDown,
+    this.onLongPress,
+    this.onLongPressStart,
+    this.onSecondaryTapUp,
     this.controller,
     this.panEnabled = true,
     this.scaleEnabled = true,
@@ -78,6 +81,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.semanticLabel,
     this.rubberBandPan = true,
+    this.doubleTapDragZoom = true,
+    this.enableMouseWheelZoom = true,
   }) : assert(minScale > 0),
        assert(maxScale >= minScale),
        assert(
@@ -114,6 +119,9 @@ sealed class ViewfinderImage extends StatefulWidget {
     GestureTapCallback? onTap,
     GestureTapUpCallback? onTapUp,
     GestureTapDownCallback? onTapDown,
+    GestureLongPressCallback? onLongPress,
+    GestureLongPressStartCallback? onLongPressStart,
+    GestureTapUpCallback? onSecondaryTapUp,
     ViewfinderImageController? controller,
     bool panEnabled,
     bool scaleEnabled,
@@ -126,6 +134,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     Curve thumbCrossFadeCurve,
     bool gaplessPlayback,
     bool rubberBandPan,
+    bool doubleTapDragZoom,
+    bool enableMouseWheelZoom,
   }) = ViewfinderProviderImage;
 
   /// Displays an arbitrary [child] widget instead of an image.
@@ -154,6 +164,9 @@ sealed class ViewfinderImage extends StatefulWidget {
     GestureTapCallback? onTap,
     GestureTapUpCallback? onTapUp,
     GestureTapDownCallback? onTapDown,
+    GestureLongPressCallback? onLongPress,
+    GestureLongPressStartCallback? onLongPressStart,
+    GestureTapUpCallback? onSecondaryTapUp,
     ViewfinderImageController? controller,
     bool panEnabled,
     bool scaleEnabled,
@@ -163,6 +176,8 @@ sealed class ViewfinderImage extends StatefulWidget {
     double interactionEndFrictionCoefficient,
     String? semanticLabel,
     bool rubberBandPan,
+    bool doubleTapDragZoom,
+    bool enableMouseWheelZoom,
   }) = ViewfinderChildImage;
 
   /// Initial scale applied before any user interaction.
@@ -212,6 +227,19 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// See [onTap].
   final GestureTapDownCallback? onTapDown;
 
+  /// Fired on a long-press — the standard mobile entry point for
+  /// save / share / context actions. Only registered when non-null,
+  /// so the default gesture arena is unchanged otherwise.
+  final GestureLongPressCallback? onLongPress;
+
+  /// Like [onLongPress] but carries the press position, for anchoring
+  /// a context menu.
+  final GestureLongPressStartCallback? onLongPressStart;
+
+  /// Fired on a secondary-button tap (mouse right-click) with the tap
+  /// position — the desktop / web counterpart of [onLongPress].
+  final GestureTapUpCallback? onSecondaryTapUp;
+
   /// Optional [ViewfinderImageController] for state-level observation
   /// and programmatic transform changes.
   final ViewfinderImageController? controller;
@@ -259,6 +287,18 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// boundary with no elastic give.
   final bool rubberBandPan;
 
+  /// When `true` (default), a double-tap followed by a vertical drag
+  /// continuously zooms around the tap point (iOS Photos style). Has
+  /// no effect when [doubleTapScales] is empty — an empty ladder
+  /// disables both double-tap flavors.
+  final bool doubleTapDragZoom;
+
+  /// Whether mouse scroll-wheel events zoom around the pointer.
+  /// Disable when embedding the viewer in a scrollable page that
+  /// should keep receiving wheel events, or when a surrounding
+  /// gallery repurposes the wheel for page navigation.
+  final bool enableMouseWheelZoom;
+
   @override
   State<ViewfinderImage> createState() => _ViewfinderImageState();
 }
@@ -286,6 +326,9 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     super.onTap,
     super.onTapUp,
     super.onTapDown,
+    super.onLongPress,
+    super.onLongPressStart,
+    super.onSecondaryTapUp,
     super.controller,
     super.panEnabled,
     super.scaleEnabled,
@@ -295,6 +338,8 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     super.interactionEndFrictionCoefficient,
     super.semanticLabel,
     super.rubberBandPan,
+    super.doubleTapDragZoom,
+    super.enableMouseWheelZoom,
     this.thumbCrossFadeDuration = const .new(milliseconds: 200),
     this.thumbCrossFadeCurve = Curves.easeOut,
     this.gaplessPlayback = true,
@@ -354,6 +399,9 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.onTap,
     super.onTapUp,
     super.onTapDown,
+    super.onLongPress,
+    super.onLongPressStart,
+    super.onSecondaryTapUp,
     super.controller,
     super.panEnabled,
     super.scaleEnabled,
@@ -363,6 +411,8 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.interactionEndFrictionCoefficient,
     super.semanticLabel,
     super.rubberBandPan,
+    super.doubleTapDragZoom,
+    super.enableMouseWheelZoom,
   }) : super._();
 
   /// Widget rendered for this view.
@@ -604,6 +654,12 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   void _animateTo(Matrix4 target) {
+    // Honor the platform's reduce-motion setting: jump instead of
+    // animating (double-tap zoom, reset, animateToScale/Transform).
+    if (mounted && MediaQuery.maybeDisableAnimationsOf(context) == true) {
+      jumpToTransform(target);
+      return;
+    }
     _animation = Matrix4Tween(begin: _transformation.value, end: target)
         .animate(
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
@@ -747,6 +803,9 @@ class _ImageBody extends StatelessWidget {
         onTap: spec.onTap,
         onTapUp: spec.onTapUp,
         onTapDown: spec.onTapDown,
+        onLongPress: spec.onLongPress,
+        onLongPressStart: spec.onLongPressStart,
+        onSecondaryTapUp: spec.onSecondaryTapUp,
         onDoubleTapDown: onDoubleTapDown,
         onDoubleTap: onDoubleTap,
         child: ZoomableViewport(
@@ -764,6 +823,11 @@ class _ImageBody extends StatelessWidget {
           canPan: spec.canPan,
           claimPan: spec.claimPan,
           rubberBandPan: spec.rubberBandPan,
+          // An empty double-tap ladder means "double-tap zoom is off" —
+          // including the double-tap-drag flavor.
+          doubleTapDragZoom:
+              spec.doubleTapDragZoom && spec.doubleTapScales.isNotEmpty,
+          enableMouseWheelZoom: spec.enableMouseWheelZoom,
           onScaleStart: spec.onScaleStart,
           onScaleEnd: spec.onScaleEnd,
           child: content,

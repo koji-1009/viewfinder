@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import 'chrome.dart';
@@ -9,11 +10,13 @@ import 'image.dart';
 import 'initial_scale.dart';
 import 'internal/chrome_fade.dart';
 import 'internal/dismissible.dart';
+import 'internal/keep_alive_page.dart';
 import 'internal/page_indicator_overlay.dart';
 import 'internal/thumbnail_bar.dart';
 import 'internal/thumbnail_frame.dart';
 import 'internal/viewfinder_page.dart';
 import 'item.dart';
+import 'keys.dart';
 import 'page_indicator.dart';
 import 'thumbnails.dart';
 
@@ -55,6 +58,16 @@ class Viewfinder extends StatefulWidget {
     this.reverse = false,
     this.allowEdgeHandoff = true,
     this.rubberBandPan = true,
+    this.onScaleStateChanged,
+    this.announcePageChanges = true,
+    this.pageAnnouncementBuilder,
+    this.restorationId,
+    this.immersiveSystemUi = false,
+    this.keepAlivePages = false,
+    this.mouseWheelBehavior = .zoom,
+    this.decodeSizeMultiplier,
+    this.dismissOnOverscroll = false,
+    this.loop = false,
   }) : assert(itemCount >= 0),
        assert(minScale > 0),
        assert(maxScale >= minScale),
@@ -76,6 +89,17 @@ class Viewfinder extends StatefulWidget {
          'Axis.vertical pagerAxis conflicts with ViewfinderDismiss: both '
          'consume vertical drags. Pick one (use a horizontal pager, or '
          'drop dismiss when running a vertical pager).',
+       ),
+       assert(decodeSizeMultiplier == null || decodeSizeMultiplier > 0),
+       assert(
+         !dismissOnOverscroll || dismiss != null,
+         'dismissOnOverscroll fires the dismiss callback — supply a '
+         'ViewfinderDismiss config to use it.',
+       ),
+       assert(
+         !(loop && dismissOnOverscroll),
+         'A looping gallery has no first/last page to overscroll past; '
+         'dismissOnOverscroll can never fire with loop: true.',
        );
 
   /// Quick gallery from a flat list of [ImageProvider]s.
@@ -118,11 +142,23 @@ class Viewfinder extends StatefulWidget {
     bool reverse = false,
     bool allowEdgeHandoff = true,
     bool rubberBandPan = true,
+    ViewfinderScaleStateChanged? onScaleStateChanged,
+    bool announcePageChanges = true,
+    ViewfinderPageAnnouncementBuilder? pageAnnouncementBuilder,
+    String? restorationId,
+    bool immersiveSystemUi = false,
+    bool keepAlivePages = false,
+    ViewfinderMouseWheelBehavior mouseWheelBehavior = .zoom,
+    double? decodeSizeMultiplier,
+    bool dismissOnOverscroll = false,
+    bool loop = false,
     ImageLoadingBuilder? loadingBuilder,
     ImageErrorWidgetBuilder? errorBuilder,
     ViewfinderHero Function(int index)? hero,
     String Function(int index)? semanticLabel,
     ImageProvider Function(int index)? thumbImage,
+    void Function(int index)? onLongPress,
+    void Function(int index, TapUpDetails details)? onSecondaryTapUp,
     Duration thumbCrossFadeDuration = const .new(milliseconds: 200),
     Curve thumbCrossFadeCurve = Curves.easeOut,
     bool gaplessPlayback = true,
@@ -137,6 +173,10 @@ class Viewfinder extends StatefulWidget {
         loadingBuilder: loadingBuilder,
         errorBuilder: errorBuilder,
         semanticLabel: semanticLabel?.call(i),
+        onLongPress: onLongPress == null ? null : () => onLongPress(i),
+        onSecondaryTapUp: onSecondaryTapUp == null
+            ? null
+            : (details) => onSecondaryTapUp(i, details),
         thumbCrossFadeDuration: thumbCrossFadeDuration,
         thumbCrossFadeCurve: thumbCrossFadeCurve,
         gaplessPlayback: gaplessPlayback,
@@ -167,6 +207,16 @@ class Viewfinder extends StatefulWidget {
       reverse: reverse,
       allowEdgeHandoff: allowEdgeHandoff,
       rubberBandPan: rubberBandPan,
+      onScaleStateChanged: onScaleStateChanged,
+      announcePageChanges: announcePageChanges,
+      pageAnnouncementBuilder: pageAnnouncementBuilder,
+      restorationId: restorationId,
+      immersiveSystemUi: immersiveSystemUi,
+      keepAlivePages: keepAlivePages,
+      mouseWheelBehavior: mouseWheelBehavior,
+      decodeSizeMultiplier: decodeSizeMultiplier,
+      dismissOnOverscroll: dismissOnOverscroll,
+      loop: loop,
     );
   }
 
@@ -183,6 +233,9 @@ class Viewfinder extends StatefulWidget {
     ImageProvider? thumbImage,
     ViewfinderHero? hero,
     String? semanticLabel,
+    GestureLongPressCallback? onLongPress,
+    GestureLongPressStartCallback? onLongPressStart,
+    GestureTapUpCallback? onSecondaryTapUp,
     ImageLoadingBuilder? loadingBuilder,
     ImageErrorWidgetBuilder? errorBuilder,
     ViewfinderController? controller,
@@ -202,6 +255,11 @@ class Viewfinder extends StatefulWidget {
     Duration thumbCrossFadeDuration = const .new(milliseconds: 200),
     Curve thumbCrossFadeCurve = Curves.easeOut,
     bool gaplessPlayback = true,
+    ViewfinderScaleStateChanged? onScaleStateChanged,
+    bool immersiveSystemUi = false,
+    ViewfinderMouseWheelBehavior mouseWheelBehavior = .zoom,
+    double? decodeSizeMultiplier,
+    bool dismissOnOverscroll = false,
   }) {
     return Viewfinder(
       key: key,
@@ -211,6 +269,9 @@ class Viewfinder extends StatefulWidget {
         thumbImage: thumbImage,
         hero: hero,
         semanticLabel: semanticLabel,
+        onLongPress: onLongPress,
+        onLongPressStart: onLongPressStart,
+        onSecondaryTapUp: onSecondaryTapUp,
         loadingBuilder: loadingBuilder,
         errorBuilder: errorBuilder,
         thumbCrossFadeDuration: thumbCrossFadeDuration,
@@ -231,6 +292,11 @@ class Viewfinder extends StatefulWidget {
       chromeController: chromeController,
       chromeOverlays: chromeOverlays,
       chromeFadeDuration: chromeFadeDuration,
+      onScaleStateChanged: onScaleStateChanged,
+      immersiveSystemUi: immersiveSystemUi,
+      mouseWheelBehavior: mouseWheelBehavior,
+      decodeSizeMultiplier: decodeSizeMultiplier,
+      dismissOnOverscroll: dismissOnOverscroll,
     );
   }
 
@@ -378,6 +444,74 @@ class Viewfinder extends StatefulWidget {
   /// page's [ViewfinderImage.rubberBandPan].
   final bool rubberBandPan;
 
+  /// Fired when the current page's [ViewfinderScaleState] transitions
+  /// (initial ⇄ zoomed) — the hook for app chrome that reacts to zoom,
+  /// e.g. hiding an AppBar or disabling a share button. Also fires on
+  /// a page change when the new page's state differs from the last
+  /// reported one. Coalesced: not a per-frame scale stream.
+  final ViewfinderScaleStateChanged? onScaleStateChanged;
+
+  /// When `true` (default), page changes are announced to screen
+  /// readers via [SemanticsService.sendAnnouncement] — the container
+  /// label update alone is not reliably spoken by TalkBack / VoiceOver
+  /// on swipe. Customize (or localize) the message with
+  /// [pageAnnouncementBuilder].
+  final bool announcePageChanges;
+
+  /// Builds the screen-reader announcement for a page change. Receives
+  /// the new index and [itemCount]; defaults to
+  /// `'Photo ${index + 1} of $itemCount'`.
+  final ViewfinderPageAnnouncementBuilder? pageAnnouncementBuilder;
+
+  /// Restoration ID forwarded to the underlying [PageView], preserving
+  /// the page position across state restoration (e.g. Android process
+  /// death).
+  final String? restorationId;
+
+  /// When `true`, the gallery manages the system UI overlays for a
+  /// full-screen viewing experience: with a [chromeController], the
+  /// status/navigation bars follow chrome visibility
+  /// ([SystemUiMode.edgeToEdge] while visible,
+  /// [SystemUiMode.immersiveSticky] while hidden); without one, the
+  /// gallery enters immersive mode on mount. On unmount
+  /// [SystemUiMode.edgeToEdge] is restored. Default `false`.
+  final bool immersiveSystemUi;
+
+  /// When `true`, pages that scroll out of view keep their [State]
+  /// alive (e.g. a `.child` page's video position or scroll offset).
+  /// The pan/zoom transform is still reset when leaving a page —
+  /// that's the photo-viewer convention. Default `false`: pages are
+  /// disposed as [PageView] normally would.
+  final bool keepAlivePages;
+
+  /// What the mouse scroll wheel does over a page. Defaults to
+  /// [ViewfinderMouseWheelBehavior.zoom].
+  final ViewfinderMouseWheelBehavior mouseWheelBehavior;
+
+  /// When non-null, every image-backed page's provider is wrapped in
+  /// a [ResizeImage] targeting the viewport size × this multiplier
+  /// (in physical pixels), capping decode memory for large sources.
+  /// `1.0` decodes at viewport size — cheapest, but zooming past 1×
+  /// runs out of pixels; `2.0`–`3.0` keeps zoom headroom. Upscaling
+  /// is never forced ([ResizeImagePolicy.fit]). Adjacent-page
+  /// precaching uses the same target so cache keys match. `null`
+  /// (default) decodes at the source's native resolution.
+  final double? decodeSizeMultiplier;
+
+  /// When `true`, overscrolling past the first or last page by
+  /// ~100 logical pixels fires [ViewfinderDismiss.onDismiss] — the
+  /// "swipe out of the gallery" gesture. Requires [dismiss].
+  /// Default `false`.
+  final bool dismissOnOverscroll;
+
+  /// When `true`, the gallery wraps around: swiping past the last
+  /// page lands on the first and vice versa. [ViewfinderController]
+  /// indices, [onPageChanged], the indicator, and thumbnails all keep
+  /// reporting logical indices (`0..itemCount-1`); `jumpTo` /
+  /// `animateTo` travel the shortest direction around the loop.
+  /// Ignored when [itemCount] < 2. Default `false`.
+  final bool loop;
+
   @override
   State<Viewfinder> createState() => _ViewfinderState();
 }
@@ -393,18 +527,67 @@ const Set<PointerDeviceKind> kViewfinderDefaultSwipeDragDevices =
       PointerDeviceKind.unknown,
     };
 
+/// What the mouse scroll wheel does over a [Viewfinder] page.
+enum ViewfinderMouseWheelBehavior {
+  /// Wheel zooms the photo around the pointer (default).
+  zoom,
+
+  /// Wheel navigates pages: scroll down/right goes to the next page,
+  /// up/left to the previous. Wheel zoom is disabled; pinch,
+  /// double-tap, and double-tap-drag still zoom.
+  paging,
+}
+
+/// Callback signature for [Viewfinder.onScaleStateChanged]: the current
+/// page's index and its new [ViewfinderScaleState].
+typedef ViewfinderScaleStateChanged =
+    void Function(int index, ViewfinderScaleState state);
+
+/// Builds the message announced to screen readers when the page
+/// changes. See [Viewfinder.pageAnnouncementBuilder].
+typedef ViewfinderPageAnnouncementBuilder =
+    String Function(int index, int itemCount);
+
+/// Accumulated overscroll past the first/last page that triggers
+/// [ViewfinderDismiss.onDismiss] when
+/// [Viewfinder.dismissOnOverscroll] is enabled.
+const double _kOverscrollDismissExtent = 100.0;
+
 class _ViewfinderState extends State<Viewfinder> {
   late ViewfinderController _controller;
   late PageController _pageController;
   bool _ownsController = false;
+  // Logical index (0..itemCount-1) — what controllers, callbacks, the
+  // indicator, and thumbnails see.
   int _currentIndex = 0;
+  // The PageView's own page. Equal to [_currentIndex] except in loop
+  // mode, where the pager runs on an unbounded index that maps to
+  // logical pages modulo itemCount.
+  int _currentRawIndex = 0;
   bool _swipeLocked = false;
-  // Index-keyed: each PageView slot owns a distinct controller, so the
-  // single-state-attached invariant of `ViewfinderImageController` is
-  // preserved even when two slots happen to render the same content.
-  // The "transform follows the photo" guarantee on re-order is handled
-  // separately by `ViewfinderImage`'s own content-swap reset.
+  // Raw-index-keyed: each PageView slot owns a distinct controller, so
+  // the single-state-attached invariant of `ViewfinderImageController`
+  // is preserved even when two slots happen to render the same content
+  // (possible in loop mode with small galleries). The "transform
+  // follows the photo" guarantee on re-order is handled separately by
+  // `ViewfinderImage`'s own content-swap reset.
   final Map<int, ViewfinderImageController> _imageControllers = {};
+  ViewfinderScaleState _lastReportedScaleState = .initial;
+  // Overscroll-to-dismiss bookkeeping (see _handlePagerNotification).
+  double _overscrollAccum = 0;
+  bool _overscrollDismissed = false;
+  // The chrome controller the system-UI sync is currently listening to.
+  ViewfinderChromeController? _systemUiChrome;
+
+  /// How many raw pages the looping pager starts in from 0 — large
+  /// enough that swiping backward never reaches the hard 0 boundary
+  /// in practice.
+  static const int _kLoopBaseCycles = 10000;
+
+  bool get _loopEnabled => widget.loop && widget.itemCount >= 2;
+
+  int _logicalFor(int raw) =>
+      widget.itemCount == 0 ? 0 : raw % widget.itemCount;
 
   ViewfinderChromeController? get _chrome => widget.chromeController;
 
@@ -422,10 +605,39 @@ class _ViewfinderState extends State<Viewfinder> {
     final chrome = _chrome;
     if (chrome == null) return;
     if (!chrome.autoHideWhileZoomed) return;
-    final zoomed = _imageControllers[_currentIndex]?.scaleState == .zoomed;
+    final zoomed = _imageControllers[_currentRawIndex]?.scaleState == .zoomed;
     if (zoomed && chrome.visible) {
       chrome.hide();
     }
+  }
+
+  // ---------------- system UI (immersive mode) ---------------- //
+
+  void _attachSystemUi() {
+    if (!widget.immersiveSystemUi) return;
+    final chrome = _chrome;
+    if (chrome != null) {
+      _systemUiChrome = chrome;
+      chrome.addListener(_syncSystemUiWithChrome);
+    }
+    _syncSystemUiWithChrome();
+  }
+
+  void _detachSystemUi({required bool restore}) {
+    _systemUiChrome?.removeListener(_syncSystemUiWithChrome);
+    _systemUiChrome = null;
+    if (restore) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
+  void _syncSystemUiWithChrome() {
+    // Without a chrome controller the gallery is permanently immersive
+    // while mounted; with one, system bars follow chrome visibility.
+    final visible = _chrome?.visible ?? false;
+    SystemChrome.setEnabledSystemUIMode(
+      visible ? SystemUiMode.edgeToEdge : SystemUiMode.immersiveSticky,
+    );
   }
 
   ViewfinderImageController _imageControllerFor(int index) {
@@ -436,15 +648,22 @@ class _ViewfinderState extends State<Viewfinder> {
     });
   }
 
-  void _onImageControllerUpdate(int index) {
-    if (index != _currentIndex) return;
-    final c = _imageControllers[index];
+  void _onImageControllerUpdate(int rawIndex) {
+    if (rawIndex != _currentRawIndex) return;
+    final c = _imageControllers[rawIndex];
     if (c == null) return;
     final lock = !_canSwipeAlongPager(c);
     if (lock != _swipeLocked) {
       setState(() => _swipeLocked = lock);
     }
+    _emitScaleState(_currentIndex, c.scaleState);
     _syncChromeWithZoom();
+  }
+
+  void _emitScaleState(int logicalIndex, ViewfinderScaleState state) {
+    if (state == _lastReportedScaleState) return;
+    _lastReportedScaleState = state;
+    widget.onScaleStateChanged?.call(logicalIndex, state);
   }
 
   bool _canSwipeAlongPager(ViewfinderImageController c) =>
@@ -454,7 +673,7 @@ class _ViewfinderState extends State<Viewfinder> {
   /// a reset was performed — useful for intercepting custom back-button
   /// navigation.
   bool resetCurrentImage() {
-    final c = _imageControllers[_currentIndex];
+    final c = _imageControllers[_currentRawIndex];
     if (c != null && c.scaleState == .zoomed) {
       c.reset();
       return true;
@@ -472,9 +691,17 @@ class _ViewfinderState extends State<Viewfinder> {
   }
 
   int _clampIndex(int index) {
-    if (widget.itemCount == 0) return 0;
-    return index.clamp(0, widget.itemCount - 1);
+    final n = widget.itemCount;
+    if (n == 0) return 0;
+    // A looping gallery wraps out-of-range indices instead of clamping.
+    if (_loopEnabled) return ((index % n) + n) % n;
+    return index.clamp(0, n - 1);
   }
+
+  /// The raw PageView page that shows [logical] when (re)basing the
+  /// pager — loop mode starts deep inside the unbounded index space.
+  int _rawBaseFor(int logical) =>
+      _loopEnabled ? widget.itemCount * _kLoopBaseCycles + logical : logical;
 
   @override
   void initState() {
@@ -487,8 +714,10 @@ class _ViewfinderState extends State<Viewfinder> {
     // initial page, so an out-of-range initialIndex would otherwise
     // keep reading back unclamped through `controller.currentIndex`.
     _controller._currentIndex = _currentIndex;
-    _pageController = PageController(initialPage: _currentIndex);
+    _currentRawIndex = _rawBaseFor(_currentIndex);
+    _pageController = PageController(initialPage: _currentRawIndex);
     _controller._attach(this);
+    _attachSystemUi();
   }
 
   @override
@@ -513,32 +742,64 @@ class _ViewfinderState extends State<Viewfinder> {
       // user-driven page change.
       _controller._currentIndex = _currentIndex;
     }
-    if (oldWidget.itemCount != widget.itemCount) {
-      // Dispose per-slot controllers that fell off the right edge.
-      final toRemove = <int>[];
-      for (final entry in _imageControllers.entries) {
-        if (entry.key >= widget.itemCount) toRemove.add(entry.key);
-      }
-      for (final k in toRemove) {
-        _imageControllers.remove(k)!.dispose();
-      }
-      // The current page may have fallen off the right edge (itemCount
-      // shrank) or the gallery may now be empty. Re-clamp so the
-      // semantic label, scroll position, and PageView builder stay in
-      // a consistent state.
-      final clamped = _clampIndex(_currentIndex);
-      if (clamped != _currentIndex) {
-        _currentIndex = clamped;
-        _controller._setIndex(clamped);
+    if (oldWidget.itemCount != widget.itemCount ||
+        oldWidget.loop != widget.loop) {
+      final wasLoop = oldWidget.loop && oldWidget.itemCount >= 2;
+      if (!wasLoop && !_loopEnabled) {
+        // Plain (non-looping) itemCount change.
+        // Dispose per-slot controllers that fell off the right edge.
+        final toRemove = <int>[];
+        for (final entry in _imageControllers.entries) {
+          if (entry.key >= widget.itemCount) toRemove.add(entry.key);
+        }
+        for (final k in toRemove) {
+          _imageControllers.remove(k)!.dispose();
+        }
+        // The current page may have fallen off the right edge (itemCount
+        // shrank) or the gallery may now be empty. Re-clamp so the
+        // semantic label, scroll position, and PageView builder stay in
+        // a consistent state.
+        final clamped = _clampIndex(_currentIndex);
+        if (clamped != _currentIndex) {
+          _currentIndex = clamped;
+          _currentRawIndex = clamped;
+          _controller._setIndex(clamped);
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(clamped);
+          }
+        }
+      } else {
+        // The raw↔logical mapping changed (loop toggled, or the modulus
+        // under a looping pager). Rebase: drop every per-slot controller
+        // (raw keys from the old mapping are meaningless now — disposal
+        // is guarded, so still-mounted pages detach harmlessly) and jump
+        // the pager to a fresh raw base for the preserved logical page.
+        for (final c in _imageControllers.values) {
+          c.dispose();
+        }
+        _imageControllers.clear();
+        _currentIndex = _clampIndex(_currentIndex);
+        _controller._currentIndex = _currentIndex;
+        _currentRawIndex = _rawBaseFor(_currentIndex);
         if (_pageController.hasClients) {
-          _pageController.jumpToPage(clamped);
+          _pageController.jumpToPage(_currentRawIndex);
         }
       }
+    }
+    if (oldWidget.immersiveSystemUi != widget.immersiveSystemUi ||
+        oldWidget.chromeController != widget.chromeController) {
+      _detachSystemUi(
+        restore: oldWidget.immersiveSystemUi && !widget.immersiveSystemUi,
+      );
+      _attachSystemUi();
     }
   }
 
   @override
   void dispose() {
+    if (widget.immersiveSystemUi) {
+      _detachSystemUi(restore: true);
+    }
     for (final c in _imageControllers.values) {
       c.dispose();
     }
@@ -556,24 +817,103 @@ class _ViewfinderState extends State<Viewfinder> {
   // through is cheap because the builder returns a config object.
   ViewfinderItem _itemAt(int index) => widget.itemBuilder(context, index);
 
+  /// Wraps [provider] in a [ResizeImage] targeting the viewport ×
+  /// [Viewfinder.decodeSizeMultiplier] when the knob is set. The same
+  /// wrapping runs for display and precache so cache keys match.
+  ImageProvider _decodeWrapped(ImageProvider provider) {
+    final m = widget.decodeSizeMultiplier;
+    if (m == null) return provider;
+    final size = MediaQuery.sizeOf(context);
+    if (size.isEmpty) return provider;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return ResizeImage(
+      provider,
+      width: (size.width * dpr * m).round(),
+      height: (size.height * dpr * m).round(),
+      policy: .fit,
+    );
+  }
+
+  /// The item for [index] with the decode-size policy applied to its
+  /// main provider. The thumbnail strip keeps using the raw item — it
+  /// already decodes tiles at tile size.
+  ViewfinderItem _resolvedItemAt(int index) {
+    final item = _itemAt(index);
+    if (widget.decodeSizeMultiplier == null) return item;
+    return switch (item) {
+      final ViewfinderImageItem i => ViewfinderImageItem(
+        image: _decodeWrapped(i.image),
+        thumbImage: i.thumbImage,
+        hero: i.hero,
+        loadingBuilder: i.loadingBuilder,
+        errorBuilder: i.errorBuilder,
+        initialScale: i.initialScale,
+        minScale: i.minScale,
+        maxScale: i.maxScale,
+        doubleTapScales: i.doubleTapScales,
+        semanticLabel: i.semanticLabel,
+        onLongPress: i.onLongPress,
+        onLongPressStart: i.onLongPressStart,
+        onSecondaryTapUp: i.onSecondaryTapUp,
+        thumbCrossFadeDuration: i.thumbCrossFadeDuration,
+        thumbCrossFadeCurve: i.thumbCrossFadeCurve,
+        gaplessPlayback: i.gaplessPlayback,
+      ),
+      final ViewfinderChildItem i => i,
+    };
+  }
+
   void _precacheAround(int index) {
     if (widget.precacheAdjacent == 0) return;
     for (var delta = 1; delta <= widget.precacheAdjacent; delta++) {
       for (final i in [index - delta, index + delta]) {
-        if (i < 0 || i >= widget.itemCount) continue;
-        if (_itemAt(i) case ViewfinderImageItem(:final image)) {
-          precacheImage(image, context);
+        int effective = i;
+        if (_loopEnabled) {
+          effective = _clampIndex(i);
+        } else if (i < 0 || i >= widget.itemCount) {
+          continue;
+        }
+        if (_itemAt(effective) case ViewfinderImageItem(:final image)) {
+          precacheImage(_decodeWrapped(image), context);
         }
       }
     }
   }
 
-  void _onPageChanged(int index) {
-    final previous = _currentIndex;
+  void _announcePage(int logical) {
+    if (!widget.announcePageChanges || widget.itemCount == 0) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      widget.pageAnnouncementBuilder?.call(logical, widget.itemCount) ??
+          'Photo ${logical + 1} of ${widget.itemCount}',
+      Directionality.of(context),
+    );
+  }
+
+  /// Loop mode visits an unbounded raw-index space; controllers for
+  /// slots far outside the live window would otherwise accumulate for
+  /// the whole session. Pages beyond the PageView's cache extent are
+  /// already unmounted (and detached), so pruning is safe.
+  void _pruneLoopControllers() {
+    if (!_loopEnabled) return;
+    final keep = widget.precacheAdjacent + 3;
+    final stale = [
+      for (final k in _imageControllers.keys)
+        if ((k - _currentRawIndex).abs() > keep) k,
+    ];
+    for (final k in stale) {
+      _imageControllers.remove(k)!.dispose();
+    }
+  }
+
+  void _onPageChanged(int rawIndex) {
+    final previousRaw = _currentRawIndex;
+    final logical = _logicalFor(rawIndex);
     setState(() {
-      _currentIndex = index;
+      _currentRawIndex = rawIndex;
+      _currentIndex = logical;
       // Re-derive swipe lock for the new page's current state.
-      final c = _imageControllers[index];
+      final c = _imageControllers[rawIndex];
       _swipeLocked = c != null && !_canSwipeAlongPager(c);
     });
     // The page we just left keeps its own TransformationController
@@ -581,28 +921,91 @@ class _ViewfinderState extends State<Viewfinder> {
     // it, a later swipe back would reveal the stale zoom. Snap it
     // back instantly — matches photo-viewer convention of presenting
     // every page at its initial scale.
-    if (previous != index) {
-      _imageControllers[previous]?.jumpToInitial();
+    if (previousRaw != rawIndex) {
+      _imageControllers[previousRaw]?.jumpToInitial();
     }
-    _controller._setIndex(index);
-    widget.onPageChanged?.call(index);
-    _precacheAround(index);
+    _controller._setIndex(logical);
+    widget.onPageChanged?.call(logical);
+    _emitScaleState(
+      logical,
+      _imageControllers[rawIndex]?.scaleState ?? .initial,
+    );
+    _announcePage(logical);
+    _precacheAround(logical);
+    _pruneLoopControllers();
     _bumpChrome();
   }
 
   void _goTo(int index, {bool animate = true}) {
-    final max = widget.itemCount - 1;
-    final i = max < 0 ? 0 : index.clamp(0, max);
     if (!_pageController.hasClients) return;
-    if (animate) {
+    final int targetRaw;
+    if (_loopEnabled) {
+      // Wrap the target and travel the shortest way around the loop.
+      final n = widget.itemCount;
+      final targetLogical = ((index % n) + n) % n;
+      var delta = targetLogical - _currentIndex;
+      if (delta > n / 2) delta -= n;
+      if (delta < -n / 2) delta += n;
+      targetRaw = _currentRawIndex + delta;
+    } else {
+      final max = widget.itemCount - 1;
+      targetRaw = max < 0 ? 0 : index.clamp(0, max);
+    }
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) == true;
+    if (animate && !reduceMotion) {
       _pageController.animateToPage(
-        i,
+        targetRaw,
         duration: const .new(milliseconds: 280),
         curve: Curves.easeOutCubic,
       );
     } else {
-      _pageController.jumpToPage(i);
+      _pageController.jumpToPage(targetRaw);
     }
+  }
+
+  /// Wheel-paging handler ([ViewfinderMouseWheelBehavior.paging]):
+  /// positive deltas (scroll down / right) go to the next logical
+  /// page, negative to the previous. Ignored while a page transition
+  /// is still settling so one wheel notch turns one page.
+  void _onWheelPageDelta(double delta) {
+    if (delta == 0) return;
+    if (_pageController.hasClients) {
+      final page = _pageController.page;
+      if (page != null && (page - page.round()).abs() > 0.02) return;
+    }
+    _goTo(_currentIndex + (delta > 0 ? 1 : -1));
+  }
+
+  /// Overscroll-to-dismiss: accumulate how far the pager was pulled
+  /// past its first/last page within one scroll activity and fire the
+  /// dismiss callback once past [_kOverscrollDismissExtent]. Handles
+  /// both clamping physics (OverscrollNotification) and bouncing
+  /// physics (pixels beyond the extents).
+  bool _handlePagerNotification(ScrollNotification n) {
+    if (n.metrics.axis != widget.pagerAxis) return false;
+    switch (n) {
+      case ScrollStartNotification() || ScrollEndNotification():
+        _overscrollAccum = 0;
+        _overscrollDismissed = false;
+      case final OverscrollNotification o:
+        _overscrollAccum += o.overscroll.abs();
+      case final ScrollUpdateNotification u:
+        final m = u.metrics;
+        final over = m.pixels < m.minScrollExtent
+            ? m.minScrollExtent - m.pixels
+            : m.pixels > m.maxScrollExtent
+            ? m.pixels - m.maxScrollExtent
+            : 0.0;
+        if (over > _overscrollAccum) _overscrollAccum = over;
+      default:
+        break;
+    }
+    if (!_overscrollDismissed &&
+        _overscrollAccum >= _kOverscrollDismissExtent) {
+      _overscrollDismissed = true;
+      widget.dismiss?.onDismiss();
+    }
+    return false;
   }
 
   void _handleEscape() {
@@ -645,7 +1048,7 @@ class _ViewfinderState extends State<Viewfinder> {
   /// the pager's drag recognizer can claim it. Pinches (two-pointer
   /// gestures) bypass this gate inside the recognizer.
   bool _canPanForPage(
-    int index,
+    int rawIndex,
     ViewfinderImageController c,
     Axis axis,
     int sign,
@@ -654,7 +1057,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // axis is always allowed inside the image.
     if (axis != widget.pagerAxis) return true;
     // Adjacent pre-built pages always allow their own pan.
-    if (index != _currentIndex) return true;
+    if (rawIndex != _currentRawIndex) return true;
     // Not zoomed: yield to the pager — unconditional, regardless of
     // handoff setting. The handoff knob only governs the zoomed-edge
     // case; unzoomed swipe is part of the basic PageView contract.
@@ -676,7 +1079,9 @@ class _ViewfinderState extends State<Viewfinder> {
     // when the finger moves left to reveal the photo's right side.
     if (c.canSwipeToward(_dragDirection(axis, sign))) {
       // At the directional edge: hand off only if a page exists in
-      // the drag's navigation direction (otherwise stay inside).
+      // the drag's navigation direction (otherwise stay inside). A
+      // looping pager always has one.
+      if (_loopEnabled) return false;
       final targetIndex = _dragTargetIndex(sign);
       return targetIndex < 0 || targetIndex >= widget.itemCount;
     }
@@ -689,56 +1094,85 @@ class _ViewfinderState extends State<Viewfinder> {
   /// recognizer's pan-slop, and would steal the drag otherwise. Never
   /// claims while unzoomed so taps/swipes/dismiss compete normally.
   bool _claimPanForPage(
-    int index,
+    int rawIndex,
     ViewfinderImageController c,
     Axis axis,
     int sign,
   ) {
     if (c.scaleState != .zoomed) return false;
-    return _canPanForPage(index, c, axis, sign);
+    return _canPanForPage(rawIndex, c, axis, sign);
   }
 
   @override
   Widget build(BuildContext context) {
+    Widget pageView = PageView.builder(
+      controller: _pageController,
+      scrollDirection: widget.pagerAxis,
+      reverse: widget.reverse,
+      // A looping pager runs on an unbounded raw index space; pages
+      // map to logical indices modulo itemCount.
+      itemCount: _loopEnabled ? null : widget.itemCount,
+      onPageChanged: _onPageChanged,
+      allowImplicitScrolling: widget.allowImplicitScrolling,
+      restorationId: widget.restorationId,
+      physics: _swipeLocked
+          ? const NeverScrollableScrollPhysics()
+          : widget.scrollPhysics ?? const PageScrollPhysics(),
+      itemBuilder: (context, rawIndex) {
+        final logical = _logicalFor(rawIndex);
+        final imageController = _imageControllerFor(rawIndex);
+        Widget page = ViewfinderPage(
+          item: _resolvedItemAt(logical),
+          isCurrent: rawIndex == _currentRawIndex,
+          controller: imageController,
+          canPan: (axis, sign) =>
+              _canPanForPage(rawIndex, imageController, axis, sign),
+          claimPan: (axis, sign) =>
+              _claimPanForPage(rawIndex, imageController, axis, sign),
+          defaultInitialScale: widget.defaultInitialScale,
+          doubleTapScales: widget.doubleTapScales,
+          defaultMinScale: widget.minScale,
+          defaultMaxScale: widget.maxScale,
+          rotateEnabled: widget.rotateEnabled,
+          interactionEndFrictionCoefficient:
+              widget.interactionEndFrictionCoefficient,
+          rubberBandPan: widget.rubberBandPan,
+          pageSpacing: widget.pageSpacing,
+          pagerAxis: widget.pagerAxis,
+          enableMouseWheelZoom: widget.mouseWheelBehavior == .zoom,
+          onWheelDelta: widget.mouseWheelBehavior == .paging
+              ? _onWheelPageDelta
+              : null,
+        );
+        if (widget.keepAlivePages) {
+          page = KeepAlivePage(child: page);
+        }
+        // In loop mode two raw slots can show the same logical page
+        // (small galleries), so the public per-logical-index key is
+        // only safe on a bounded pager.
+        return KeyedSubtree(
+          key: _loopEnabled
+              ? ValueKey<String>('viewfinder-raw-page-$rawIndex')
+              : ViewfinderKeys.page(logical),
+          child: page,
+        );
+      },
+    );
+
+    if (widget.dismissOnOverscroll) {
+      pageView = NotificationListener<ScrollNotification>(
+        onNotification: _handlePagerNotification,
+        child: pageView,
+      );
+    }
+
     Widget pager = ColoredBox(
       color: widget.backgroundColor,
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(
           context,
         ).copyWith(dragDevices: widget.swipeDragDevices),
-        child: PageView.builder(
-          controller: _pageController,
-          scrollDirection: widget.pagerAxis,
-          reverse: widget.reverse,
-          itemCount: widget.itemCount,
-          onPageChanged: _onPageChanged,
-          allowImplicitScrolling: widget.allowImplicitScrolling,
-          physics: _swipeLocked
-              ? const NeverScrollableScrollPhysics()
-              : widget.scrollPhysics ?? const PageScrollPhysics(),
-          itemBuilder: (context, index) {
-            final imageController = _imageControllerFor(index);
-            return ViewfinderPage(
-              item: _itemAt(index),
-              isCurrent: index == _currentIndex,
-              controller: imageController,
-              canPan: (axis, sign) =>
-                  _canPanForPage(index, imageController, axis, sign),
-              claimPan: (axis, sign) =>
-                  _claimPanForPage(index, imageController, axis, sign),
-              defaultInitialScale: widget.defaultInitialScale,
-              doubleTapScales: widget.doubleTapScales,
-              defaultMinScale: widget.minScale,
-              defaultMaxScale: widget.maxScale,
-              rotateEnabled: widget.rotateEnabled,
-              interactionEndFrictionCoefficient:
-                  widget.interactionEndFrictionCoefficient,
-              rubberBandPan: widget.rubberBandPan,
-              pageSpacing: widget.pageSpacing,
-              pagerAxis: widget.pagerAxis,
-            );
-          },
-        ),
+        child: pageView,
       ),
     );
 
@@ -853,7 +1287,7 @@ class _ViewfinderState extends State<Viewfinder> {
     //    the callback *before* the Hero flight reads the source rect,
     //    so hero transitions stay coherent.
     final isCurrentZoomed =
-        _imageControllers[_currentIndex]?.scaleState == .zoomed;
+        _imageControllers[_currentRawIndex]?.scaleState == .zoomed;
     body = PopScope<Object?>(
       canPop: !isCurrentZoomed,
       onPopInvokedWithResult: (didPop, _) {

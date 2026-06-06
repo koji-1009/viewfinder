@@ -17,6 +17,7 @@ export 'src/hero.dart';
 export 'src/image.dart' hide ViewfinderProviderImage, ViewfinderChildImage;
 export 'src/initial_scale.dart';
 export 'src/item.dart' hide ViewfinderImageItem, ViewfinderChildItem;
+export 'src/keys.dart';
 export 'src/page_indicator.dart';
 export 'src/thumbnails.dart';
 export 'src/viewfinder.dart';

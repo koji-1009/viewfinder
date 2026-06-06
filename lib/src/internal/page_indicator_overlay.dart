@@ -80,23 +80,32 @@ class _DotsView extends StatelessWidget {
   final int currentIndex;
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: .min,
-    children: [
-      for (var i = 0; i < itemCount; i++)
-        Padding(
-          padding: .symmetric(horizontal: dots.spacing / 2),
-          child: AnimatedContainer(
-            duration: const .new(milliseconds: 180),
-            width: i == currentIndex ? dots.activeDotSize : dots.dotSize,
-            height: i == currentIndex ? dots.activeDotSize : dots.dotSize,
-            decoration: BoxDecoration(
-              shape: .circle,
-              color: i == currentIndex ? dots.activeColor : dots.color,
+  Widget build(BuildContext context) => Semantics(
+    // The dot row is purely visual; give screen readers the position.
+    // `container: true` keeps the label its own node instead of
+    // merging into the gallery's.
+    container: true,
+    label:
+        dots.semanticLabelBuilder?.call(currentIndex, itemCount) ??
+        'Page ${currentIndex + 1} of $itemCount',
+    child: Row(
+      mainAxisSize: .min,
+      children: [
+        for (var i = 0; i < itemCount; i++)
+          Padding(
+            padding: .symmetric(horizontal: dots.spacing / 2),
+            child: AnimatedContainer(
+              duration: const .new(milliseconds: 180),
+              width: i == currentIndex ? dots.activeDotSize : dots.dotSize,
+              height: i == currentIndex ? dots.activeDotSize : dots.dotSize,
+              decoration: BoxDecoration(
+                shape: .circle,
+                color: i == currentIndex ? dots.activeColor : dots.color,
+              ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   );
 }
 

@@ -42,6 +42,7 @@ class ViewfinderDismiss {
     this.backgroundColor = Colors.black,
     this.slideType = .wholePage,
     this.onProgress,
+    this.onThresholdCrossed,
   });
 
   /// Invoked after the user releases past [threshold]. The widget itself
@@ -74,6 +75,13 @@ class ViewfinderDismiss {
   /// fading custom chrome overlays in step with the gesture.
   final ValueChanged<double>? onProgress;
 
+  /// Edge-triggered counterpart of [onProgress]: fires with `true`
+  /// when the drag crosses [threshold] (releasing here would dismiss)
+  /// and with `false` when it recedes back below — once per crossing,
+  /// not per frame. The natural hook for a haptic tick
+  /// (`HapticFeedback.selectionClick`) signalling "far enough".
+  final ValueChanged<bool>? onThresholdCrossed;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -84,7 +92,8 @@ class ViewfinderDismiss {
           fadeBackground == other.fadeBackground &&
           backgroundColor == other.backgroundColor &&
           slideType == other.slideType &&
-          onProgress == other.onProgress;
+          onProgress == other.onProgress &&
+          onThresholdCrossed == other.onThresholdCrossed;
 
   @override
   int get hashCode => Object.hash(
@@ -95,5 +104,6 @@ class ViewfinderDismiss {
     backgroundColor,
     slideType,
     onProgress,
+    onThresholdCrossed,
   );
 }

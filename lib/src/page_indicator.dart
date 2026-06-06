@@ -22,6 +22,11 @@ sealed class ViewfinderPageIndicator {
   final EdgeInsets padding;
 }
 
+/// Builds the screen-reader label for a dots indicator. See
+/// [ViewfinderPageIndicatorDots.semanticLabelBuilder].
+typedef ViewfinderPageIndicatorSemanticLabelBuilder =
+    String Function(int currentIndex, int itemCount);
+
 /// Renders one dot per item, highlighting the current page.
 final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   /// Creates a dots indicator.
@@ -33,6 +38,7 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     this.spacing = 8,
     this.color = Colors.white54,
     this.activeColor = Colors.white,
+    this.semanticLabelBuilder,
   });
 
   /// Diameter of inactive dots.
@@ -50,6 +56,12 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   /// Color of the dot for the current page.
   final Color activeColor;
 
+  /// Builds the screen-reader label for the dot row, which is
+  /// otherwise purely visual. Defaults to
+  /// `'Page ${currentIndex + 1} of $itemCount'` — supply your own for
+  /// localization.
+  final ViewfinderPageIndicatorSemanticLabelBuilder? semanticLabelBuilder;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -60,7 +72,8 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
           activeDotSize == other.activeDotSize &&
           spacing == other.spacing &&
           color == other.color &&
-          activeColor == other.activeColor;
+          activeColor == other.activeColor &&
+          semanticLabelBuilder == other.semanticLabelBuilder;
 
   @override
   int get hashCode => Object.hash(
@@ -71,6 +84,7 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     spacing,
     color,
     activeColor,
+    semanticLabelBuilder,
   );
 }
 

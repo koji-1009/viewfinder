@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../item.dart';
+import '../keys.dart';
 import '../thumbnails.dart';
 
 /// Thumbnail strip — internal renderer driven by `Viewfinder` from the
@@ -67,7 +68,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
       0.0,
       maxScroll,
     );
-    if (!animate) {
+    if (!animate || MediaQuery.maybeDisableAnimationsOf(context) == true) {
       _scrollController.jumpTo(desired);
       return;
     }
@@ -90,6 +91,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
       itemCount: widget.itemCount,
       itemExtent: cfg.size + cfg.spacing,
       itemBuilder: (context, i) => _ThumbnailTile(
+        key: ViewfinderKeys.thumbnail(i),
         config: cfg,
         item: widget.itemAt(i),
         index: i,
@@ -129,6 +131,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
 
 class _ThumbnailTile extends StatelessWidget {
   const _ThumbnailTile({
+    super.key,
     required this.config,
     required this.item,
     required this.index,
@@ -159,7 +162,14 @@ class _ThumbnailTile extends StatelessWidget {
       padding: config.isHorizontal
           ? .only(right: config.spacing)
           : .only(bottom: config.spacing),
-      child: GestureDetector(behavior: .opaque, onTap: onTap, child: inner),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label:
+            config.semanticLabelBuilder?.call(index, selected) ??
+            'Thumbnail ${index + 1}',
+        child: GestureDetector(behavior: .opaque, onTap: onTap, child: inner),
+      ),
     );
   }
 }

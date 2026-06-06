@@ -20,11 +20,14 @@ class ChromeFade extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: chrome,
-    builder: (_, c) => IgnorePointer(
+    builder: (context, c) => IgnorePointer(
       ignoring: !chrome.visible,
       child: AnimatedOpacity(
         opacity: chrome.visible ? 1.0 : 0.0,
-        duration: fadeDuration,
+        // Honor reduce-motion: toggle instantly instead of fading.
+        duration: MediaQuery.maybeDisableAnimationsOf(context) == true
+            ? Duration.zero
+            : fadeDuration,
         child: c,
       ),
     ),

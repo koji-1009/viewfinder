@@ -27,6 +27,7 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
     with SingleTickerProviderStateMixin {
   double _dragOffset = 0;
   double _lastReportedProgress = 0.0;
+  bool _pastThreshold = false;
   late final AnimationController _release;
 
   @override
@@ -67,12 +68,19 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
   }
 
   void _reportProgress() {
-    final cb = widget.config.onProgress;
-    if (cb == null) return;
     final size = _viewportExtent();
     final progress = size <= 0
         ? 0.0
         : (_dragOffset.abs() / size).clamp(0.0, 1.0);
+    // Edge-triggered threshold signal (haptics hook) — fires once per
+    // crossing in each direction, including during spring-back.
+    final past = progress >= widget.config.threshold;
+    if (past != _pastThreshold) {
+      _pastThreshold = past;
+      widget.config.onThresholdCrossed?.call(past);
+    }
+    final cb = widget.config.onProgress;
+    if (cb == null) return;
     if ((progress - _lastReportedProgress).abs() < 1e-4) return;
     _lastReportedProgress = progress;
     cb(progress);

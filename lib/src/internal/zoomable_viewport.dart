@@ -276,6 +276,11 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     _snapBackTween = null;
   }
 
+  /// Whether the platform asks for reduced motion; decorative
+  /// animations (fling glide, rubber-band snap-back) jump instead.
+  bool get _reduceMotion =>
+      mounted && MediaQuery.maybeDisableAnimationsOf(context) == true;
+
   /// If the current matrix sits in rubber-band over-pan territory,
   /// animate it back to the strict-clamp position.
   void _snapBackIfOverPan() {
@@ -284,6 +289,10 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     final dx = (clamped.storage[12] - current.storage[12]).abs();
     final dy = (clamped.storage[13] - current.storage[13]).abs();
     if (dx < 0.5 && dy < 0.5) return;
+    if (_reduceMotion) {
+      _setTransform(clamped);
+      return;
+    }
     _snapBackTween = Matrix4Tween(begin: current.clone(), end: clamped);
     _snapBackController
       ..reset()
@@ -360,7 +369,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     // exactly at minScale).
     final hasScaleFling = scaleV.abs() >= _kMinScaleFlingVelocity;
 
-    if (!hasPanFling && !hasScaleFling) {
+    if ((!hasPanFling && !hasScaleFling) || _reduceMotion) {
       _snapBackIfOverPan();
       return;
     }
