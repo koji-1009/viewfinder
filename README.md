@@ -266,7 +266,7 @@ Tap the photo: toggle. Zoom in: auto-hide. Page change: auto-hide timer restarts
 
 * **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
 * **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
-* **Fit-mismatch flicker** — Flutter's default flight shuttle is the destination hero's child, so a pop flight renders your (typically cover-fit) thumbnail stretched across the viewer's rect. Provider-backed heroes instead fly the viewer's own rendering by default; pass `ViewfinderHero(flightShuttleBuilder: …)` to override.
+* **Fit-mismatch flicker** — Flutter's default flight shuttle is the destination hero's child, so a pop flight renders your (typically cover-fit) thumbnail stretched across the viewer's rect. Provider-backed heroes instead fly the viewer's own rendering by default. Declare your thumbnail's fit (`ViewfinderHero('tag', thumbnailFit: BoxFit.cover)`) and the shuttle interpolates between the two fits, landing exactly on the thumbnail's crop at the other end too; pass `flightShuttleBuilder` to take over entirely.
 
 These together let the back button stay two-stage by design: the first press on a zoomed photo resets the zoom; the second pops. If you drive navigation yourself, check the reset status first:
 

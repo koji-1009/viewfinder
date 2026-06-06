@@ -240,7 +240,14 @@ class _GalleryViewerState extends State<_GalleryViewer> {
               ],
         itemBuilder: (context, index) => ViewfinderItem(
           image: images[index],
-          hero: s.heroEnabled ? ViewfinderHero('gallery-photo-$index') : null,
+          // thumbnailFit matches the grid tiles, so the pop flight
+          // lands exactly on their cover crop.
+          hero: s.heroEnabled
+              ? ViewfinderHero(
+                  'gallery-photo-$index',
+                  thumbnailFit: BoxFit.cover,
+                )
+              : null,
           semanticLabel: 'Photo ${index + 1}',
           errorBuilder: (_, _, _) => const DemoBrokenImage(),
           loadingBuilder: (_, child, progress) => progress == null

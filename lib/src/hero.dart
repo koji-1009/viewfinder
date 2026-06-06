@@ -22,6 +22,7 @@ class ViewfinderHero {
     this.flightShuttleBuilder,
     this.placeholderBuilder,
     this.transitionOnUserGestures = false,
+    this.thumbnailFit,
   });
 
   /// The unique tag identifying this hero in the [Hero] flight.
@@ -42,12 +43,25 @@ class ViewfinderHero {
   /// matching Flutter's own default.
   final bool transitionOnUserGestures;
 
+  /// The [BoxFit] the launcher-side hero child renders the same image
+  /// with (typically `BoxFit.cover` for a grid thumbnail).
+  ///
+  /// When set, the default flight shuttle interpolates the image's
+  /// painted rect between this fit and the viewer's fit over the
+  /// flight, so the flight lands exactly on the thumbnail's crop —
+  /// no jump at either end. When `null` (default), the shuttle flies
+  /// the viewer's fit for the whole flight, which leaves a small snap
+  /// at the thumbnail end if the fits differ. Ignored when
+  /// [flightShuttleBuilder] is supplied.
+  final BoxFit? thumbnailFit;
+
   Object get _props => (
     tag,
     createRectTween,
     flightShuttleBuilder,
     placeholderBuilder,
     transitionOnUserGestures,
+    thumbnailFit,
   );
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'hero.dart';
 import 'initial_scale.dart';
+import 'internal/hero_shuttle.dart';
 import 'internal/matrix_utils.dart';
 import 'internal/zoomable_viewport.dart';
 
@@ -764,6 +765,37 @@ class _ImageBody extends StatelessWidget {
   final GestureTapDownCallback onDoubleTapDown;
   final GestureTapCallback onDoubleTap;
 
+  /// Default flight shuttle for provider-backed viewers. Flutter's own
+  /// default flies the destination hero's child, so a pop flight
+  /// renders the app-side widget (typically a cover-fit thumbnail)
+  /// stretched across the viewer's rect — a visible jump against the
+  /// viewer's fit. Fly the viewer's rendering instead; with
+  /// [ViewfinderHero.thumbnailFit] set, interpolate toward the
+  /// thumbnail's fit so the other end lands exactly too.
+  HeroFlightShuttleBuilder? _defaultShuttle(ViewfinderHero hero) {
+    if (spec case final ViewfinderProviderImage spec) {
+      return (context, animation, direction, fromContext, toContext) {
+        if (hero.thumbnailFit case final thumbnailFit?) {
+          return HeroCrossFitShuttle(
+            image: spec.image,
+            viewerFit: spec.initialScale.boxFit,
+            thumbnailFit: thumbnailFit,
+            animation: animation,
+            direction: direction,
+            filterQuality: spec.filterQuality,
+          );
+        }
+        return Image(
+          image: spec.image,
+          fit: spec.initialScale.boxFit,
+          filterQuality: spec.filterQuality,
+          gaplessPlayback: true,
+        );
+      };
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget content = switch (spec) {
@@ -792,28 +824,12 @@ class _ImageBody extends StatelessWidget {
       ViewfinderChildImage(:final child) => child,
     };
 
-    // Flutter's default flight shuttle is the destination hero's child,
-    // so a pop flight renders the app-side widget (typically a
-    // cover-fit thumbnail) stretched across the viewer's rect — a
-    // visible jump against the viewer's own fit. Fly the viewer's
-    // rendering instead; the viewer side of every flight then matches
-    // exactly. Callers can still override via
-    // [ViewfinderHero.flightShuttleBuilder].
-    final HeroFlightShuttleBuilder? defaultShuttle = switch (spec) {
-      final ViewfinderProviderImage spec => (_, _, _, _, _) => Image(
-        image: spec.image,
-        fit: spec.initialScale.boxFit,
-        filterQuality: spec.filterQuality,
-        gaplessPlayback: true,
-      ),
-      ViewfinderChildImage() => null,
-    };
-
     if (spec.hero case final hero?) {
       content = Hero(
         tag: hero.tag,
         createRectTween: hero.createRectTween,
-        flightShuttleBuilder: hero.flightShuttleBuilder ?? defaultShuttle,
+        flightShuttleBuilder:
+            hero.flightShuttleBuilder ?? _defaultShuttle(hero),
         placeholderBuilder: hero.placeholderBuilder,
         transitionOnUserGestures: hero.transitionOnUserGestures,
         child: content,
