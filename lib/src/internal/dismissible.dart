@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../dismiss.dart';
 
@@ -41,6 +41,19 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
           setState(() => _dragOffset *= 1 - _release.value);
           _reportProgress();
         });
+  }
+
+  @override
+  void didUpdateWidget(covariant ViewfinderDismissible oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Disabling mid-drag tears down the recognizer without firing
+    // onEnd; spring back so the gallery doesn't stay translated.
+    if (!widget.enabled &&
+        oldWidget.enabled &&
+        _dragOffset != 0 &&
+        !_release.isAnimating) {
+      _release.forward(from: 0);
+    }
   }
 
   @override
@@ -92,6 +105,9 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
 
   void _handleDragEnd(DragEndDetails _) {
     if (_dragProgress() >= widget.config.threshold) {
+      // Re-arm the threshold signal: when onDismiss keeps the widget
+      // mounted, the next drag must be able to fire it again.
+      _pastThreshold = false;
       widget.config.onDismiss();
     } else {
       _release.forward(from: 0);

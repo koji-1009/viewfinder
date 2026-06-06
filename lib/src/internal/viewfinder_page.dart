@@ -1,25 +1,26 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../image.dart';
 import '../initial_scale.dart';
 import '../item.dart';
+import '../pan_gate.dart';
+import 'colors.dart' as colors;
 
 /// One page of a `Viewfinder` gallery.
 ///
 /// Translates a [ViewfinderItem] (image-backed or child-backed) into a
 /// matching [ViewfinderImage] / [ViewfinderImage.child], threading the
 /// per-gallery defaults, the per-page transform [controller], the
-/// edge-handoff [canPan] gate, and (only for the currently visible
-/// page) the per-item Hero. Internal — driven by `Viewfinder.build`.
+/// edge-handoff [panGate], and (only for the currently visible page)
+/// the per-item Hero. Internal — driven by `Viewfinder.build`.
 class ViewfinderPage extends StatelessWidget {
   const ViewfinderPage({
     super.key,
     required this.item,
     required this.isCurrent,
     required this.controller,
-    required this.canPan,
-    required this.claimPan,
+    required this.panGate,
     required this.defaultInitialScale,
     required this.doubleTapScales,
     required this.defaultMinScale,
@@ -29,6 +30,7 @@ class ViewfinderPage extends StatelessWidget {
     required this.rubberBandPan,
     required this.pageSpacing,
     required this.pagerAxis,
+    required this.filterQuality,
     this.enableMouseWheelZoom = true,
     this.onWheelDelta,
     this.wrapProvider,
@@ -37,8 +39,7 @@ class ViewfinderPage extends StatelessWidget {
   final ViewfinderItem item;
   final bool isCurrent;
   final ViewfinderImageController controller;
-  final ZoomableCanPan canPan;
-  final ZoomableClaimPan claimPan;
+  final ViewfinderPanGate panGate;
   final ViewfinderInitialScale defaultInitialScale;
   final List<double> doubleTapScales;
   final double defaultMinScale;
@@ -48,6 +49,7 @@ class ViewfinderPage extends StatelessWidget {
   final bool rubberBandPan;
   final double pageSpacing;
   final Axis pagerAxis;
+  final FilterQuality filterQuality;
 
   /// Forwarded to [ViewfinderImage.enableMouseWheelZoom]; `false` when
   /// the gallery repurposes the wheel for page navigation.
@@ -89,11 +91,11 @@ class ViewfinderPage extends StatelessWidget {
         onLongPressStart: item.onLongPressStart,
         onSecondaryTapUp: item.onSecondaryTapUp,
         controller: controller,
-        canPan: canPan,
-        claimPan: claimPan,
+        panGate: panGate,
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
-        backgroundColor: Colors.transparent,
+        backgroundColor: colors.transparent,
+        filterQuality: filterQuality,
         thumbCrossFadeDuration: item.thumbCrossFadeDuration,
         thumbCrossFadeCurve: item.thumbCrossFadeCurve,
         gaplessPlayback: item.gaplessPlayback,
@@ -111,11 +113,10 @@ class ViewfinderPage extends StatelessWidget {
         onLongPressStart: item.onLongPressStart,
         onSecondaryTapUp: item.onSecondaryTapUp,
         controller: controller,
-        canPan: canPan,
-        claimPan: claimPan,
+        panGate: panGate,
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
-        backgroundColor: Colors.transparent,
+        backgroundColor: colors.transparent,
         rubberBandPan: rubberBandPan,
         enableMouseWheelZoom: enableMouseWheelZoom,
         contentKey: item.contentKey,

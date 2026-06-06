@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import 'internal/colors.dart' as colors;
 import 'viewfinder.dart' show Viewfinder;
 
 /// Optional page-indicator for a [Viewfinder].
@@ -44,8 +45,8 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     this.dotSize = 8,
     this.activeDotSize = 10,
     this.spacing = 8,
-    this.color = Colors.white54,
-    this.activeColor = Colors.white,
+    this.color = colors.white54,
+    this.activeColor = colors.white,
     this.semanticLabelBuilder,
   });
 

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../page_indicator.dart';
+import 'colors.dart' as colors;
 
 /// Internal widget that renders the configured indicator.
 ///
@@ -125,15 +126,17 @@ class _LabelView extends StatelessWidget {
   Widget build(BuildContext context) {
     final builder = this.builder;
     if (builder != null) return builder(context, currentIndex, itemCount);
-    return Container(
-      padding: const .symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: .circular(16),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: colors.black54,
+        borderRadius: .all(.circular(16)),
       ),
-      child: Text(
-        '${currentIndex + 1} / $itemCount',
-        style: const .new(color: Colors.white, fontSize: 13),
+      child: Padding(
+        padding: const .symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          '${currentIndex + 1} / $itemCount',
+          style: const .new(color: colors.white, fontSize: 13),
+        ),
       ),
     );
   }

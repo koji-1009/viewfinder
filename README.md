@@ -135,7 +135,7 @@ Knobs on `Viewfinder` that control how pages flow.
 | `swipeDragDevices`        | `kViewfinderDefaultSwipeDragDevices` | Pointer kinds allowed to swipe the underlying `PageView`. Default includes mouse / trackpad / touch / stylus. Pass a narrower set to opt out.                                                                             |
 | `enableKeyboardShortcuts` | `true`                               | Arrow keys (visual order — RTL/`reverse`-aware), PageUp/Down (logical order), Esc (two-stage). Disable to take over the keyboard.                                                                                         |
 | `allowImplicitScrolling`  | `true`                               | Forwarded to `PageView.allowImplicitScrolling` for accessible focus traversal.                                                                                                                                            |
-| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` turns the wheel into page navigation (pinch / double-tap still zoom).                                                                                                         |
+| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` turns wheel / trackpad scrolling into page navigation (pinch / double-tap still zoom).                                                                                        |
 | `onScaleStateChanged`     | —                                    | Fires when the current page transitions initial ⇄ zoomed — the hook for app chrome that reacts to zoom. Coalesced, not per-frame.                                                                                         |
 | `keepAlivePages`          | `false`                              | Keep off-screen pages' `State` alive (e.g. a `.child` page's video position). The pan/zoom transform still resets on page leave.                                                                                          |
 | `restorationId`           | —                                    | Forwarded to `PageView.restorationId`; the page position survives state restoration.                                                                                                                                      |
@@ -183,7 +183,7 @@ All variants take `alignment`, `padding`, and `safeArea` (default `true` — a b
 ## Inputs
 
 * **Touch / stylus / trackpad / mouse** — wired by default.
-* **Mouse wheel** — zooms around the pointer location; switch to page-turning with `mouseWheelBehavior: .paging`.
+* **Mouse wheel / trackpad scroll** — zooms around the pointer location; switch to page-turning with `mouseWheelBehavior: .paging`. Browser pinch zooms regardless.
 * **Trackpad pinch (macOS)** — wired in.
 * **Mouse drag on web/desktop** — swipes pages out of the box (`swipeDragDevices` includes mouse).
 * **Mouse right-click / long-press** — `onSecondaryTapUp` / `onLongPress` hooks for context menus and save/share actions.
@@ -231,13 +231,27 @@ controller.animateToTransform(targetMatrix);
 controller.canSwipe(Axis.horizontal); // bool — at either edge of that axis
 controller.canSwipe(Axis.vertical);   // bool
 controller.canSwipeToward(AxisDirection.left); // direction-aware: no more room for a leftward drag
-controller.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content); // photo-frame edge instead
 controller.scaleState;                // ViewfinderScaleState
 ```
 
-`canSwipeToward` takes the direction of the _finger motion_: a finger moving right pulls the content right and is exhausted once the content's left edge meets the viewport's left. The bundled gallery uses exactly this to hand off pans to the pager only in the direction the photo has run out of content.
+`canSwipeToward` takes the direction of the _finger motion_: a finger moving right pulls the content right and is exhausted once the content's left edge meets the viewport's left. The check runs in screen space (the rotated content's AABB against the viewport), matching what a screen-axis pager needs. The bundled gallery uses exactly this to hand off pans to the pager only in the direction the photo has run out of content.
 
-The default `mode: SwipeEdgeMode.screen` matches the bundled gallery — a screen-axis pager. Pass `SwipeEdgeMode.content` when you have a custom pager that should follow the photo's own axes through rotation (e.g., a pager that stays aligned with the photo's logical horizontal even at 90° rotation). At zero rotation both modes agree.
+Embedding a standalone `ViewfinderImage` in your own scrollable? `panGate` is the other half of the handoff: once a single-pointer pan's dominant direction is known, return a `ViewfinderPanVerdict` — `release` hands the drag to your pager, `claim` keeps a zoomed pan away from ancestor recognizers that would win at their smaller hit-slop, `compete` leaves normal arena rules in place.
+
+```dart
+ViewfinderImage(
+  image: provider,
+  controller: controller,
+  panGate: (direction) {
+    if (controller.scaleState == ViewfinderScaleState.initial) {
+      return ViewfinderPanVerdict.release;       // pager owns unzoomed drags
+    }
+    return controller.canSwipeToward(direction)
+        ? ViewfinderPanVerdict.release           // at the edge: hand off
+        : ViewfinderPanVerdict.claim;            // zoomed pan stays inside
+  },
+)
+```
 
 ### `ViewfinderChromeController` — chrome visibility
 

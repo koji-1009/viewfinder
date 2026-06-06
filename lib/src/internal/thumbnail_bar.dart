@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../item.dart';
 import '../keys.dart';
 import '../thumbnails.dart';
+import 'colors.dart' as colors;
 
 /// Thumbnail strip — internal renderer driven by `Viewfinder` from the
 /// public [ViewfinderThumbnails] config.
@@ -62,7 +63,10 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     final cfg = widget.config;
     final extent = cfg.size + cfg.spacing;
     final viewport = _scrollController.position.viewportDimension;
-    final target = widget.currentIndex * extent;
+    // Tile i sits at `leading padding + i * extent` in scroll
+    // coordinates; offset 0 shows the padding, not tile 0.
+    final leading = cfg.isHorizontal ? cfg.padding.left : cfg.padding.top;
+    final target = leading + widget.currentIndex * extent;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final desired = (target - viewport / 2 + cfg.size / 2).clamp(
       0.0,
@@ -202,7 +206,7 @@ class _DefaultThumbnailTile extends StatelessWidget {
         gaplessPlayback: true,
         errorBuilder:
             config.errorBuilder ??
-            (_, _, _) => const ColoredBox(color: Colors.white12),
+            (_, _, _) => const ColoredBox(color: colors.white12),
       ),
       ViewfinderChildItem(:final child) => SizedBox(
         width: config.size,
