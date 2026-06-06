@@ -1,0 +1,35 @@
+{
+    "name": "viewfinder demo",
+    "short_name": "viewfinder demo",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#14181c",
+    "theme_color": "#3B6EA5",
+    "description": "Live demo of viewfinder, a photo viewer for Flutter: pinch / double-tap / rotation zoom, drag-to-dismiss, thumbnail strip, page indicator, and keyboard shortcuts.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
