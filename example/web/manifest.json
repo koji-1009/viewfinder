@@ -1,11 +1,11 @@
 {
-    "name": "viewfinder_example",
-    "short_name": "viewfinder_example",
+    "name": "viewfinder demo",
+    "short_name": "viewfinder demo",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#14181c",
+    "theme_color": "#3B6EA5",
+    "description": "Live demo of viewfinder, a photo viewer for Flutter: pinch / double-tap / rotation zoom, drag-to-dismiss, thumbnail strip, page indicator, and keyboard shortcuts.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
