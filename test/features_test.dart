@@ -708,6 +708,82 @@ void main() {
     expect(controller.currentIndex, 2);
   });
 
+  testWidgets('hero flights fly a viewer-fit shuttle by default', (
+    tester,
+  ) async {
+    final image = _memoryImage('hero-shuttle');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Viewfinder.single(
+                    image: image,
+                    hero: const ViewfinderHero('shuttle-test'),
+                  ),
+                ),
+              ),
+              child: SizedBox(
+                width: 100,
+                height: 100,
+                child: Hero(
+                  tag: 'shuttle-test',
+                  child: Image(image: image, fit: BoxFit.cover),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _settleImages(tester);
+
+    await tester.tap(find.byType(GestureDetector).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100)); // mid-flight
+
+    // The overlay shuttle renders the viewer's fit (contain), not the
+    // cover-fit source thumbnail Flutter's default would fly.
+    final shuttles = tester
+        .widgetList<Image>(find.byType(Image))
+        .where((w) => w.image == image && w.fit == BoxFit.contain);
+    expect(shuttles, isNotEmpty);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('page indicator respects the bottom safe-area inset', (
+    tester,
+  ) async {
+    Future<Rect> pump({required bool safeArea}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(800, 600),
+              padding: EdgeInsets.only(bottom: 48),
+            ),
+            child: Viewfinder(
+              itemCount: 3,
+              indicator: ViewfinderPageIndicatorDots(safeArea: safeArea),
+              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await _settleImages(tester);
+      return tester.getRect(find.bySemanticsLabel('Page 1 of 3'));
+    }
+
+    // 600 viewport − 48 inset − 16 indicator padding.
+    final inset = await pump(safeArea: true);
+    expect(inset.bottom, lessThanOrEqualTo(600 - 48 - 16 + 0.01));
+
+    final flush = await pump(safeArea: false);
+    expect(flush.bottom, greaterThan(600.0 - 48));
+  });
+
   testWidgets('dots indicator exposes a position label', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

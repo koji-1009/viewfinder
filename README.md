@@ -178,6 +178,8 @@ Sealed `ViewfinderPageIndicator`, three variants:
 * `ViewfinderPageIndicatorLabel` — single text label, default `"i / N"`. Pass `labelBuilder` for full control.
 * `ViewfinderPageIndicatorAdaptive` — dots up to `maxDots`, then falls back to the label. The most common pick.
 
+All variants take `alignment`, `padding`, and `safeArea` (default `true` — a bottom-aligned indicator stays above the home indicator / browser chrome).
+
 ## Inputs
 
 * **Touch / stylus / trackpad / mouse** — wired by default.
@@ -260,10 +262,11 @@ Tap the photo: toggle. Zoom in: auto-hide. Page change: auto-hide timer restarts
 
 ## Hero
 
-`ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Two known Hero-with-photo-viewer pitfalls are handled internally:
+`ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Three known Hero-with-photo-viewer pitfalls are handled internally:
 
 * **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
 * **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
+* **Fit-mismatch flicker** — Flutter's default flight shuttle is the destination hero's child, so a pop flight renders your (typically cover-fit) thumbnail stretched across the viewer's rect. Provider-backed heroes instead fly the viewer's own rendering by default; pass `ViewfinderHero(flightShuttleBuilder: …)` to override.
 
 These together let the back button stay two-stage by design: the first press on a zoomed photo resets the zoom; the second pops. If you drive navigation yourself, check the reset status first:
 

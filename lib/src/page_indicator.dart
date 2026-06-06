@@ -13,6 +13,7 @@ sealed class ViewfinderPageIndicator {
   const ViewfinderPageIndicator({
     this.alignment = .bottomCenter,
     this.padding = const .all(16),
+    this.safeArea = true,
   });
 
   /// Where the indicator sits within the viewfinder.
@@ -20,6 +21,12 @@ sealed class ViewfinderPageIndicator {
 
   /// Padding applied around the indicator before alignment.
   final EdgeInsets padding;
+
+  /// When `true` (default), the indicator keeps clear of system
+  /// intrusions — a bottom-aligned indicator sits above the home
+  /// indicator / browser chrome instead of sinking under it. Set
+  /// `false` to manage the inset yourself via [padding].
+  final bool safeArea;
 }
 
 /// Builds the screen-reader label for a dots indicator. See
@@ -33,6 +40,7 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   const ViewfinderPageIndicatorDots({
     super.alignment,
     super.padding,
+    super.safeArea,
     this.dotSize = 8,
     this.activeDotSize = 10,
     this.spacing = 8,
@@ -68,6 +76,7 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
   Object get _props => (
     alignment,
     padding,
+    safeArea,
     dotSize,
     activeDotSize,
     spacing,
@@ -100,13 +109,14 @@ final class ViewfinderPageIndicatorLabel extends ViewfinderPageIndicator {
   const ViewfinderPageIndicatorLabel({
     super.alignment,
     super.padding,
+    super.safeArea,
     this.labelBuilder,
   });
 
   /// Builds the rendered label. When `null`, a default pill is used.
   final ViewfinderPageIndicatorLabelBuilder? labelBuilder;
 
-  Object get _props => (alignment, padding, labelBuilder);
+  Object get _props => (alignment, padding, safeArea, labelBuilder);
 
   @override
   bool operator ==(Object other) =>
@@ -129,6 +139,7 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   const ViewfinderPageIndicatorAdaptive({
     super.alignment,
     super.padding,
+    super.safeArea,
     this.dots = const ViewfinderPageIndicatorDots(),
     this.label = const ViewfinderPageIndicatorLabel(),
     this.maxDots = 12,
@@ -144,7 +155,7 @@ final class ViewfinderPageIndicatorAdaptive extends ViewfinderPageIndicator {
   /// variant takes over.
   final int maxDots;
 
-  Object get _props => (alignment, padding, dots, label, maxDots);
+  Object get _props => (alignment, padding, safeArea, dots, label, maxDots);
 
   @override
   bool operator ==(Object other) =>
