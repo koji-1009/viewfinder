@@ -136,8 +136,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    return Container(
-      width: double.infinity,
+    return ColoredBox(
       color: scheme.surfaceContainerHigh,
       child: SafeArea(
         bottom: false,
@@ -271,14 +270,13 @@ class _ScenarioCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
+              Material(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox.square(
+                  dimension: 44,
+                  child: Icon(scenario.icon, color: scheme.onPrimaryContainer),
                 ),
-                child: Icon(scenario.icon, color: scheme.onPrimaryContainer),
               ),
               const SizedBox(width: 16),
               Expanded(

@@ -156,50 +156,52 @@ class _ZoomableCard extends StatelessWidget {
       ('rubberBandPan', 'true', 'Elastic over-pan'),
       ('rotateEnabled', 'false', 'Two-finger rotate'),
     ];
-    return Container(
+    return ColoredBox(
       color: scheme.surfaceContainerHighest,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'ViewfinderImage knobs (package defaults)',
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: scheme.onSurface),
-          ),
-          const SizedBox(height: 12),
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(3),
-              1: FlexColumnWidth(2),
-              2: FlexColumnWidth(4),
-            },
-            border: TableBorder.symmetric(
-              inside: BorderSide(color: scheme.outlineVariant),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'ViewfinderImage knobs (package defaults)',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: scheme.onSurface),
             ),
-            children: [
-              for (final (name, value, desc) in rows)
-                TableRow(
-                  children: [
-                    _Cell(name, mono: true, color: scheme.primary),
-                    _Cell(value, mono: true, color: scheme.onSurfaceVariant),
-                    _Cell(desc, color: scheme.onSurfaceVariant),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Pinch or double-tap to read the fine print.',
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(3),
+                1: FlexColumnWidth(2),
+                2: FlexColumnWidth(4),
+              },
+              border: TableBorder.symmetric(
+                inside: BorderSide(color: scheme.outlineVariant),
+              ),
+              children: [
+                for (final (name, value, desc) in rows)
+                  TableRow(
+                    children: [
+                      _Cell(name, mono: true, color: scheme.primary),
+                      _Cell(value, mono: true, color: scheme.onSurfaceVariant),
+                      _Cell(desc, color: scheme.onSurfaceVariant),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Pinch or double-tap to read the fine print.',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }

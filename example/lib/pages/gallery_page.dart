@@ -148,13 +148,14 @@ class _GalleryViewerState extends State<_GalleryViewer> {
         position: s.thumbnailsPosition,
         size: 64,
         safeArea: s.thumbnailsSafeArea,
-        itemBuilder: (context, index, selected) => Container(
-          decoration: BoxDecoration(
-            border: Border.all(
+        itemBuilder: (context, index, selected) => Material(
+          color: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
               color: selected ? Colors.amber : Colors.transparent,
               width: 3,
             ),
-            borderRadius: BorderRadius.circular(8),
           ),
           clipBehavior: Clip.hardEdge,
           child: Image(
