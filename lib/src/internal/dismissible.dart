@@ -151,9 +151,7 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final progress = (_dragOffset.abs() / (size.height == 0 ? 1 : size.height))
-        .clamp(0.0, 1.0);
+    final progress = _dragProgress();
 
     final bg = widget.config.fadeBackground
         ? widget.config.backgroundColor.withValues(

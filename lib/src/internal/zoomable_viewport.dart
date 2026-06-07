@@ -412,12 +412,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       widget.maxScale,
     );
     final effective = targetScale / currentScaleAtStart;
-
-    final delta = Matrix4.identity()
-      ..translateByDouble(_dtdFocal.dx, _dtdFocal.dy, 0, 1)
-      ..scaleByDouble(effective, effective, 1, 1)
-      ..translateByDouble(-_dtdFocal.dx, -_dtdFocal.dy, 0, 1);
-
+    final delta = scaleAroundFocal(focal: _dtdFocal, scale: effective);
     _setTransform(_clampMatrix(delta.multiplied(start)));
   }
 
@@ -469,10 +464,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     );
     if ((targetScale - currentScale).abs() < 1e-6) return;
     final effective = targetScale / currentScale;
-    final delta = Matrix4.identity()
-      ..translateByDouble(focal.dx, focal.dy, 0, 1)
-      ..scaleByDouble(effective, effective, 1, 1)
-      ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
+    final delta = scaleAroundFocal(focal: focal, scale: effective);
     _setTransform(_clampMatrix(delta.multiplied(start)));
     // Consume so scrollables above us don't also handle it.
     GestureBinding.instance.pointerSignalResolver.register(event, (event) {});
@@ -760,9 +752,9 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
     final delta = event.localPosition - tp.startPosition;
     final slop = computeHitSlop(tp.kind, gestureSettings);
     if (delta.distance <= slop) return false;
-    _resolved = true;
     // Flutter's own convention: strict axis dominance (no weighting);
-    // an exact diagonal has no dominant direction and is not gated.
+    // an exact diagonal has no dominant direction — leave the gate
+    // armed for the next move instead of latching unresolved.
     final AxisDirection? dominant = switch (delta) {
       _ when delta.dx.abs() > delta.dy.abs() =>
         delta.dx >= 0 ? AxisDirection.right : AxisDirection.left,
@@ -771,6 +763,7 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
       _ => null,
     };
     if (dominant == null) return false;
+    _resolved = true;
     switch (verdictAt(dominant)) {
       case ViewfinderPanVerdict.release:
         resolvePointer(event.pointer, .rejected);
@@ -1035,10 +1028,7 @@ class FlingRunner {
     // point captured at release.
     final scaleNow = simScale.x(t).clamp(minScale, maxScale);
     final scaleFactor = scaleNow / startScale;
-    final delta = Matrix4.identity()
-      ..translateByDouble(focal.dx, focal.dy, 0, 1)
-      ..scaleByDouble(scaleFactor, scaleFactor, 1, 1)
-      ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
+    final delta = scaleAroundFocal(focal: focal, scale: scaleFactor);
     final m = delta.multiplied(startMatrix);
 
     // Pan displacement from gesture-end to t, layered on top of the

@@ -1594,6 +1594,182 @@ void main() {
     expect(controller.rotation, closeTo(math.pi / 2, 1e-3));
   });
 
+  testWidgets('a held arrow key flips page after page', (tester) async {
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 6,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // OS key repeat: ~50 ms ticks, far shorter than the 400 ms page
+    // animation. Each repeat must advance from the in-flight target,
+    // not re-target the page the lagging _currentIndex still reports.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 4);
+  });
+
+  testWidgets('an interrupted turn completing does not clear a newer '
+      'same-target flight', (tester) async {
+    final controller = ViewfinderController(initialIndex: 3);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 10,
+              loop: true,
+              controller: controller,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // A synchronous reversal burst: the 1st and 3rd flights share a
+    // raw target, so a value-compared completion guard would let the
+    // interrupted 1st flight clear the 3rd's in-flight target.
+    controller.animateTo(4);
+    controller.animateTo(3);
+    controller.animateTo(4);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 5);
+  });
+
+  testWidgets('flipping mouseWheelBehavior at runtime keeps the live zoom', (
+    tester,
+  ) async {
+    final events = <ViewfinderScaleState>[];
+    var behavior = ViewfinderMouseWheelBehavior.zoom;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return SizedBox(
+                width: 400,
+                height: 400,
+                child: Viewfinder(
+                  itemCount: 2,
+                  mouseWheelBehavior: behavior,
+                  onScaleStateChanged: (_, s) => events.add(s),
+                  itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    await tester.tapAt(center);
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(events, [ViewfinderScaleState.zoomed]);
+
+    // The page element must survive the flip; recreating it would
+    // reset the transform (and emit an `initial` transition).
+    rebuild(() => behavior = ViewfinderMouseWheelBehavior.paging);
+    await tester.pumpAndSettle();
+    expect(events, [ViewfinderScaleState.zoomed]);
+  });
+
+  testWidgets('rotation requested before the first layout pivots on the '
+      'center once laid out', (tester) async {
+    final controller = ViewfinderImageController();
+    var collapsed = true;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return SizedBox(
+                width: collapsed ? 0 : 400,
+                height: collapsed ? 0 : 400,
+                child: ViewfinderImage(
+                  image: memoryImage(),
+                  controller: controller,
+                  rotateEnabled: true,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Zero-sized viewport: no center to pivot on yet.
+    controller.jumpToRotation(math.pi / 2);
+    await tester.pump();
+
+    rebuild(() => collapsed = false);
+    await settleImages(tester);
+    expect(controller.rotation, closeTo(math.pi / 2, 1e-6));
+    final m = controller.currentTransform.storage;
+    expect(m[0] * 200 + m[4] * 200 + m[12], closeTo(200, 1e-6));
+    expect(m[1] * 200 + m[5] * 200 + m[13], closeTo(200, 1e-6));
+  });
+
+  testWidgets('mutating the matrix after animateToTransform does not move '
+      'the landing', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final target = Matrix4.identity()..scaleByDouble(3, 3, 1, 1);
+    controller.animateToTransform(target);
+    target.translateByDouble(999, 999, 0, 1); // caller reuses its matrix
+    await tester.pumpAndSettle();
+    final m = controller.currentTransform.storage;
+    expect(m[0], closeTo(3.0, 1e-9));
+    expect(m[12], closeTo(0.0, 1e-9));
+  });
+
   testWidgets('jumpToScale sets the scale instantly', (tester) async {
     final controller = ViewfinderImageController();
     await tester.pumpWidget(

@@ -125,23 +125,22 @@ class ViewfinderPage extends StatelessWidget {
     // ZoomableViewport skips pager-axis-dominant events, so the two
     // split the resolver cleanly). Registered from this leaf-side
     // Listener, so it wins over the enclosing scrollable's own wheel
-    // handling.
-    if (onWheelDelta case final onWheel?) {
-      page = Listener(
-        onPointerSignal: (event) {
-          if (event is! PointerScrollEvent) return;
-          final (:along, :cross) = splitScrollDelta(
-            event.scrollDelta,
-            pagerAxis,
-          );
-          if (along.abs() <= cross.abs()) return;
-          GestureBinding.instance.pointerSignalResolver.register(event, (_) {
-            onWheel(event, along);
-          });
-        },
-        child: page,
-      );
-    }
+    // handling. The Listener mounts unconditionally — gating it on the
+    // mode would change the element tree on a runtime
+    // mouseWheelBehavior flip and recreate the page, dropping its
+    // live zoom.
+    page = Listener(
+      onPointerSignal: (event) {
+        final onWheel = onWheelDelta;
+        if (onWheel == null || event is! PointerScrollEvent) return;
+        final (:along, :cross) = splitScrollDelta(event.scrollDelta, pagerAxis);
+        if (along.abs() <= cross.abs()) return;
+        GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+          onWheel(event, along);
+        });
+      },
+      child: page,
+    );
 
     page = PagerScope(
       axis: pagerAxis,

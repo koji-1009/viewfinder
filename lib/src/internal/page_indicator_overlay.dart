@@ -103,7 +103,7 @@ class _DotsView extends StatelessWidget {
       mainAxisSize: .min,
       children: [
         for (final i in [
-          for (var i = 0; i < itemCount; i++) reverse ? itemCount - 1 - i : i,
+          for (var k = 0; k < itemCount; k++) reverse ? itemCount - 1 - k : k,
         ])
           Padding(
             padding: .symmetric(horizontal: dots.spacing / 2),

@@ -114,6 +114,18 @@ class _RotationPageState extends State<RotationPage> {
                     doubleTapScales: const [1, 2.5, 5],
                     maxScale: 8,
                     semanticLabel: 'Rotatable demo photo',
+                    // Keep the slider and label in sync with the
+                    // two-finger rotate gesture. The wrap guard treats
+                    // ±180° as the same angle — the matrix read-back
+                    // flips sign there, which would flick the thumb
+                    // end-to-end while dragging at the boundary.
+                    onScaleChanged: (_) {
+                      final degrees = _controller.rotation * 180 / math.pi;
+                      final diff = (degrees - _degrees).abs();
+                      if (diff > 0.5 && diff < 359.5) {
+                        setState(() => _degrees = degrees);
+                      }
+                    },
                   ),
                 ),
               ),

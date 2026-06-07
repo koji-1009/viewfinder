@@ -604,7 +604,6 @@ class _ViewfinderState extends State<Viewfinder> {
   bool _wheelSettling = false;
   double _wheelLockedSign = 0;
   double _wheelLastAbsDelta = 0;
-  int _wheelTargetIndex = 0;
   int _wheelSettleGen = 0;
   PointerScrollEvent? _lastWheelEvent;
   Timer? _wheelCooldown;
@@ -828,6 +827,9 @@ class _ViewfinderState extends State<Viewfinder> {
         _pageController.jumpToPage(clamped);
       }
     }
+    // An in-flight target may now lie beyond the shrunk range; the
+    // next relative turn must not base itself on it.
+    _navTargetRaw = null;
   }
 
   /// The raw↔logical mapping changed (loop toggled, or the modulus
@@ -844,6 +846,9 @@ class _ViewfinderState extends State<Viewfinder> {
     // would mis-gate the pager and PopScope until the next transition.
     _swipeLocked = false;
     _currentZoomed = false;
+    // The rebase changes the raw index space; a target from the old
+    // space would mis-base the next relative page turn.
+    _navTargetRaw = null;
     _currentIndex = _clampIndex(_currentIndex);
     _controller._currentIndex = _currentIndex;
     _currentRawIndex = _rawBaseFor(_currentIndex);
@@ -981,32 +986,59 @@ class _ViewfinderState extends State<Viewfinder> {
     _chrome?.bumpAutoHide();
   }
 
+  /// Raw target of the in-flight programmatic page turn, or null at
+  /// rest. `_currentIndex` only advances once an animation crosses the
+  /// page midpoint, so a relative turn issued mid-flight (held arrow
+  /// key, wheel momentum, rapid `animateTo`) must advance from the
+  /// issued target, not the lagging current page. The generation
+  /// guards the clear: raw targets recur (a direction reversal lands
+  /// on the same page), so an interrupted flight comparing values
+  /// could clear a newer flight's target mid-air.
+  int? _navTargetRaw;
+  int _navGen = 0;
+
+  /// Base for computing a relative page turn: the in-flight target if
+  /// one exists, the settled current page otherwise.
+  int get _navBaseIndex =>
+      _navTargetRaw == null ? _currentIndex : _logicalFor(_navTargetRaw!);
+
   Future<void> _goTo(int index, {bool animate = true}) {
     if (!_pageController.hasClients) return Future<void>.value();
     final int targetRaw;
     if (_loopEnabled) {
-      // Wrap the target and travel the shortest way around the loop.
+      // Wrap the target and travel the shortest way around the loop —
+      // measured from the in-flight target when there is one.
       final n = widget.itemCount;
       final targetLogical = _clampIndex(index);
-      var delta = targetLogical - _currentIndex;
+      var delta = targetLogical - _navBaseIndex;
       if (delta > n / 2) delta -= n;
       if (delta < -n / 2) delta += n;
-      targetRaw = _currentRawIndex + delta;
+      targetRaw = (_navTargetRaw ?? _currentRawIndex) + delta;
     } else {
-      final max = widget.itemCount - 1;
-      targetRaw = max < 0 ? 0 : index.clamp(0, max);
+      targetRaw = _clampIndex(index);
     }
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) == true;
     if (animate && !reduceMotion) {
+      _navTargetRaw = targetRaw;
+      final gen = ++_navGen;
       // easeOutCubic front-loads the motion like a finger fling; 400 ms
       // matches the tail of a PageScrollPhysics swipe settle (a flat
       // 280 ms read as an abrupt jump next to real swipes).
-      return _pageController.animateToPage(
-        targetRaw,
-        duration: const .new(milliseconds: 400),
-        curve: Curves.easeOutCubic,
-      );
+      return _pageController
+          .animateToPage(
+            targetRaw,
+            duration: const .new(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            // A newer turn may have re-targeted; only the latest
+            // flight's completion clears the base.
+            if (gen == _navGen) {
+              _navTargetRaw = null;
+            }
+          });
     }
+    _navTargetRaw = null;
     _pageController.jumpToPage(targetRaw);
     return Future<void>.value();
   }
@@ -1079,20 +1111,9 @@ class _ViewfinderState extends State<Viewfinder> {
     // NeverScrollableScrollPhysics for exactly that window. The
     // generation guard keeps a rapid follow-up swipe's window open
     // when the interrupted animation's future completes.
-    //
-    // A follow-up swipe fired mid-transition advances from the
-    // previous TARGET — _currentIndex only updates once the animation
-    // crosses the page midpoint, so it can still read the old page.
-    final base = _wheelSettling ? _wheelTargetIndex : _currentIndex;
-    final next = base + (delta > 0 ? 1 : -1);
-    // Keep the stored target in range so a direction change from a
-    // boundary doesn't have to walk back through out-of-range values.
-    _wheelTargetIndex = _loopEnabled
-        ? _clampIndex(next)
-        : next.clamp(0, math.max(0, widget.itemCount - 1));
     final gen = ++_wheelSettleGen;
     setState(() => _wheelSettling = true);
-    _goTo(_wheelTargetIndex).whenComplete(() {
+    _goTo(_navBaseIndex + (delta > 0 ? 1 : -1)).whenComplete(() {
       if (mounted && gen == _wheelSettleGen) {
         setState(() => _wheelSettling = false);
       }
@@ -1230,24 +1251,26 @@ class _ViewfinderState extends State<Viewfinder> {
 
   /// Keyboard bindings: arrows are spatial (they move to the page
   /// visually in that direction, tracking reverse / RTL); PageUp /
-  /// PageDown stay logical; Escape is two-stage.
+  /// PageDown stay logical; Escape is two-stage. Relative steps build
+  /// on [_navBaseIndex] so a held key flips page after page instead of
+  /// re-targeting the one in flight.
   Map<ShortcutActivator, VoidCallback> _keyboardBindings() {
     final visualStep = _effectiveReverse ? -1 : 1;
     return <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-          _goTo(_currentIndex - visualStep),
+          _goTo(_navBaseIndex - visualStep),
       const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-          _goTo(_currentIndex + visualStep),
+          _goTo(_navBaseIndex + visualStep),
       if (widget.pagerAxis == .vertical) ...{
         const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-            _goTo(_currentIndex - visualStep),
+            _goTo(_navBaseIndex - visualStep),
         const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
-            _goTo(_currentIndex + visualStep),
+            _goTo(_navBaseIndex + visualStep),
       },
       const SingleActivator(LogicalKeyboardKey.pageUp): () =>
-          _goTo(_currentIndex - 1),
+          _goTo(_navBaseIndex - 1),
       const SingleActivator(LogicalKeyboardKey.pageDown): () =>
-          _goTo(_currentIndex + 1),
+          _goTo(_navBaseIndex + 1),
       const SingleActivator(LogicalKeyboardKey.escape): _handleEscape,
     };
   }
@@ -1318,19 +1341,17 @@ class _ViewfinderState extends State<Viewfinder> {
       );
     }
 
-    if (widget.mouseWheelBehavior == .paging) {
-      // Observation only (never registers with the signal resolver):
-      // while the page transition animates, the Scrollable's children
-      // are not hit-testable, so the per-page wheel listeners go
-      // silent — this outer listener keeps the wheel handler fed
-      // through the momentum tail. Restricted to the locked/settling
-      // window so idle wheel handling stays with the per-page
-      // listeners; the event-identity dedupe absorbs the overlap.
-      pageView = Listener(
-        onPointerSignal: _observeWheelSignal,
-        child: pageView,
-      );
-    }
+    // Observation only (never registers with the signal resolver):
+    // while the page transition animates, the Scrollable's children
+    // are not hit-testable, so the per-page wheel listeners go silent
+    // — this outer listener keeps the wheel handler fed through the
+    // momentum tail. Restricted by its handler to the locked/settling
+    // window so idle wheel handling stays with the per-page listeners;
+    // the event-identity dedupe absorbs the overlap. Mounted
+    // unconditionally — gating it on the mode would recreate the
+    // PageView (and every page's zoom) on a runtime mouseWheelBehavior
+    // flip.
+    pageView = Listener(onPointerSignal: _observeWheelSignal, child: pageView);
 
     Widget pager = ColoredBox(
       color: widget.backgroundColor,

@@ -589,8 +589,10 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     }
     _animation =
         _SimilarityTween(
+          // Clone both endpoints so a caller reusing its matrix can't
+          // shift the flight or the landing.
           begin: _transformation.value.clone(),
-          end: target,
+          end: target.clone(),
           center: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
         ).animate(
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
@@ -629,6 +631,13 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   void scaleTo(double scale, {Offset? focal, bool animate = true}) {
+    if (_viewportSize.isEmpty) {
+      // No center to pivot on before the first layout; run after it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) scaleTo(scale, focal: focal, animate: animate);
+      });
+      return;
+    }
     final base = _baseScale;
     final clamped = (scale * base).clamp(_absMinScale, _absMaxScale).toDouble();
     final f =
@@ -648,7 +657,9 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   void jumpToTransform(Matrix4 target) {
     _animController.stop();
     _animation = null;
-    _writeTransform(target);
+    // Clone: holding the caller's instance would let later mutations
+    // change the transform without a notification.
+    _writeTransform(target.clone());
   }
 
   void animateToTransform(Matrix4 target) => _animateTo(target);
@@ -656,6 +667,13 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   double get rotationAngle => rotationOf(_transformation.value);
 
   void rotateTo(double radians, {Offset? focal, bool animate = true}) {
+    if (_viewportSize.isEmpty) {
+      // No center to pivot on before the first layout; run after it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) rotateTo(radians, focal: focal, animate: animate);
+      });
+      return;
+    }
     final delta = radians - rotationAngle;
     if (delta.abs() < 1e-9) return;
     final f =
@@ -1067,6 +1085,10 @@ class _MainImageFadeState extends State<_MainImageFade> {
 /// Each controller drives a single [ViewfinderImage]. Passing the same
 /// instance to multiple widgets is rejected by a debug assert; create a
 /// fresh controller per viewer.
+///
+/// Scale and rotation commands issued before the viewer's first layout
+/// apply one frame later — the viewport center they pivot on doesn't
+/// exist yet.
 class ViewfinderImageController extends ChangeNotifier {
   /// Creates a detached controller. Pass it to a [ViewfinderImage] to
   /// observe and drive that image's transform.

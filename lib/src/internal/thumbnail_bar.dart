@@ -228,14 +228,20 @@ class _DefaultThumbnailTile extends StatelessWidget {
     return AnimatedOpacity(
       duration: const .new(milliseconds: 150),
       opacity: selected ? 1.0 : config.unselectedOpacity,
-      child: Container(
+      child: SizedBox(
         width: config.size,
         height: config.size,
-        decoration: BoxDecoration(
-          border: selected ? config.selectedBorder : null,
+        child: DecoratedBox(
+          // Foreground, so the selection border stays visible over a
+          // cover-fit image.
+          position: .foreground,
+          decoration: BoxDecoration(
+            border: selected ? config.selectedBorder : null,
+          ),
+          // A small source decodes below the tile size (ResizeImage
+          // never upscales), so the cover fit can paint past the tile.
+          child: ClipRect(child: img),
         ),
-        clipBehavior: .hardEdge,
-        child: img,
       ),
     );
   }
