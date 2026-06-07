@@ -1662,6 +1662,94 @@ void main() {
     expect(controller.scale, closeTo(1.0, 1e-3));
   });
 
+  testWidgets('a pinch with a horizontal first-finger drift zooms instead '
+      'of swiping the page', (tester) async {
+    final events = <ViewfinderScaleState>[];
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              onScaleStateChanged: (_, s) => events.add(s),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // First finger drifts along the pager axis (under its 18-px slop),
+    // the second lands, then both spread. Without the two-finger claim
+    // the pager's drag wins off the continuing drift, because the
+    // scale recognizer's own acceptance tracks the finger AVERAGE
+    // against the larger pan-slop.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final p1 = await tester.startGesture(center - const Offset(20, 0));
+    await p1.moveBy(const Offset(12, 0));
+    await tester.pump(const Duration(milliseconds: 30));
+    final p2 = await tester.startGesture(center + const Offset(20, 0));
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await p1.moveBy(const Offset(-25, 0));
+      await p2.moveBy(const Offset(25, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await p1.up();
+    await p2.up();
+    await tester.pumpAndSettle();
+
+    expect(events, contains(ViewfinderScaleState.zoomed));
+    expect(controller.currentIndex, 0);
+  });
+
+  testWidgets('a motionless two-finger touch fires no scale callbacks and '
+      'keeps taps alive', (tester) async {
+    var scaleStarts = 0;
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              onScaleStart: (_) => scaleStarts++,
+              onTap: () => taps++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport));
+    final p1 = await tester.startGesture(center - const Offset(20, 0));
+    final p2 = await tester.startGesture(center + const Offset(20, 0));
+    await tester.pump(const Duration(milliseconds: 50));
+    await p1.up();
+    await p2.up();
+    await tester.pumpAndSettle();
+    expect(scaleStarts, 0);
+
+    // A plain single tap still works afterwards. Let the double-tap
+    // window from the two-finger release close first, and again after
+    // the tap so it resolves as a single tap. (The motionless touch
+    // itself may resolve as one tap — pre-existing arena behavior.)
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    final tapsBefore = taps;
+    await tester.tapAt(center);
+    await tester.pump(kDoubleTapTimeout);
+    await tester.pump();
+    expect(taps, tapsBefore + 1);
+  });
+
   testWidgets('a pinch with a slight first-finger drift zooms instead of '
       'dragging the dismissible', (tester) async {
     final events = <ViewfinderScaleState>[];

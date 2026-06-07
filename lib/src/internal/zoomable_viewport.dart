@@ -574,7 +574,9 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     // Registration order is also arena priority. Put double-tap-drag
     // FIRST so that, when a user has double-tapped and begun dragging,
     // it wins the pointer over the single-pointer pan path of
-    // ScaleGestureRecognizer.
+    // ScaleGestureRecognizer. The order also lets DTD reject itself on
+    // a second pointer before the scale recognizer's two-finger claim
+    // sees that pointer's events.
     return <Type, GestureRecognizerFactory>{
       if (widget.doubleTapDragZoom && widget.scaleEnabled)
         DoubleTapDragRecognizer:
@@ -717,6 +719,13 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
     super.addAllowedPointer(event);
   }
 
+  /// Movement that confirms two fingers as a pinch/pan. Well under an
+  /// ancestor drag's kTouchSlop (18) — without the eager claim the
+  /// pager would win the arena off finger 1's drift, because the scale
+  /// recognizer's own acceptance waits for the focal point (the finger
+  /// average) to cross the larger pan-slop.
+  static const double _kTwoFingerClaimSlop = 6.0;
+
   @override
   void handleEvent(PointerEvent event) {
     if (!_resolved &&
@@ -726,6 +735,18 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
         _gateYieldedPointer(event)) {
       // The pointer was handed to the arena; don't forward the event.
       return;
+    }
+    // Two fingers on the content are never a page swipe; claim as soon
+    // as the gesture demonstrably moves. Not on the second pointer's
+    // down: a motionless two-finger touch must not fire
+    // onScaleStart/onScaleEnd or steal taps.
+    if (!_accepted && _tracked.length >= 2 && event is PointerMoveEvent) {
+      final tp = _tracked[event.pointer];
+      if (tp != null &&
+          (event.localPosition - tp.startPosition).distance >
+              _kTwoFingerClaimSlop) {
+        resolve(GestureDisposition.accepted);
+      }
     }
     super.handleEvent(event);
   }
