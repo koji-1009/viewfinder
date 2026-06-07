@@ -839,6 +839,10 @@ class _ViewfinderState extends State<Viewfinder> {
       c.dispose();
     }
     _imageControllers.clear();
+    // Fresh controllers start at the initial state; stale flags here
+    // would mis-gate the pager and PopScope until the next transition.
+    _swipeLocked = false;
+    _currentZoomed = false;
     _currentIndex = _clampIndex(_currentIndex);
     _controller._currentIndex = _currentIndex;
     _currentRawIndex = _rawBaseFor(_currentIndex);
@@ -1359,20 +1363,29 @@ class _ViewfinderState extends State<Viewfinder> {
     if (overlayChildren.isNotEmpty) {
       Widget overlayStack = Stack(fit: .expand, children: overlayChildren);
       // The thumbnail strip overlays the same full-bleed viewer; keep
-      // the indicator and chrome overlays clear of its edge.
+      // the indicator and chrome overlays clear of its edge. When the
+      // strip reserves a safe-area band, clear that too — SafeArea
+      // consumes the inset from the inherited MediaQuery, so overlays
+      // applying their own SafeArea don't double up.
       if (widget.thumbnails case final t?) {
-        final thickness = t.isHorizontal
-            ? t.size + t.padding.vertical
-            : t.size + t.padding.horizontal;
         overlayStack = Padding(
           padding: switch (t.position) {
-            .bottom => EdgeInsets.only(bottom: thickness),
-            .top => EdgeInsets.only(top: thickness),
-            .left => EdgeInsets.only(left: thickness),
-            .right => EdgeInsets.only(right: thickness),
+            .bottom => EdgeInsets.only(bottom: t.crossExtent),
+            .top => EdgeInsets.only(top: t.crossExtent),
+            .left => EdgeInsets.only(left: t.crossExtent),
+            .right => EdgeInsets.only(right: t.crossExtent),
           },
           child: overlayStack,
         );
+        if (t.safeArea) {
+          overlayStack = SafeArea(
+            top: t.position == .top,
+            bottom: t.position == .bottom,
+            left: t.position == .left,
+            right: t.position == .right,
+            child: overlayStack,
+          );
+        }
       }
       if (_chrome case final chrome?) {
         overlayStack = ChromeFade(
@@ -1429,10 +1442,8 @@ class _ViewfinderState extends State<Viewfinder> {
     // 2. When the pop does go through, snap all pages to identity in
     //    the callback *before* the Hero flight reads the source rect,
     //    so hero transitions stay coherent.
-    final isCurrentZoomed =
-        _imageControllers[_currentRawIndex]?.scaleState == .zoomed;
     body = PopScope<Object?>(
-      canPop: !isCurrentZoomed,
+      canPop: !_currentZoomed,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           _jumpAllImagesToInitial();

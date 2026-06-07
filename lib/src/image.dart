@@ -509,11 +509,10 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     if ((s - 1.0).abs() < 0.001) return Matrix4.identity();
     // Center the scaled content — scaling about the origin would
     // anchor contain(<1) to the top-left and crop cover(>1) toward it.
-    final dx = _viewportSize.width * (1 - s) / 2;
-    final dy = _viewportSize.height * (1 - s) / 2;
-    return Matrix4.identity()
-      ..translateByDouble(dx, dy, 0, 1)
-      ..scaleByDouble(s, s, 1, 1);
+    return scaleAroundFocal(
+      focal: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
+      scale: s,
+    );
   }
 
   /// Writes [m] to the transformation controller, marked as our own so

@@ -121,6 +121,11 @@ class ViewfinderThumbnails {
     .left || .right => false,
   };
 
+  /// Strip thickness on its cross axis — tile [size] plus the padding
+  /// stacked across the strip. Excludes any safe-area inset.
+  double get crossExtent =>
+      size + (isHorizontal ? padding.vertical : padding.horizontal);
+
   /// Identity tuple backing [==] and [hashCode] — one field list
   /// instead of two parallel ones (records compare and hash
   /// structurally).

@@ -1375,6 +1375,42 @@ void main() {
     expect(image.filterQuality, FilterQuality.high);
   });
 
+  testWidgets('chrome overlays clear the thumbnail strip including its '
+      'safe-area band', (tester) async {
+    const safeBottom = 48.0;
+    const overlayKey = Key('chrome-bottom-bar');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(800, 600),
+            padding: EdgeInsets.only(bottom: safeBottom),
+          ),
+          child: Viewfinder(
+            itemCount: 2,
+            thumbnails: const ViewfinderThumbnails(),
+            chromeOverlays: const [
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: SizedBox(key: overlayKey, height: 40),
+              ),
+            ],
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // Strip occupies safe inset + crossExtent from the bottom; the
+    // overlay's bottom edge must sit exactly on the tiles' top.
+    const thumbs = ViewfinderThumbnails();
+    final overlay = tester.getRect(find.byKey(overlayKey));
+    expect(overlay.bottom, closeTo(600 - safeBottom - thumbs.crossExtent, 0.1));
+  });
+
   testWidgets('contain/cover factors center the photo from the first '
       'frame', (tester) async {
     final contained = ViewfinderImageController();

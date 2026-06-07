@@ -105,12 +105,9 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
       ),
     );
 
-    final barH = cfg.size + cfg.padding.top + cfg.padding.bottom;
-    final barW = cfg.size + cfg.padding.left + cfg.padding.right;
-
     Widget content = SizedBox(
-      height: cfg.isHorizontal ? barH : null,
-      width: cfg.isHorizontal ? null : barW,
+      height: cfg.isHorizontal ? cfg.crossExtent : null,
+      width: cfg.isHorizontal ? null : cfg.crossExtent,
       child: list,
     );
 
