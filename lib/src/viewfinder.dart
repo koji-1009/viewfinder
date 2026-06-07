@@ -1356,6 +1356,7 @@ class _ViewfinderState extends State<Viewfinder> {
           config: indicator,
           itemCount: widget.itemCount,
           currentIndex: _currentIndex,
+          reverse: widget.reverse,
         ),
       ...widget.chromeOverlays,
     ];
@@ -1404,6 +1405,7 @@ class _ViewfinderState extends State<Viewfinder> {
         currentIndex: _currentIndex,
         itemAt: _itemAt,
         onSelect: _goTo,
+        reverse: widget.reverse,
       );
       if (_chrome case final chrome?) {
         bar = ChromeFade(

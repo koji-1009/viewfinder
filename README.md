@@ -136,7 +136,7 @@ Knobs on `Viewfinder` that control how pages flow.
 | `swipeDragDevices`        | `kViewfinderDefaultSwipeDragDevices` | Pointer kinds allowed to swipe the underlying `PageView`. Default includes mouse / trackpad / touch / stylus. Pass a narrower set to opt out.                                                                             |
 | `enableKeyboardShortcuts` | `true`                               | Arrow keys (visual order — RTL/`reverse`-aware), PageUp/Down (logical order), Esc (two-stage). Disable to take over the keyboard.                                                                                         |
 | `allowImplicitScrolling`  | `true`                               | Forwarded to `PageView.allowImplicitScrolling` for accessible focus traversal.                                                                                                                                            |
-| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` splits scrolling by axis — along the pager turns pages (one per gesture), across it zooms.                                                                                    |
+| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` splits scrolling by axis — along the pager turns pages (one per gesture), across it zooms. During the ~280 ms turn animation the pager ignores drags.                         |
 | `onScaleStateChanged`     | —                                    | Fires when the current page transitions initial ⇄ zoomed — the hook for app chrome that reacts to zoom. Coalesced, not per-frame.                                                                                         |
 | `keepAlivePages`          | `false`                              | Keep off-screen pages' `State` alive (e.g. a `.child` page's video position). The pan/zoom transform still resets on page leave.                                                                                          |
 | `restorationId`           | —                                    | Forwarded to `PageView.restorationId`; the page position survives state restoration.                                                                                                                                      |
@@ -286,7 +286,7 @@ Tap the photo: toggle. Zoom in: auto-hide. Page change: auto-hide timer restarts
 
 `ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Three known Hero-with-photo-viewer pitfalls are handled internally:
 
-* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
+* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the page's initial rendering, never from a visibly zoomed crop. (The rect is the full page — for a `contain`-fit photo it includes the letterbox; `thumbnailFit` keeps the visible photo coherent through the flight.)
 * **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
 * **Fit-mismatch flicker** — Flutter's default flight shuttle is the destination hero's child, so a pop flight renders your (typically cover-fit) thumbnail stretched across the viewer's rect. Provider-backed heroes instead fly the viewer's own rendering by default. Declare your thumbnail's fit (`ViewfinderHero('tag', thumbnailFit: BoxFit.cover)`) and the shuttle interpolates between the two fits, landing exactly on the thumbnail's crop at the other end too; pass `flightShuttleBuilder` to take over entirely.
 
@@ -416,6 +416,8 @@ Stable keys are attached for widget tests — no fishing through internal types:
 await tester.tap(find.byKey(ViewfinderKeys.thumbnail(3)));
 expect(find.byKey(ViewfinderKeys.page(3)), findsOneWidget);
 ```
+
+`ViewfinderKeys.page` applies to bounded galleries only — a `loop: true` pager runs on internal raw-index keys, so the per-page key finds nothing there (thumbnail keys are unaffected).
 
 `ViewfinderImage`'s runtime type is a package-internal subclass, so `find.byType(ViewfinderImage)` does not match; when you need the widget itself use `find.byWidgetPredicate((w) => w is ViewfinderImage)`. To drive zoom programmatically in a test, pass a `ViewfinderImageController` and call `animateToScale` / `jumpToTransform`.
 

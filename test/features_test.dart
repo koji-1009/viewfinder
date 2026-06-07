@@ -1375,6 +1375,28 @@ void main() {
     expect(image.filterQuality, FilterQuality.high);
   });
 
+  testWidgets('reverse: true mirrors the thumbnail strip to match the '
+      'pager', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 3,
+            reverse: true,
+            thumbnails: const ViewfinderThumbnails(),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // Page 0 sits on the right in a reversed pager; tile 0 must too.
+    final tile0 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(0)));
+    final tile2 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(2)));
+    expect(tile0.dx, greaterThan(tile2.dx));
+  });
+
   testWidgets('chrome overlays clear the thumbnail strip including its '
       'safe-area band', (tester) async {
     const safeBottom = 48.0;

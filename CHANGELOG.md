@@ -22,7 +22,7 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 * `contain(factor)` / `cover(factor)` center the photo instead of anchoring it to the top-left.
 * The two-stage Android back / Esc no longer stays blocked after a zoom whose pan released the swipe lock.
 * The thumbnail strip overlays the full-bleed viewer instead of reserving layout space — hiding the chrome reveals the whole photo; bottom/top indicators and chrome overlays are inset past the strip automatically.
-* `reverse: true` and RTL layouts hand off to the correct neighbor page.
+* `reverse: true` and RTL layouts hand off to the correct neighbor page; the dots indicator and the thumbnail strip mirror their visual order to match.
 * Lifting one finger of a two-finger gesture keeps edge handoff for the remaining finger.
 * Programmatic transform writes stop an in-flight fling/snap-back; starting a gesture stops a double-tap animation.
 * The transform re-clamps when the viewport resizes and when `minScale` / `maxScale` narrow at runtime.

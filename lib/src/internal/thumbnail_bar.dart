@@ -15,6 +15,7 @@ class ViewfinderThumbnailBar extends StatefulWidget {
     required this.currentIndex,
     required this.itemAt,
     required this.onSelect,
+    this.reverse = false,
   });
 
   final ViewfinderThumbnails config;
@@ -22,6 +23,11 @@ class ViewfinderThumbnailBar extends StatefulWidget {
   final int currentIndex;
   final ViewfinderItem Function(int index) itemAt;
   final ValueChanged<int> onSelect;
+
+  /// Mirrors the tile order to match a `reverse: true` pager (ambient
+  /// `Directionality` already mirrors the underlying [ListView] for
+  /// RTL).
+  final bool reverse;
 
   @override
   State<ViewfinderThumbnailBar> createState() => _ViewfinderThumbnailBarState();
@@ -64,8 +70,15 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     final extent = cfg.size + cfg.spacing;
     final viewport = _scrollController.position.viewportDimension;
     // Tile i sits at `leading padding + i * extent` in scroll
-    // coordinates; offset 0 shows the padding, not tile 0.
-    final leading = cfg.isHorizontal ? cfg.padding.left : cfg.padding.top;
+    // coordinates; offset 0 shows the padding, not tile 0. A reversed
+    // list anchors its scroll origin on the opposite edge, swapping
+    // which padding side leads.
+    final leading = switch ((cfg.isHorizontal, widget.reverse)) {
+      (true, false) => cfg.padding.left,
+      (true, true) => cfg.padding.right,
+      (false, false) => cfg.padding.top,
+      (false, true) => cfg.padding.bottom,
+    };
     final target = leading + widget.currentIndex * extent;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final desired = (target - viewport / 2 + cfg.size / 2).clamp(
@@ -91,6 +104,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     final list = ListView.builder(
       controller: _scrollController,
       scrollDirection: cfg.isHorizontal ? .horizontal : .vertical,
+      reverse: widget.reverse,
       padding: cfg.padding,
       itemCount: widget.itemCount,
       itemExtent: cfg.size + cfg.spacing,

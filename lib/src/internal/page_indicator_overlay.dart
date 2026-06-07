@@ -13,11 +13,16 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
     required this.config,
     required this.itemCount,
     required this.currentIndex,
+    this.reverse = false,
   });
 
   final ViewfinderPageIndicator config;
   final int itemCount;
   final int currentIndex;
+
+  /// Mirrors the dot order to match a `reverse: true` pager (ambient
+  /// `Directionality` already mirrors the underlying [Row] for RTL).
+  final bool reverse;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +48,7 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
         dots: cfg,
         itemCount: itemCount,
         currentIndex: currentIndex,
+        reverse: reverse,
       ),
       ViewfinderPageIndicatorLabel() => _LabelView(
         builder: cfg.labelBuilder,
@@ -60,6 +66,7 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
                 dots: cfg.dots,
                 itemCount: itemCount,
                 currentIndex: currentIndex,
+                reverse: reverse,
               ),
     };
     final aligned = Align(
@@ -75,11 +82,13 @@ class _DotsView extends StatelessWidget {
     required this.dots,
     required this.itemCount,
     required this.currentIndex,
+    required this.reverse,
   });
 
   final ViewfinderPageIndicatorDots dots;
   final int itemCount;
   final int currentIndex;
+  final bool reverse;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -93,7 +102,9 @@ class _DotsView extends StatelessWidget {
     child: Row(
       mainAxisSize: .min,
       children: [
-        for (var i = 0; i < itemCount; i++)
+        for (final i in [
+          for (var i = 0; i < itemCount; i++) reverse ? itemCount - 1 - i : i,
+        ])
           Padding(
             padding: .symmetric(horizontal: dots.spacing / 2),
             child: AnimatedContainer(
