@@ -118,7 +118,7 @@ class InputHints extends StatelessWidget {
       children: [
         for (final h in hints)
           Chip(
-            visualDensity: VisualDensity.compact,
+            visualDensity: .compact,
             avatar: Icon(h.icon, size: 18, color: scheme.onSurfaceVariant),
             label: Text(h.label),
             side: BorderSide(color: scheme.outlineVariant),

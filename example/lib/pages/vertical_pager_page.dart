@@ -80,11 +80,11 @@ class _VerticalViewerState extends State<_VerticalViewer> {
             itemCount: images.length,
             backgroundColor: scheme.surface,
             controller: _controller,
-            pagerAxis: Axis.vertical,
+            pagerAxis: .vertical,
             precacheAdjacent: 1,
             // Scrolling down a vertical feed should page, not zoom;
             // pinch / double-tap still zoom.
-            mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
+            mouseWheelBehavior: .paging,
             indicator: const ViewfinderPageIndicatorAdaptive(),
             itemBuilder: (context, index) => ViewfinderItem(
               image: images[index],

@@ -65,7 +65,7 @@ class _RotationPageState extends State<RotationPage> {
                 'never pans fully off-screen.',
           ),
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: .fromLTRB(16, 16, 16, 0),
             child: InputHints(
               hints: [
                 (
@@ -78,7 +78,7 @@ class _RotationPageState extends State<RotationPage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const .fromLTRB(16, 8, 16, 0),
             child: Row(
               children: [
                 const Icon(Icons.rotate_90_degrees_ccw_outlined, size: 20),
@@ -94,23 +94,23 @@ class _RotationPageState extends State<RotationPage> {
                 ),
                 SizedBox(
                   width: 44,
-                  child: Text('${_degrees.round()}°', textAlign: TextAlign.end),
+                  child: Text('${_degrees.round()}°', textAlign: .end),
                 ),
               ],
             ),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const .all(16),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: .circular(16),
                 child: ColoredBox(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: ViewfinderImage(
                     controller: _controller,
                     image: DemoPhotos.images[5],
                     rotateEnabled: true,
-                    initialScale: const ViewfinderInitialScale.contain(0.9),
+                    initialScale: const .contain(0.9),
                     doubleTapScales: const [1, 2.5, 5],
                     maxScale: 8,
                     semanticLabel: 'Rotatable demo photo',

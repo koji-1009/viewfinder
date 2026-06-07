@@ -18,11 +18,11 @@ class ViewfinderDemoApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF3B6EA5),
-        brightness: Brightness.light,
+        brightness: .light,
       ),
       darkTheme: ThemeData(
         colorSchemeSeed: const Color(0xFF3B6EA5),
-        brightness: Brightness.dark,
+        brightness: .dark,
       ),
       home: const _HomePage(),
     );
@@ -91,7 +91,7 @@ class _HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('viewfinder')),
+      appBar: AppBar(title: const Text('viewfinder')),
       body: ListView.separated(
         padding: const .symmetric(horizontal: 16),
         separatorBuilder: (context, index) => const SizedBox(height: 16),
@@ -128,7 +128,7 @@ class _ScenarioCard extends StatelessWidget {
           clipBehavior: .antiAlias,
           child: SizedBox.square(dimension: 44, child: Icon(scenario.icon)),
         ),
-        trailing: Icon(Icons.chevron_right),
+        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }

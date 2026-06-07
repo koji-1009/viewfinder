@@ -53,12 +53,12 @@ class EmbeddedZoomPage extends StatelessWidget {
                 _Figure(
                   caption: 'Figure 1 — ViewfinderImage (image-backed)',
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: .circular(12),
                     child: AspectRatio(
                       aspectRatio: 4 / 3,
                       child: ViewfinderImage(
                         image: DemoPhotos.landscape,
-                        initialScale: const ViewfinderInitialScale.cover(),
+                        initialScale: const .cover(),
                         doubleTapScales: const [1, 2.5, 5],
                         maxScale: 8,
                         // Embedded in a scrollable: scrolling belongs
@@ -87,12 +87,12 @@ class EmbeddedZoomPage extends StatelessWidget {
                 _Figure(
                   caption: 'Figure 2 — ViewfinderImage.child (widget)',
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: .circular(12),
                     child: AspectRatio(
                       aspectRatio: 4 / 3,
                       child: ViewfinderImage.child(
                         contentKey: 'chart',
-                        initialScale: const ViewfinderInitialScale.contain(0.9),
+                        initialScale: const .contain(0.9),
                         doubleTapScales: const [1, 2, 4],
                         maxScale: 6,
                         enableMouseWheelZoom: false,
@@ -129,12 +129,12 @@ class _Figure extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: .start,
       children: [
         Material(
           elevation: 1,
-          clipBehavior: Clip.antiAlias,
-          borderRadius: BorderRadius.circular(12),
+          clipBehavior: .antiAlias,
+          borderRadius: .circular(12),
           child: child,
         ),
         const SizedBox(height: 8),
@@ -167,14 +167,14 @@ class _ZoomableCard extends StatelessWidget {
     return ColoredBox(
       color: scheme.surfaceContainerHighest,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const .all(20),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: .center,
+          crossAxisAlignment: .stretch,
           children: [
             Text(
               'ViewfinderImage knobs (package defaults)',
-              textAlign: TextAlign.center,
+              textAlign: .center,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(color: scheme.onSurface),
@@ -186,7 +186,7 @@ class _ZoomableCard extends StatelessWidget {
                 1: FlexColumnWidth(2),
                 2: FlexColumnWidth(4),
               },
-              border: TableBorder.symmetric(
+              border: .symmetric(
                 inside: BorderSide(color: scheme.outlineVariant),
               ),
               children: [
@@ -203,7 +203,7 @@ class _ZoomableCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Pinch or double-tap to read the fine print.',
-              textAlign: TextAlign.center,
+              textAlign: .center,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
@@ -225,10 +225,10 @@ class _Cell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const .symmetric(horizontal: 6, vertical: 6),
       child: Text(
         text,
-        style: TextStyle(
+        style: .new(
           fontSize: 11,
           fontFamily: mono ? 'monospace' : null,
           color: color,
