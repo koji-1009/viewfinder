@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -441,7 +443,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       // this the photo stays out of bounds until the next gesture.
       final clamped = relativeScale.clamp(widget.minScale, widget.maxScale);
       if (clamped != relativeScale) {
-        animateToScale(clamped);
+        scaleTo(clamped);
       }
     }
   }
@@ -581,8 +583,12 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       jumpToTransform(target);
       return;
     }
-    _animation = Matrix4Tween(begin: _transformation.value, end: target)
-        .animate(
+    _animation =
+        _SimilarityTween(
+          begin: _transformation.value.clone(),
+          end: target,
+          center: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
+        ).animate(
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
         );
     _animController
@@ -618,19 +624,19 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     _writeTransform(_initialMatrix());
   }
 
-  void animateToScale(double scale, {Offset? focal}) {
+  void scaleTo(double scale, {Offset? focal, bool animate = true}) {
     final base = _baseScale;
     final clamped = (scale * base).clamp(_absMinScale, _absMaxScale).toDouble();
-    final size = switch (context.findRenderObject()) {
-      final RenderBox b => b.size,
-      _ => Size.zero,
-    };
-    final f = focal ?? Offset(size.width / 2, size.height / 2);
-    _animateTo(
-      (clamped - base).abs() < 0.001
-          ? _initialMatrix()
-          : scaleAroundFocal(focal: f, scale: clamped),
-    );
+    final f =
+        focal ?? Offset(_viewportSize.width / 2, _viewportSize.height / 2);
+    final target = (clamped - base).abs() < 0.001
+        ? _initialMatrix()
+        : scaleAroundFocal(focal: f, scale: clamped);
+    if (animate) {
+      _animateTo(target);
+    } else {
+      jumpToTransform(target);
+    }
   }
 
   Matrix4 get currentTransform => _transformation.value.clone();
@@ -642,6 +648,31 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   void animateToTransform(Matrix4 target) => _animateTo(target);
+
+  double get rotationAngle => rotationOf(_transformation.value);
+
+  void rotateTo(double radians, {Offset? focal, bool animate = true}) {
+    final delta = radians - rotationAngle;
+    if (delta.abs() < 1e-9) return;
+    final f =
+        focal ?? Offset(_viewportSize.width / 2, _viewportSize.height / 2);
+    final base = _transformation.value.clone();
+    if (!animate ||
+        (mounted && MediaQuery.maybeDisableAnimationsOf(context) == true)) {
+      jumpToTransform(rotateAroundFocal(base: base, focal: f, radians: delta));
+      return;
+    }
+    // Not via _animateTo: _SimilarityTween decomposes about the
+    // viewport center, which would let an off-center [focal] drift
+    // mid-turn — _RotationTween keeps it pinned every frame. The
+    // literal delta is honored, so targets past ±π spin full turns.
+    _animation = _RotationTween(base: base, focal: f, delta: delta).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+    _animController
+      ..reset()
+      ..forward();
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -663,6 +694,115 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       );
     },
   );
+}
+
+/// Tween between two similarity transforms (uniform scale + rotation +
+/// translation), interpolating each component in its own space about
+/// [center] and taking the shortest angular path.
+///
+/// [Matrix4Tween] lerps raw matrix entries, which shrinks rotations
+/// along the chord — a 90° difference dips to ~0.71× scale mid-flight.
+/// For rotation-free endpoints the result is identical to the entry
+/// lerp. Endpoints that are not similarities (skew or non-uniform
+/// scale, possible via `jumpToTransform`) cannot be decomposed and
+/// fall back to the entry lerp. Both paths land exactly on `end`.
+class _SimilarityTween extends Animatable<Matrix4> {
+  _SimilarityTween({
+    required Matrix4 begin,
+    required Matrix4 end,
+    required this.center,
+  }) : _beginRaw = begin,
+       _endRaw = end,
+       _componentwise = _isSimilarity(begin) && _isSimilarity(end),
+       _begin = _decompose(begin, center),
+       _end = _decompose(end, center) {
+    var d = _end.angle - _begin.angle;
+    if (d > math.pi) d -= 2 * math.pi;
+    if (d < -math.pi) d += 2 * math.pi;
+    _angleDelta = d;
+  }
+
+  final Offset center;
+  final Matrix4 _beginRaw;
+  final Matrix4 _endRaw;
+  final bool _componentwise;
+  final ({double scale, double angle, double tx, double ty}) _begin;
+  final ({double scale, double angle, double tx, double ty}) _end;
+  late final double _angleDelta;
+
+  static bool _isSimilarity(Matrix4 m) {
+    final s = m.storage;
+    final a = s[0], b = s[1], c = s[4], d = s[5];
+    final len0 = a * a + b * b;
+    final len1 = c * c + d * d;
+    final n = math.max(len0, len1);
+    if (n == 0) return false;
+    const eps = 1e-6;
+    // Equal-length orthogonal columns with positive determinant:
+    // uniform scale × rotation, no skew or reflection.
+    return (len0 - len1).abs() <= eps * n &&
+        (a * c + b * d).abs() <= eps * n &&
+        a * d - b * c > 0;
+  }
+
+  static ({double scale, double angle, double tx, double ty}) _decompose(
+    Matrix4 m,
+    Offset c,
+  ) {
+    // Conjugate about the center so the rotation pivots there.
+    final conj = Matrix4.identity()
+      ..translateByDouble(-c.dx, -c.dy, 0, 1)
+      ..multiply(m)
+      ..translateByDouble(c.dx, c.dy, 0, 1);
+    return (
+      scale: xyScale(conj),
+      angle: rotationOf(conj),
+      tx: conj.storage[12],
+      ty: conj.storage[13],
+    );
+  }
+
+  @override
+  Matrix4 transform(double t) {
+    if (t <= 0.0) return _beginRaw.clone();
+    if (t >= 1.0) return _endRaw.clone();
+    if (!_componentwise) {
+      final m = Matrix4.zero();
+      for (var i = 0; i < 16; i++) {
+        m.storage[i] =
+            _beginRaw.storage[i] +
+            (_endRaw.storage[i] - _beginRaw.storage[i]) * t;
+      }
+      return m;
+    }
+    final scale = _begin.scale + (_end.scale - _begin.scale) * t;
+    final angle = _begin.angle + _angleDelta * t;
+    final tx = _begin.tx + (_end.tx - _begin.tx) * t;
+    final ty = _begin.ty + (_end.ty - _begin.ty) * t;
+    final ca = math.cos(angle) * scale;
+    final sa = math.sin(angle) * scale;
+    return Matrix4.identity()
+      ..translateByDouble(center.dx, center.dy, 0, 1)
+      ..multiply(Matrix4(ca, sa, 0, 0, -sa, ca, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1))
+      ..translateByDouble(-center.dx, -center.dy, 0, 1);
+  }
+}
+
+/// Animates a rotation in angle space on top of [base].
+class _RotationTween extends Animatable<Matrix4> {
+  _RotationTween({
+    required this.base,
+    required this.focal,
+    required this.delta,
+  });
+
+  final Matrix4 base;
+  final Offset focal;
+  final double delta;
+
+  @override
+  Matrix4 transform(double t) =>
+      rotateAroundFocal(base: base, focal: focal, radians: delta * t);
 }
 
 class _ImageBody extends StatelessWidget {
@@ -1023,9 +1163,31 @@ class ViewfinderImageController extends ChangeNotifier {
   void jumpToInitial() => _state?.jumpToInitial();
 
   /// Animate to a specific scale — relative to the initial baseline,
-  /// like [scale] — optionally around a focal point.
+  /// like [scale] — optionally around a focal point (defaults to the
+  /// viewport center).
   void animateToScale(double scale, {Offset? focal}) =>
-      _state?.animateToScale(scale, focal: focal);
+      _state?.scaleTo(scale, focal: focal);
+
+  /// Like [animateToScale], without animation — for continuous
+  /// controls such as a zoom slider.
+  void jumpToScale(double scale, {Offset? focal}) =>
+      _state?.scaleTo(scale, focal: focal, animate: false);
+
+  /// Current rotation in radians (`0` = upright). Returns `0` when not
+  /// attached.
+  double get rotation => _state?.rotationAngle ?? 0.0;
+
+  /// Rotate to an absolute angle of [radians] around [focal] (defaults
+  /// to the viewport center), preserving scale and pan, without
+  /// animation. Programmatic rotation works regardless of
+  /// `rotateEnabled`, which gates only the gesture.
+  void jumpToRotation(double radians, {Offset? focal}) =>
+      _state?.rotateTo(radians, focal: focal, animate: false);
+
+  /// Like [jumpToRotation], animated — in angle space, so the content
+  /// keeps its scale throughout the turn.
+  void animateToRotation(double radians, {Offset? focal}) =>
+      _state?.rotateTo(radians, focal: focal);
 
   /// Current transform matrix. Returns the identity when not attached.
   Matrix4 get currentTransform =>

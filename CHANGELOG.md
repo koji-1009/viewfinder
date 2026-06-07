@@ -42,6 +42,8 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 * `onLongPress` / `onLongPressStart` / `onSecondaryTapUp` on `ViewfinderImage` and `ViewfinderItem`; forwarded by `Viewfinder.images` (index-aware) and `Viewfinder.single`.
 * `Viewfinder.onScaleStateChanged` — coalesced initial ⇄ zoomed transitions of the current page.
 * `ViewfinderImageController.canSwipeToward(AxisDirection)`.
+* `ViewfinderImageController.rotation` / `jumpToRotation` / `animateToRotation` — programmatic rotation about a focal point, preserving scale and pan; the animation runs in angle space.
+* `ViewfinderImageController.jumpToScale` — instant counterpart of `animateToScale`, for slider-style control.
 * Screen-reader page announcements (`announcePageChanges`, `pageAnnouncementBuilder`); semantics on thumbnail tiles and the dots indicator (`semanticLabelBuilder`).
 * Reduce-motion support: animations jump when `MediaQuery.disableAnimations` is set.
 * `mouseWheelBehavior` (`.zoom` / `.paging`); `ViewfinderImage.enableMouseWheelZoom` and `doubleTapDragZoom` are public.

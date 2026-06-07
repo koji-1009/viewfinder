@@ -11,6 +11,23 @@ Matrix4 scaleAroundFocal({required Offset focal, required double scale}) {
     ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
 }
 
+/// Rotation angle of [m]'s 2D linear part, in radians.
+double rotationOf(Matrix4 m) => math.atan2(m.storage[1], m.storage[0]);
+
+/// Returns [base] rotated by [radians] around [focal] (in local
+/// coordinates of the viewport).
+Matrix4 rotateAroundFocal({
+  required Matrix4 base,
+  required Offset focal,
+  required double radians,
+}) {
+  return Matrix4.identity()
+    ..translateByDouble(focal.dx, focal.dy, 0, 1)
+    ..rotateZ(radians)
+    ..translateByDouble(-focal.dx, -focal.dy, 0, 1)
+    ..multiply(base);
+}
+
 /// Splits a scroll delta into the components along and across [axis].
 ({double along, double cross}) splitScrollDelta(Offset delta, Axis axis) =>
     axis == Axis.horizontal

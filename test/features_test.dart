@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1371,6 +1373,156 @@ void main() {
     await settleImages(tester);
     final image = tester.widget<Image>(find.byType(Image));
     expect(image.filterQuality, FilterQuality.high);
+  });
+
+  testWidgets('jumpToRotation rotates about the viewport center, '
+      'preserving scale', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+              rotateEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    controller.jumpToRotation(math.pi / 2);
+    await tester.pump();
+    expect(controller.rotation, closeTo(math.pi / 2, 1e-6));
+    expect(controller.scale, closeTo(1.0, 1e-6));
+    // The viewport center stays fixed.
+    final m = controller.currentTransform.storage;
+    expect(m[0] * 200 + m[4] * 200 + m[12], closeTo(200, 1e-6));
+    expect(m[1] * 200 + m[5] * 200 + m[13], closeTo(200, 1e-6));
+  });
+
+  testWidgets('animateToRotation animates in angle space without scale '
+      'wobble', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    controller.animateToRotation(math.pi / 2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100)); // mid-flight
+    // A Matrix4Tween would dip toward ~0.71× here; angle-space stays 1.
+    expect(controller.scale, closeTo(1.0, 0.001));
+    expect(controller.rotation, greaterThan(0.0));
+    expect(controller.rotation, lessThan(math.pi / 2));
+    await tester.pumpAndSettle();
+    expect(controller.rotation, closeTo(math.pi / 2, 1e-3));
+  });
+
+  testWidgets('jumpToScale sets the scale instantly', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    controller.jumpToScale(2.0);
+    await tester.pump();
+    expect(controller.scale, closeTo(2.0, 1e-6));
+    // Clamped to maxScale like animateToScale.
+    controller.jumpToScale(99.0);
+    await tester.pump();
+    expect(controller.scale, closeTo(8.0, 1e-6));
+  });
+
+  testWidgets('animateToTransform lands exactly on a non-similarity '
+      'target matrix', (tester) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // Non-uniform scale: not decomposable as a similarity; the tween
+    // must fall back to the entry lerp and still land on the target.
+    final target = Matrix4.identity()..scaleByDouble(2.0, 1.0, 1, 1);
+    controller.animateToTransform(target);
+    await tester.pumpAndSettle();
+    final m = controller.currentTransform.storage;
+    expect(m[0], closeTo(2.0, 1e-9));
+    expect(m[5], closeTo(1.0, 1e-9));
+    expect(m[12], closeTo(0.0, 1e-9));
+  });
+
+  testWidgets('reset from a rotated state keeps the scale steady', (
+    tester,
+  ) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+              rotateEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    controller.jumpToRotation(math.pi / 2);
+    await tester.pump();
+    controller.reset();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100)); // mid-flight
+    // A Matrix4Tween would dip toward ~0.71× here.
+    expect(controller.scale, closeTo(1.0, 0.001));
+    await tester.pumpAndSettle();
+    expect(controller.rotation, closeTo(0.0, 1e-3));
+    expect(controller.scale, closeTo(1.0, 1e-3));
   });
 
   testWidgets('dismiss drag springs back when disabled mid-drag', (

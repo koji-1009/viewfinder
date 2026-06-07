@@ -219,8 +219,15 @@ final controller = ViewfinderImageController();
 // Zoom. Scales are relative to the initial scale (1.0 = as first shown).
 controller.animateToScale(3.0);
 controller.animateToScale(2.0, focal: tapPosition);
+controller.jumpToScale(2.0);          // instant — for slider-style control
 controller.reset();
 controller.scale;                     // double, 1.0 = initial
+
+// Rotation (radians, 0 = upright). Works regardless of rotateEnabled,
+// which gates only the gesture; scale and pan are preserved.
+controller.jumpToRotation(math.pi / 2);
+controller.animateToRotation(0, focal: tapPosition);
+controller.rotation;                  // double
 
 // Direct matrix control (absolute matrices).
 final m = controller.currentTransform;
