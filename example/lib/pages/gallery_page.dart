@@ -222,6 +222,7 @@ class _GalleryViewerState extends State<_GalleryViewer> {
         defaultInitialScale: s.initialScale,
         precacheAdjacent: s.precacheAdjacent,
         pagerAxis: s.pagerAxis,
+        mouseWheelBehavior: s.mouseWheelBehavior,
         rotateEnabled: s.rotateEnabled,
         swipeDragDevices: s.dragDevices,
         doubleTapScales: const [1.0, 2.5, 5.0],
@@ -333,6 +334,26 @@ class _SettingsSheet extends StatelessWidget {
                 settings.dismissEnabled = false;
               }
             }),
+          ),
+        ),
+        ListTile(
+          dense: true,
+          title: const Text('mouseWheelBehavior'),
+          trailing: SegmentedButton<ViewfinderMouseWheelBehavior>(
+            segments: const [
+              ButtonSegment(
+                value: ViewfinderMouseWheelBehavior.zoom,
+                label: Text('zoom'),
+              ),
+              ButtonSegment(
+                value: ViewfinderMouseWheelBehavior.paging,
+                label: Text('paging'),
+              ),
+            ],
+            selected: {settings.mouseWheelBehavior},
+            onSelectionChanged: (value) => settings.update(
+              () => settings.mouseWheelBehavior = value.first,
+            ),
           ),
         ),
         ListTile(
@@ -580,6 +601,8 @@ class _Settings extends ChangeNotifier {
       context.dependOnInheritedWidgetOfExactType<_SettingsScope>()!.notifier!;
 
   Axis pagerAxis = Axis.horizontal;
+  ViewfinderMouseWheelBehavior mouseWheelBehavior =
+      ViewfinderMouseWheelBehavior.zoom;
   int precacheAdjacent = 2;
   Set<PointerDeviceKind> dragDevices = kViewfinderDefaultSwipeDragDevices;
   bool rotateEnabled = false;
