@@ -600,6 +600,10 @@ class _ViewfinderState extends State<Viewfinder> {
   double _wheelAccum = 0;
   bool _wheelLocked = false;
   bool _wheelSettling = false;
+  double _wheelLockedSign = 0;
+  double _wheelLastAbsDelta = 0;
+  int _wheelSettleGen = 0;
+  PointerScrollEvent? _lastWheelEvent;
   Timer? _wheelCooldown;
   // The chrome controller the system-UI sync is currently listening to.
   ViewfinderChromeController? _systemUiChrome;
@@ -997,6 +1001,10 @@ class _ViewfinderState extends State<Viewfinder> {
   /// Pause in the scroll stream after which wheel paging re-arms.
   static const Duration _kWheelCooldown = Duration(milliseconds: 200);
 
+  /// Minimum delta magnitude for the new-gesture jump detection, so
+  /// late-tail jitter (single-digit deltas) cannot re-trigger.
+  static const double _kWheelNewGestureFloor = 10.0;
+
   /// Wheel-paging handler ([ViewfinderMouseWheelBehavior.paging]):
   /// positive deltas (scroll down / right) go to the next logical
   /// page, negative to the previous.
@@ -1004,29 +1012,54 @@ class _ViewfinderState extends State<Viewfinder> {
   /// One scroll gesture turns one page: deltas accumulate toward a
   /// threshold (so a discrete wheel notch turns immediately while a
   /// trackpad stream takes a short swipe), and once a page turns,
-  /// further deltas — the trackpad's momentum tail — are swallowed
-  /// until the stream pauses for [_kWheelCooldown].
-  void _onWheelPageDelta(double delta) {
+  /// further deltas — the trackpad's momentum tail — are swallowed.
+  /// A new swipe started mid-momentum merges into the same stream
+  /// with no pause, so a swallowed delta that flips direction or
+  /// jumps against the tail's decay re-arms immediately; otherwise
+  /// the lock lasts until the stream pauses for [_kWheelCooldown].
+  ///
+  /// Called from the per-page listeners and, while the transition
+  /// animation makes those unreachable, from the outer observation
+  /// listener — [event] identity dedupes the overlap.
+  void _onWheelPageDelta(PointerScrollEvent event, double delta) {
+    if (identical(event, _lastWheelEvent)) return;
+    _lastWheelEvent = event;
     if (delta == 0) return;
     if (_wheelLocked) {
-      _armWheelCooldown();
-      return;
+      final a = delta.abs();
+      final newGesture =
+          delta.sign != _wheelLockedSign ||
+          (a > _kWheelNewGestureFloor && a > _wheelLastAbsDelta * 2);
+      if (!newGesture) {
+        _wheelLastAbsDelta = a;
+        _armWheelCooldown();
+        return;
+      }
+      _wheelLocked = false;
+      _wheelAccum = 0;
     }
     if (_wheelAccum != 0 && _wheelAccum.sign != delta.sign) {
       _wheelAccum = 0;
     }
     _wheelAccum += delta;
+    _armWheelCooldown();
     if (_wheelAccum.abs() < _kWheelPageThreshold) return;
     _wheelAccum = 0;
     _wheelLocked = true;
-    _armWheelCooldown();
+    _wheelLockedSign = delta.sign;
+    _wheelLastAbsDelta = delta.abs();
     // While the transition animates, the Scrollable's children are not
     // hit-testable and the momentum tail would reach the PageView's
     // own wheel handler and raw-scroll the settling pager — flip to
-    // NeverScrollableScrollPhysics for exactly that window.
+    // NeverScrollableScrollPhysics for exactly that window. The
+    // generation guard keeps a rapid follow-up swipe's window open
+    // when the interrupted animation's future completes.
+    final gen = ++_wheelSettleGen;
     setState(() => _wheelSettling = true);
     _goTo(_currentIndex + (delta > 0 ? 1 : -1)).whenComplete(() {
-      if (mounted) setState(() => _wheelSettling = false);
+      if (mounted && gen == _wheelSettleGen) {
+        setState(() => _wheelSettling = false);
+      }
     });
   }
 
@@ -1034,10 +1067,8 @@ class _ViewfinderState extends State<Viewfinder> {
     _wheelCooldown?.cancel();
     _wheelCooldown = Timer(_kWheelCooldown, () {
       if (!mounted) return;
-      setState(() {
-        _wheelLocked = false;
-        _wheelAccum = 0;
-      });
+      _wheelLocked = false;
+      _wheelAccum = 0;
     });
   }
 
@@ -1234,15 +1265,18 @@ class _ViewfinderState extends State<Viewfinder> {
       // Observation only (never registers with the signal resolver):
       // while the page transition animates, the Scrollable's children
       // are not hit-testable, so the per-page wheel listeners go
-      // silent — this outer listener keeps the wheel lock armed
-      // through the momentum tail.
+      // silent — this outer listener keeps the wheel handler fed
+      // through the momentum tail. Restricted to the locked/settling
+      // window so idle wheel handling stays with the per-page
+      // listeners; the event-identity dedupe absorbs the overlap.
       pageView = Listener(
         onPointerSignal: (event) {
-          if (event is! PointerScrollEvent || !_wheelLocked) return;
+          if (event is! PointerScrollEvent) return;
+          if (!_wheelLocked && !_wheelSettling) return;
           final d = event.scrollDelta;
           final along = widget.pagerAxis == .horizontal ? d.dx : d.dy;
           final cross = widget.pagerAxis == .horizontal ? d.dy : d.dx;
-          if (along.abs() > cross.abs()) _armWheelCooldown();
+          if (along.abs() > cross.abs()) _onWheelPageDelta(event, along);
         },
         child: pageView,
       );

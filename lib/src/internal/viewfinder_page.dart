@@ -53,7 +53,7 @@ class ViewfinderPage extends StatelessWidget {
   /// When non-null, pager-axis-dominant scroll-wheel events over this
   /// page are consumed and reported here (the gallery's wheel-paging
   /// mode); cross-axis scroll keeps zooming.
-  final ValueChanged<double>? onWheelDelta;
+  final void Function(PointerScrollEvent event, double along)? onWheelDelta;
 
   /// Applied to an image-backed item's main provider before display —
   /// the gallery's decode-size policy. The thumb provider is left
@@ -135,7 +135,7 @@ class ViewfinderPage extends StatelessWidget {
           final cross = pagerAxis == .horizontal ? d.dy : d.dx;
           if (along.abs() <= cross.abs()) return;
           GestureBinding.instance.pointerSignalResolver.register(event, (_) {
-            onWheel(along);
+            onWheel(event, along);
           });
         },
         child: page,

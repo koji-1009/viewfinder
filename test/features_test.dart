@@ -454,6 +454,42 @@ void main() {
     expect(controller.currentIndex, 2);
   });
 
+  testWidgets('mouseWheelBehavior.paging: a new swipe merged into the '
+      'momentum tail pages again without a pause', (tester) async {
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 5,
+              controller: controller,
+              mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(Viewfinder));
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(center);
+    // One continuous stream, no pause: swipe (30,30 → page turn), a
+    // decaying momentum tail, then a second deliberate swipe whose
+    // magnitude jumps against the decay.
+    const deltas = [30, 30, 20, 16, 12, 8, 6, 5, 4, 3, 40, 45, 50];
+    for (final d in deltas) {
+      await tester.sendEventToBinding(pointer.scroll(Offset(d * 1.0, 0)));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 2);
+  });
+
   testWidgets('a tap followed by a horizontal drag swipes the page '
       'instead of double-tap-drag zooming', (tester) async {
     final controller = ViewfinderController();
