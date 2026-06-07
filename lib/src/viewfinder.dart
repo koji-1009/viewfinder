@@ -15,6 +15,7 @@ import 'internal/chrome_fade.dart';
 import 'internal/colors.dart' as colors;
 import 'internal/dismissible.dart';
 import 'internal/keep_alive_page.dart';
+import 'internal/matrix_utils.dart';
 import 'internal/page_indicator_overlay.dart';
 import 'internal/thumbnail_bar.dart';
 import 'internal/thumbnail_frame.dart';
@@ -1005,6 +1006,12 @@ class _ViewfinderState extends State<Viewfinder> {
   /// late-tail jitter (single-digit deltas) cannot re-trigger.
   static const double _kWheelNewGestureFloor = 10.0;
 
+  /// A swallowed delta this many times larger than the last one reads
+  /// as a new swipe: momentum decays monotonically, so a genuine
+  /// increase already implies a new gesture — the factor is the noise
+  /// margin against irregular event batching.
+  static const double _kWheelNewGestureJumpFactor = 2.0;
+
   /// Wheel-paging handler ([ViewfinderMouseWheelBehavior.paging]):
   /// positive deltas (scroll down / right) go to the next logical
   /// page, negative to the previous.
@@ -1029,7 +1036,8 @@ class _ViewfinderState extends State<Viewfinder> {
       final a = delta.abs();
       final newGesture =
           delta.sign != _wheelLockedSign ||
-          (a > _kWheelNewGestureFloor && a > _wheelLastAbsDelta * 2);
+          (a > _kWheelNewGestureFloor &&
+              a > _wheelLastAbsDelta * _kWheelNewGestureJumpFactor);
       if (!newGesture) {
         _wheelLastAbsDelta = a;
         _armWheelCooldown();
@@ -1070,6 +1078,27 @@ class _ViewfinderState extends State<Viewfinder> {
       _wheelLocked = false;
       _wheelAccum = 0;
     });
+  }
+
+  /// Backs the observation-only [Listener] around the pager (paging
+  /// mode): while the page transition makes the per-page listeners
+  /// unreachable, this keeps [_onWheelPageDelta] fed.
+  void _observeWheelSignal(PointerSignalEvent event) {
+    // Native platforms report the end of momentum authoritatively when
+    // the user touches the trackpad again; re-arm at once.
+    if (event is PointerScrollInertiaCancelEvent) {
+      _wheelCooldown?.cancel();
+      _wheelLocked = false;
+      _wheelAccum = 0;
+      return;
+    }
+    if (event is! PointerScrollEvent) return;
+    if (!_wheelLocked && !_wheelSettling) return;
+    final (:along, :cross) = splitScrollDelta(
+      event.scrollDelta,
+      widget.pagerAxis,
+    );
+    if (along.abs() > cross.abs()) _onWheelPageDelta(event, along);
   }
 
   /// Distance the scroll position currently sits beyond its extents
@@ -1270,14 +1299,7 @@ class _ViewfinderState extends State<Viewfinder> {
       // window so idle wheel handling stays with the per-page
       // listeners; the event-identity dedupe absorbs the overlap.
       pageView = Listener(
-        onPointerSignal: (event) {
-          if (event is! PointerScrollEvent) return;
-          if (!_wheelLocked && !_wheelSettling) return;
-          final d = event.scrollDelta;
-          final along = widget.pagerAxis == .horizontal ? d.dx : d.dy;
-          final cross = widget.pagerAxis == .horizontal ? d.dy : d.dx;
-          if (along.abs() > cross.abs()) _onWheelPageDelta(event, along);
-        },
+        onPointerSignal: _observeWheelSignal,
         child: pageView,
       );
     }

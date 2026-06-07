@@ -42,7 +42,7 @@ class ViewfinderThumbnails {
       BorderSide(color: colors.white, width: 2),
     ),
     this.unselectedOpacity = 0.55,
-    this.backgroundColor = const .new(0x8A000000),
+    this.backgroundColor = colors.black54,
     this.errorBuilder,
     this.itemBuilder,
     this.semanticLabelBuilder,
@@ -57,7 +57,7 @@ class ViewfinderThumbnails {
     this.spacing = 4,
     this.padding = const .all(8),
     this.safeArea = true,
-    this.backgroundColor = const .new(0x8A000000),
+    this.backgroundColor = colors.black54,
     required ViewfinderThumbnailItemBuilder this.itemBuilder,
     this.semanticLabelBuilder,
   }) : selectedBorder = const Border.fromBorderSide(

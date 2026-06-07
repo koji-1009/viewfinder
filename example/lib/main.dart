@@ -19,12 +19,10 @@ class ViewfinderDemoApp extends StatelessWidget {
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF3B6EA5),
         brightness: Brightness.light,
-        useMaterial3: true,
       ),
       darkTheme: ThemeData(
         colorSchemeSeed: const Color(0xFF3B6EA5),
         brightness: Brightness.dark,
-        useMaterial3: true,
       ),
       home: const _HomePage(),
     );

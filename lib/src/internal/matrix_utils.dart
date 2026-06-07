@@ -11,6 +11,12 @@ Matrix4 scaleAroundFocal({required Offset focal, required double scale}) {
     ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
 }
 
+/// Splits a scroll delta into the components along and across [axis].
+({double along, double cross}) splitScrollDelta(Offset delta, Axis axis) =>
+    axis == Axis.horizontal
+    ? (along: delta.dx, cross: delta.dy)
+    : (along: delta.dy, cross: delta.dx);
+
 /// Applies the 2D portion of [m] to point [p].
 Offset applyMatrix2D(Matrix4 m, Offset p) {
   final v = m.storage;

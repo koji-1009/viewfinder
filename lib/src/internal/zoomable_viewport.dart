@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../pan_gate.dart';
 import 'matrix_utils.dart';
+import 'pager_scope.dart';
 
 /// Callback fired when panning hits a boundary.
 ///
@@ -62,7 +63,6 @@ class ZoomableViewport extends StatefulWidget {
     this.doubleTapDragZoom = true,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.enableMouseWheelZoom = true,
-    this.wheelPagingAxis,
     this.rubberBandPan = true,
     this.onScaleStart,
     this.onScaleEnd,
@@ -101,11 +101,6 @@ class ZoomableViewport extends StatefulWidget {
   /// can disable it to let scrolling bubble. Pinch (touch, trackpad,
   /// or browser pinch) zooms regardless.
   final bool enableMouseWheelZoom;
-
-  /// Axis a surrounding pager owns. When set, scroll events dominant
-  /// along it pass through untouched (the pager turns pages on them)
-  /// and zoom reads the cross-axis component instead of `dy`.
-  final Axis? wheelPagingAxis;
 
   /// When `true` (default), pulling a zoomed image past its boundary
   /// shows live elastic over-pan that diminishes with distance, then
@@ -157,6 +152,10 @@ class _ZoomableViewportState extends State<ZoomableViewport>
   // fling and snap-back.
   bool _selfWrite = false;
 
+  // From the enclosing gallery page's PagerScope, if any.
+  Axis? _pagerAxis;
+  Axis? _wheelPagingAxis;
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +166,14 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       duration: const .new(milliseconds: 220),
     )..addListener(_onSnapBackTick);
     widget.transformationController.addListener(_onTransformChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = PagerScope.maybeOf(context);
+    _pagerAxis = scope?.axis;
+    _wheelPagingAxis = (scope?.wheelPaging ?? false) ? scope?.axis : null;
   }
 
   @override
@@ -436,13 +443,8 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       case PointerScrollEvent(:final scrollDelta)
           when widget.enableMouseWheelZoom:
         final double zoomDelta;
-        if (widget.wheelPagingAxis case final axis?) {
-          final along = axis == Axis.horizontal
-              ? scrollDelta.dx
-              : scrollDelta.dy;
-          final cross = axis == Axis.horizontal
-              ? scrollDelta.dy
-              : scrollDelta.dx;
+        if (_wheelPagingAxis case final axis?) {
+          final (:along, :cross) = splitScrollDelta(scrollDelta, axis);
           // Pager-axis-dominant scroll belongs to the pager.
           if (along.abs() > cross.abs()) return;
           zoomDelta = cross;
@@ -580,6 +582,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
               () => DoubleTapDragRecognizer(debugOwner: this),
               (r) {
                 r
+                  ..yieldAxis = _pagerAxis
                   ..onDragStart = _onDoubleTapDragStart
                   ..onDragUpdate = _onDoubleTapDragUpdate
                   ..onDragEnd = _onDoubleTapDragEnd;
@@ -819,6 +822,11 @@ class DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
   DoubleTapDragUpdate? onDragUpdate;
   DoubleTapDragEnd? onDragEnd;
 
+  /// Axis a surrounding pager scrolls on; a drag dominant along it is
+  /// yielded as a page swipe instead of becoming a zoom drag. Null
+  /// (standalone viewer) keeps every direction.
+  Axis? yieldAxis;
+
   _State _state = _State.idle;
   Offset? _firstTapPosition;
   Duration? _firstTapUpTimestamp;
@@ -886,10 +894,14 @@ class DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
     } else if (_state == _State.tap2Down && _secondTapStart != null) {
       final delta = event.localPosition - _secondTapStart!;
       if (delta.distance > kTouchSlop) {
-        // The zoom drag is vertical by convention; a horizontally
-        // dominant motion is a page swipe that merely followed a tap
-        // (chrome toggle) within the double-tap window — yield it.
-        if (delta.dx.abs() > delta.dy.abs()) {
+        // A pager-axis-dominant motion is a page swipe that merely
+        // followed a tap (chrome toggle) within the double-tap window
+        // — yield it. The zoom drag itself stays vertical by
+        // convention regardless of the pager axis.
+        final dominant = delta.dx.abs() > delta.dy.abs()
+            ? Axis.horizontal
+            : Axis.vertical;
+        if (dominant == yieldAxis) {
           resolve(.rejected);
           stopTrackingPointer(event.pointer);
           _reset();

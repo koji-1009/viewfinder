@@ -490,6 +490,40 @@ void main() {
     expect(controller.currentIndex, 2);
   });
 
+  testWidgets('vertical pager: a tap followed by a vertical drag swipes '
+      'the page instead of double-tap-drag zooming', (tester) async {
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              pagerAxis: Axis.vertical,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    await tester.tapAt(center);
+    await tester.pump(const Duration(milliseconds: 80));
+    final p = await tester.startGesture(center);
+    for (var i = 0; i < 8; i++) {
+      await p.moveBy(const Offset(0, -40));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await p.up();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+  });
+
   testWidgets('a tap followed by a horizontal drag swipes the page '
       'instead of double-tap-drag zooming', (tester) async {
     final controller = ViewfinderController();

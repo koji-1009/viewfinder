@@ -6,6 +6,8 @@ import '../initial_scale.dart';
 import '../item.dart';
 import '../pan_gate.dart';
 import 'colors.dart' as colors;
+import 'matrix_utils.dart';
+import 'pager_scope.dart';
 
 /// One page of a `Viewfinder` gallery.
 ///
@@ -96,7 +98,6 @@ class ViewfinderPage extends StatelessWidget {
         thumbCrossFadeCurve: item.thumbCrossFadeCurve,
         gaplessPlayback: item.gaplessPlayback,
         rubberBandPan: rubberBandPan,
-        wheelPagingAxis: onWheelDelta != null ? pagerAxis : null,
       ),
       final ViewfinderChildItem item => ViewfinderImage.child(
         initialScale: initialScale,
@@ -114,7 +115,6 @@ class ViewfinderPage extends StatelessWidget {
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
         backgroundColor: colors.transparent,
         rubberBandPan: rubberBandPan,
-        wheelPagingAxis: onWheelDelta != null ? pagerAxis : null,
         contentKey: item.contentKey,
         child: item.child,
       ),
@@ -130,9 +130,10 @@ class ViewfinderPage extends StatelessWidget {
       page = Listener(
         onPointerSignal: (event) {
           if (event is! PointerScrollEvent) return;
-          final d = event.scrollDelta;
-          final along = pagerAxis == .horizontal ? d.dx : d.dy;
-          final cross = pagerAxis == .horizontal ? d.dy : d.dx;
+          final (:along, :cross) = splitScrollDelta(
+            event.scrollDelta,
+            pagerAxis,
+          );
           if (along.abs() <= cross.abs()) return;
           GestureBinding.instance.pointerSignalResolver.register(event, (_) {
             onWheel(event, along);
@@ -141,6 +142,12 @@ class ViewfinderPage extends StatelessWidget {
         child: page,
       );
     }
+
+    page = PagerScope(
+      axis: pagerAxis,
+      wheelPaging: onWheelDelta != null,
+      child: page,
+    );
 
     // Spacing goes on the pager's own axis — horizontal gaps between
     // horizontally-paged pages, vertical gaps for a vertical pager.
