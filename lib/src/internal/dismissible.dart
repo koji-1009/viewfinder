@@ -108,11 +108,9 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
   /// Normalized drag progress in `[0, 1]`. The denominator is the
   /// viewport height: the trigger threshold,
   /// [ViewfinderDismiss.onProgress], and the visual fade/translate
-  /// must all divide by the same extent — `slideType: onlyImage`
-  /// shrinks this widget's own render box (the thumbnail strip takes
-  /// part of the column), so `context.size` would make the threshold
-  /// diverge from the documented "fraction of viewport height" and
-  /// from the visuals.
+  /// must all divide by the same extent regardless of how the wrapper
+  /// is framed, so the documented "fraction of viewport height"
+  /// contract holds for both `slideType`s.
   double _dragProgress() {
     final size = MediaQuery.sizeOf(context).height;
     return size <= 0 ? 0.0 : (_dragOffset.abs() / size).clamp(0.0, 1.0);

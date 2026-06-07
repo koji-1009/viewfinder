@@ -506,9 +506,14 @@ class _ViewfinderImageState extends State<ViewfinderImage>
 
   Matrix4 _initialMatrix() {
     final s = _baseScale;
-    return (s - 1.0).abs() < 0.001
-        ? Matrix4.identity()
-        : (Matrix4.identity()..scaleByDouble(s, s, 1, 1));
+    if ((s - 1.0).abs() < 0.001) return Matrix4.identity();
+    // Center the scaled content — scaling about the origin would
+    // anchor contain(<1) to the top-left and crop cover(>1) toward it.
+    final dx = _viewportSize.width * (1 - s) / 2;
+    final dy = _viewportSize.height * (1 - s) / 2;
+    return Matrix4.identity()
+      ..translateByDouble(dx, dy, 0, 1)
+      ..scaleByDouble(s, s, 1, 1);
   }
 
   /// Writes [m] to the transformation controller, marked as our own so
@@ -679,7 +684,15 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     builder: (ctx, constraints) {
       final viewport = Size(constraints.maxWidth, constraints.maxHeight);
       if (_viewportSize != viewport) {
+        // The initial matrix depends on the viewport (centering). When
+        // the content is still untouched at the old initial — first
+        // layout, device rotation, split screen — re-center it for the
+        // new geometry before this frame paints.
+        final wasAtInitial = _transformation.value == _initialMatrix();
         _viewportSize = viewport;
+        if (wasAtInitial) {
+          _writeTransform(_initialMatrix());
+        }
         // Recompute derived state after layout settles so controller
         // listeners see the fresh canSwipe results.
         WidgetsBinding.instance.addPostFrameCallback((_) {

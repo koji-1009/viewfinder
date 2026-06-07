@@ -563,12 +563,19 @@ void main() {
         findsOneWidget,
         reason: 'position=$pos should build a ThumbnailBar',
       );
-      // Bottom/top use Column, left/right use Row.
-      if (pos == ViewfinderThumbnailPosition.top ||
-          pos == ViewfinderThumbnailPosition.bottom) {
-        expect(find.byType(Column), findsWidgets);
-      } else {
-        expect(find.byType(Row), findsWidgets);
+      // The strip overlays the full-bleed viewer on its edge.
+      final barRect = tester.getRect(find.byType(ViewfinderThumbnailBar));
+      final viewer = tester.getRect(find.byType(PageView));
+      expect(viewer.size, tester.getSize(find.byType(Viewfinder)));
+      switch (pos) {
+        case ViewfinderThumbnailPosition.bottom:
+          expect(barRect.bottom, viewer.bottom);
+        case ViewfinderThumbnailPosition.top:
+          expect(barRect.top, viewer.top);
+        case ViewfinderThumbnailPosition.left:
+          expect(barRect.left, viewer.left);
+        case ViewfinderThumbnailPosition.right:
+          expect(barRect.right, viewer.right);
       }
     }
   });

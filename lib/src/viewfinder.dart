@@ -586,6 +586,7 @@ class _ViewfinderState extends State<Viewfinder> {
   // logical pages modulo itemCount.
   int _currentRawIndex = 0;
   bool _swipeLocked = false;
+  bool _currentZoomed = false;
   // Raw-index-keyed: each PageView slot owns a distinct controller, so
   // the single-state-attached invariant of `ViewfinderImageController`
   // is preserved even when two slots happen to render the same content
@@ -679,8 +680,15 @@ class _ViewfinderState extends State<Viewfinder> {
     final c = _imageControllers[rawIndex];
     if (c == null) return;
     final lock = !_canSwipeAlongPager(c);
-    if (lock != _swipeLocked) {
-      setState(() => _swipeLocked = lock);
+    final zoomed = c.scaleState == .zoomed;
+    // The zoom state feeds PopScope.canPop in build — without the
+    // rebuild a reset that doesn't also flip the swipe lock would
+    // leave the back navigation blocked.
+    if (lock != _swipeLocked || zoomed != _currentZoomed) {
+      setState(() {
+        _swipeLocked = lock;
+        _currentZoomed = zoomed;
+      });
     }
     _emitScaleState(_currentIndex, c.scaleState);
     _syncChromeWithZoom();
@@ -941,9 +949,10 @@ class _ViewfinderState extends State<Viewfinder> {
     setState(() {
       _currentRawIndex = rawIndex;
       _currentIndex = logical;
-      // Re-derive swipe lock for the new page's current state.
+      // Re-derive swipe lock and zoom state for the new page.
       final c = _imageControllers[rawIndex];
       _swipeLocked = c != null && !_canSwipeAlongPager(c);
+      _currentZoomed = c?.scaleState == .zoomed;
     });
     // The page we just left keeps its own TransformationController
     // alive (PageView retains adjacent pages). If the user had zoomed
@@ -1349,6 +1358,22 @@ class _ViewfinderState extends State<Viewfinder> {
 
     if (overlayChildren.isNotEmpty) {
       Widget overlayStack = Stack(fit: .expand, children: overlayChildren);
+      // The thumbnail strip overlays the same full-bleed viewer; keep
+      // the indicator and chrome overlays clear of its edge.
+      if (widget.thumbnails case final t?) {
+        final thickness = t.isHorizontal
+            ? t.size + t.padding.vertical
+            : t.size + t.padding.horizontal;
+        overlayStack = Padding(
+          padding: switch (t.position) {
+            .bottom => EdgeInsets.only(bottom: thickness),
+            .top => EdgeInsets.only(top: thickness),
+            .left => EdgeInsets.only(left: thickness),
+            .right => EdgeInsets.only(right: thickness),
+          },
+          child: overlayStack,
+        );
+      }
       if (_chrome case final chrome?) {
         overlayStack = ChromeFade(
           chrome: chrome,

@@ -1375,6 +1375,107 @@ void main() {
     expect(image.filterQuality, FilterQuality.high);
   });
 
+  testWidgets('contain/cover factors center the photo from the first '
+      'frame', (tester) async {
+    final contained = ViewfinderImageController();
+    final covered = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              SizedBox(
+                width: 400,
+                height: 400,
+                child: ViewfinderImage(
+                  image: memoryImage(),
+                  controller: contained,
+                  initialScale: const ViewfinderInitialScale.contain(0.9),
+                ),
+              ),
+              SizedBox(
+                width: 400,
+                height: 200,
+                child: ViewfinderImage(
+                  image: memoryImage(),
+                  controller: covered,
+                  initialScale: const ViewfinderInitialScale.cover(1.25),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // contain(0.9) in 400×400: the 360px content sits 20px in on both
+    // axes, not anchored to the top-left.
+    var m = contained.currentTransform.storage;
+    expect(m[12], closeTo(20.0, 0.001));
+    expect(m[13], closeTo(20.0, 0.001));
+    // cover(1.25) in 400×200: a centered crop, not a top-left one.
+    m = covered.currentTransform.storage;
+    expect(m[12], closeTo(-50.0, 0.001));
+    expect(m[13], closeTo(-25.0, 0.001));
+  });
+
+  testWidgets('back navigation unblocks after a zoom reset even when the '
+      'swipe lock did not flip', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => Scaffold(
+                      body: Viewfinder(
+                        itemCount: 3,
+                        itemBuilder: (_, _) =>
+                            ViewfinderItem(image: memoryImage()),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // Zoom in (double-tap), then pan flush to an edge so the swipe
+    // lock releases while still zoomed.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    await tester.tapAt(center);
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    final p = await tester.startGesture(center);
+    for (var i = 0; i < 8; i++) {
+      await p.moveBy(const Offset(60, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await p.up();
+    await tester.pumpAndSettle();
+
+    // First back: blocked, resets the zoom.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('open'), findsNothing);
+
+    // Second back: must pop.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('open'), findsOneWidget);
+  });
+
   testWidgets('jumpToRotation rotates about the viewport center, '
       'preserving scale', (tester) async {
     final controller = ViewfinderImageController();
