@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+* Trim the package description to pub.dev's 180-character limit.
+
 ## 1.0.0
 
 First stable release; the public API is now covered by semantic versioning. Includes the unpublished 0.4.0 changes.
