@@ -604,6 +604,7 @@ class _ViewfinderState extends State<Viewfinder> {
   bool _wheelSettling = false;
   double _wheelLockedSign = 0;
   double _wheelLastAbsDelta = 0;
+  int _wheelTargetIndex = 0;
   int _wheelSettleGen = 0;
   PointerScrollEvent? _lastWheelEvent;
   Timer? _wheelCooldown;
@@ -1078,9 +1079,20 @@ class _ViewfinderState extends State<Viewfinder> {
     // NeverScrollableScrollPhysics for exactly that window. The
     // generation guard keeps a rapid follow-up swipe's window open
     // when the interrupted animation's future completes.
+    //
+    // A follow-up swipe fired mid-transition advances from the
+    // previous TARGET — _currentIndex only updates once the animation
+    // crosses the page midpoint, so it can still read the old page.
+    final base = _wheelSettling ? _wheelTargetIndex : _currentIndex;
+    final next = base + (delta > 0 ? 1 : -1);
+    // Keep the stored target in range so a direction change from a
+    // boundary doesn't have to walk back through out-of-range values.
+    _wheelTargetIndex = _loopEnabled
+        ? _clampIndex(next)
+        : next.clamp(0, math.max(0, widget.itemCount - 1));
     final gen = ++_wheelSettleGen;
     setState(() => _wheelSettling = true);
-    _goTo(_currentIndex + (delta > 0 ? 1 : -1)).whenComplete(() {
+    _goTo(_wheelTargetIndex).whenComplete(() {
       if (mounted && gen == _wheelSettleGen) {
         setState(() => _wheelSettling = false);
       }
