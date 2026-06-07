@@ -40,6 +40,8 @@ class _GalleryGrid extends StatelessWidget {
     final settings = _Settings.of(context);
     final heroEnabled = settings.heroEnabled;
     final images = DemoPhotos.images;
+    final width = MediaQuery.widthOf(context);
+    final columns = (width / 180).floor().clamp(2, 6);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gallery'),
@@ -51,54 +53,48 @@ class _GalleryGrid extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const DemoHint(
-            icon: Icons.touch_app_outlined,
-            message:
-                'Tap a photo to open the full-screen gallery. Swipe between '
-                'pages, pinch / double-tap to zoom, drag down to dismiss, and '
-                'tap the photo to toggle chrome. The tune icon flips every '
-                'knob live.',
+      body: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(
+            child: DemoHint(
+              icon: Icons.touch_app_outlined,
+              message:
+                  'Tap a photo to open the full-screen gallery. Swipe between '
+                  'pages, pinch / double-tap to zoom, drag down to dismiss, and '
+                  'tap the photo to toggle chrome. The tune icon flips every '
+                  'knob live.',
+            ),
           ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = (constraints.maxWidth / 180).floor().clamp(
-                  2,
-                  6,
+          SliverPadding(
+            padding: .all(8),
+            sliver: SliverGrid.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemCount: images.length,
+              itemBuilder: (ctx, i) {
+                final thumb = ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image(image: images[i], fit: BoxFit.cover),
                 );
-                return GridView.builder(
-                  padding: const EdgeInsets.all(8),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                  ),
-                  itemCount: images.length,
-                  itemBuilder: (ctx, i) {
-                    final thumb = ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image(image: images[i], fit: BoxFit.cover),
-                    );
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      // Pushed routes live outside this page's
-                      // _SettingsScope subtree; re-provide the same
-                      // settings instance.
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => _SettingsScope(
-                            settings: settings,
-                            child: _GalleryViewer(initialIndex: i),
-                          ),
-                        ),
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  // Pushed routes live outside this page's
+                  // _SettingsScope subtree; re-provide the same
+                  // settings instance.
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _SettingsScope(
+                        settings: settings,
+                        child: _GalleryViewer(initialIndex: i),
                       ),
-                      child: heroEnabled
-                          ? Hero(tag: 'gallery-photo-$i', child: thumb)
-                          : thumb,
-                    );
-                  },
+                    ),
+                  ),
+                  child: heroEnabled
+                      ? Hero(tag: 'gallery-photo-$i', child: thumb)
+                      : thumb,
                 );
               },
             ),
