@@ -1,13 +1,17 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 
 import 'hero.dart';
 import 'initial_scale.dart';
+import 'internal/colors.dart' as colors;
 import 'internal/hero_shuttle.dart';
 import 'internal/matrix_utils.dart';
 import 'internal/zoomable_viewport.dart';
+import 'pan_gate.dart';
 
-export 'internal/zoomable_viewport.dart'
-    show kViewfinderDefaultFlingDrag, ZoomableCanPan, ZoomableClaimPan;
+export 'internal/zoomable_viewport.dart' show kViewfinderDefaultFlingDrag;
 
 /// Callback fired with the current transformation scale, expressed
 /// relative to the initial scale (`1.0` = the [ViewfinderInitialScale]
@@ -15,49 +19,15 @@ export 'internal/zoomable_viewport.dart'
 typedef ViewfinderScaleChanged = void Function(double scale);
 
 /// Coalesced per-tick snapshot shared between the view state and
-/// [ViewfinderImageController]: the scale state plus the eight
-/// direction × [SwipeEdgeMode] swipe gates.
+/// [ViewfinderImageController]: the scale state plus the four
+/// directional swipe gates.
 typedef _SwipeSignals = ({
   ViewfinderScaleState scale,
-  bool leftScreen,
-  bool rightScreen,
-  bool upScreen,
-  bool downScreen,
-  bool leftContent,
-  bool rightContent,
-  bool upContent,
-  bool downContent,
+  bool left,
+  bool right,
+  bool up,
+  bool down,
 });
-
-/// Frame of reference used by [ViewfinderImageController.canSwipe] when
-/// asking whether a page swipe along a given axis can take over.
-///
-/// At zero rotation the two modes agree. They diverge under rotation:
-/// pick the one that matches what the receiving handoff target (pager,
-/// custom gesture, etc.) is aligned with.
-enum SwipeEdgeMode {
-  /// Check the rotated content's axis-aligned bounding box against the
-  /// viewport, in screen coordinates. Symmetric with the internal
-  /// boundary clamp; matches the screen-axis intent of a pager whose
-  /// own axis is screen-aligned. The bundled gallery uses this and it
-  /// is the default for [ViewfinderImageController.canSwipe].
-  screen,
-
-  /// Check the photo's own logical edges (`x = 0` and `x = viewport.width`
-  /// for horizontal; `y = 0` and `y = viewport.height` for vertical) in
-  /// the photo's frame. Implemented by inverse-projecting the viewport
-  /// into photo space and asking whether the viewport has reached or
-  /// crossed those logical extents.
-  ///
-  /// Use when the consumer wants handoff aligned to the photo's frame
-  /// rather than the screen — for instance, a custom pager that
-  /// follows the photo's axes through rotation. The semantic is
-  /// "the user has reached the photo's logical edge" regardless of
-  /// rotation; at 90° the photo's logical-H corresponds to screen-V,
-  /// at 180° axes are reversed, and so on. The check is correct at
-  /// every angle (no special-casing of cardinal rotations).
-  content,
-}
 
 /// A single zoomable, pannable viewer for images or arbitrary widgets.
 ///
@@ -77,7 +47,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.doubleTapScales = const [1.0, 2.5, 5.0],
     this.minScale = 1.0,
     this.maxScale = 8.0,
-    this.backgroundColor = Colors.black,
+    this.backgroundColor = colors.black,
     this.hero,
     this.onScaleChanged,
     this.onScaleStart,
@@ -92,8 +62,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     this.panEnabled = true,
     this.scaleEnabled = true,
     this.rotateEnabled = false,
-    this.canPan,
-    this.claimPan,
+    this.panGate,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.semanticLabel,
     this.rubberBandPan = true,
@@ -142,8 +111,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     bool panEnabled,
     bool scaleEnabled,
     bool rotateEnabled,
-    ZoomableCanPan? canPan,
-    ZoomableClaimPan? claimPan,
+    ViewfinderPanGate? panGate,
     double interactionEndFrictionCoefficient,
     String? semanticLabel,
     Duration thumbCrossFadeDuration,
@@ -187,8 +155,7 @@ sealed class ViewfinderImage extends StatefulWidget {
     bool panEnabled,
     bool scaleEnabled,
     bool rotateEnabled,
-    ZoomableCanPan? canPan,
-    ZoomableClaimPan? claimPan,
+    ViewfinderPanGate? panGate,
     double interactionEndFrictionCoefficient,
     String? semanticLabel,
     bool rubberBandPan,
@@ -270,22 +237,13 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// the photo upright, matching standard photo-viewer behavior.
   final bool rotateEnabled;
 
-  /// Gate for single-pointer pan, consulted per axis. Called with
-  /// `(Axis.horizontal, +1)` when the finger is moving right,
-  /// `(Axis.vertical, -1)` for upward, etc. Return `false` to yield
-  /// the gesture to an ancestor scroll view — used by the gallery to
-  /// hand drags to the parent `PageView` when the image is panned
-  /// against its edge.
-  final ZoomableCanPan? canPan;
-
-  /// Consulted after [canPan] allowed the pan. Return `true` to claim
-  /// the gesture arena immediately at hit-slop instead of waiting for
-  /// the scale recognizer's larger pan-slop — required when an
-  /// ancestor scrollable also competes for the drag and would
-  /// otherwise win first. The gallery claims pans that must stay
-  /// inside a zoomed page (e.g. revealing the photo's hidden side
-  /// while flush against the opposite edge).
-  final ZoomableClaimPan? claimPan;
+  /// Gate consulted once a single-pointer pan's dominant direction is
+  /// known, with the direction of the finger motion. Lets an embedding
+  /// integration release a drag to an ancestor scrollable (the gallery
+  /// hands edge pans to its `PageView` this way) or claim it before
+  /// ancestor recognizers accept. `null` behaves as
+  /// [ViewfinderPanVerdict.compete].
+  final ViewfinderPanGate? panGate;
 
   /// Post-release fling drag coefficient. Default
   /// [kViewfinderDefaultFlingDrag] = `0.0000135` is tuned for a smooth,
@@ -309,10 +267,11 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// disables both double-tap flavors.
   final bool doubleTapDragZoom;
 
-  /// Whether mouse scroll-wheel events zoom around the pointer.
-  /// Disable when embedding the viewer in a scrollable page that
-  /// should keep receiving wheel events, or when a surrounding
-  /// gallery repurposes the wheel for page navigation.
+  /// Whether scroll-style input — mouse wheel and trackpad two-finger
+  /// scroll — zooms around the pointer. Disable when embedding the
+  /// viewer in a scrollable page that should keep receiving scroll
+  /// events. Pinch (touch, trackpad, or browser pinch) zooms
+  /// regardless.
   final bool enableMouseWheelZoom;
 
   @override
@@ -349,8 +308,7 @@ final class ViewfinderProviderImage extends ViewfinderImage {
     super.panEnabled,
     super.scaleEnabled,
     super.rotateEnabled,
-    super.canPan,
-    super.claimPan,
+    super.panGate,
     super.interactionEndFrictionCoefficient,
     super.semanticLabel,
     super.rubberBandPan,
@@ -422,8 +380,7 @@ final class ViewfinderChildImage extends ViewfinderImage {
     super.panEnabled,
     super.scaleEnabled,
     super.rotateEnabled,
-    super.canPan,
-    super.claimPan,
+    super.panGate,
     super.interactionEndFrictionCoefficient,
     super.semanticLabel,
     super.rubberBandPan,
@@ -480,6 +437,14 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     if (oldWidget.initialScale != widget.initialScale ||
         _isContentSwap(oldWidget, widget)) {
       jumpToInitial();
+    } else if (oldWidget.minScale != widget.minScale ||
+        oldWidget.maxScale != widget.maxScale) {
+      // Narrowed bounds must apply to the live transform too; without
+      // this the photo stays out of bounds until the next gesture.
+      final clamped = relativeScale.clamp(widget.minScale, widget.maxScale);
+      if (clamped != relativeScale) {
+        scaleTo(clamped);
+      }
     }
   }
 
@@ -541,9 +506,13 @@ class _ViewfinderImageState extends State<ViewfinderImage>
 
   Matrix4 _initialMatrix() {
     final s = _baseScale;
-    return (s - 1.0).abs() < 0.001
-        ? Matrix4.identity()
-        : (Matrix4.identity()..scaleByDouble(s, s, 1, 1));
+    if ((s - 1.0).abs() < 0.001) return Matrix4.identity();
+    // Center the scaled content — scaling about the origin would
+    // anchor contain(<1) to the top-left and crop cover(>1) toward it.
+    return scaleAroundFocal(
+      focal: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
+      scale: s,
+    );
   }
 
   /// Writes [m] to the transformation controller, marked as our own so
@@ -585,79 +554,29 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     return currentScale > _baseScale + eps ? .zoomed : .initial;
   }
 
-  /// All eight [ViewfinderImageController.canSwipeToward] outcomes
-  /// (direction × mode), bundled with [scaleState] so the controller's
-  /// coalescer can consume one value. Computes the screen-space AABB
-  /// and the photo-space AABB once, then derives the eight booleans —
-  /// so a transform tick pays for one forward bbox, one matrix
-  /// inversion, and one inverse bbox regardless of how many
-  /// `canSwipe` / `canSwipeToward` queries follow.
-  ///
-  /// Field names are the direction of the finger motion of the
-  /// would-be swipe. A finger moving right pulls the content right and
-  /// reveals what lies beyond the content's *left* edge — so
-  /// `rightScreen` is true when there is no such room left (the
-  /// content's left edge has met the viewport's left, or the content
-  /// fits entirely).
-  ///
-  /// `screen` is the AABB of the transformed content rect against the
-  /// viewport (forward projection). `content` is the AABB of the
-  /// viewport rect pulled back into photo space (inverse projection),
-  /// checked against the photo's logical extents `[0, viewport.width]`
-  /// / `[0, viewport.height]`. The latter answers "has the user
-  /// reached the photo's logical edge in the photo's own frame?",
-  /// independent of rotation — including past 90° where forward-
-  /// projecting the photo's edges would give the wrong answer.
-  /// Surrendered gates: every direction reports "swipe may take over".
-  /// Built lazily so the common zoomed path doesn't allocate it on
-  /// every transform tick.
-  _SwipeSignals _allFreeSignals(ViewfinderScaleState scale) => (
-    scale: scale,
-    leftScreen: true,
-    rightScreen: true,
-    upScreen: true,
-    downScreen: true,
-    leftContent: true,
-    rightContent: true,
-    upContent: true,
-    downContent: true,
-  );
+  _SwipeSignals _allFreeSignals(ViewfinderScaleState scale) =>
+      (scale: scale, left: true, right: true, up: true, down: true);
 
+  /// Field names are the direction of the finger motion of the
+  /// would-be swipe: a finger moving right reveals what lies beyond
+  /// the content's *left* edge, so `right` is true when no such room
+  /// is left (that edge has met the viewport's, or the content fits).
   _SwipeSignals _swipeSignals() {
     final scale = scaleState;
     if (scale == .initial || _viewportSize.isEmpty) {
       return _allFreeSignals(scale);
     }
     const epsilon = 0.5;
-    final m = _transformation.value;
     final viewport = _viewportSize;
-    // Singular matrices (e.g., scale 0 forced via jumpToTransform) have
-    // no inverse; surrender all gates rather than throwing inside the
-    // transform listener. The clamp keeps regular gestures away from
-    // this state, so this only fires for caller-supplied transforms.
-    if (m.determinant() == 0) {
-      return _allFreeSignals(scale);
-    }
-    final bbox = contentBbox(m, viewport);
-    final photoBbox = contentBbox(Matrix4.inverted(m), viewport);
+    final bbox = contentBbox(_transformation.value, viewport);
     final fitsH = bbox.maxX - bbox.minX <= viewport.width + epsilon;
     final fitsV = bbox.maxY - bbox.minY <= viewport.height + epsilon;
     return (
       scale: scale,
-      // Screen mode: checked against the rotated content's AABB in
-      // screen space.
-      rightScreen: fitsH || bbox.minX >= -epsilon,
-      leftScreen: fitsH || bbox.maxX <= viewport.width + epsilon,
-      downScreen: fitsV || bbox.minY >= -epsilon,
-      upScreen: fitsV || bbox.maxY <= viewport.height + epsilon,
-      // Content mode: the same question asked in the photo's own
-      // frame — a finger moving (photo-)right reveals the photo's
-      // left region, exhausted once the viewport reaches the photo's
-      // logical left extent.
-      rightContent: photoBbox.minX <= epsilon,
-      leftContent: photoBbox.maxX >= viewport.width - epsilon,
-      downContent: photoBbox.minY <= epsilon,
-      upContent: photoBbox.maxY >= viewport.height - epsilon,
+      right: fitsH || bbox.minX >= -epsilon,
+      left: fitsH || bbox.maxX <= viewport.width + epsilon,
+      down: fitsV || bbox.minY >= -epsilon,
+      up: fitsV || bbox.maxY <= viewport.height + epsilon,
     );
   }
 
@@ -668,8 +587,14 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       jumpToTransform(target);
       return;
     }
-    _animation = Matrix4Tween(begin: _transformation.value, end: target)
-        .animate(
+    _animation =
+        _SimilarityTween(
+          // Clone both endpoints so a caller reusing its matrix can't
+          // shift the flight or the landing.
+          begin: _transformation.value.clone(),
+          end: target.clone(),
+          center: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
+        ).animate(
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
         );
     _animController
@@ -705,19 +630,26 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     _writeTransform(_initialMatrix());
   }
 
-  void animateToScale(double scale, {Offset? focal}) {
+  void scaleTo(double scale, {Offset? focal, bool animate = true}) {
+    if (_viewportSize.isEmpty) {
+      // No center to pivot on before the first layout; run after it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) scaleTo(scale, focal: focal, animate: animate);
+      });
+      return;
+    }
     final base = _baseScale;
     final clamped = (scale * base).clamp(_absMinScale, _absMaxScale).toDouble();
-    final size = switch (context.findRenderObject()) {
-      final RenderBox b => b.size,
-      _ => Size.zero,
-    };
-    final f = focal ?? Offset(size.width / 2, size.height / 2);
-    _animateTo(
-      (clamped - base).abs() < 0.001
-          ? _initialMatrix()
-          : scaleAroundFocal(focal: f, scale: clamped),
-    );
+    final f =
+        focal ?? Offset(_viewportSize.width / 2, _viewportSize.height / 2);
+    final target = (clamped - base).abs() < 0.001
+        ? _initialMatrix()
+        : scaleAroundFocal(focal: f, scale: clamped);
+    if (animate) {
+      _animateTo(target);
+    } else {
+      jumpToTransform(target);
+    }
   }
 
   Matrix4 get currentTransform => _transformation.value.clone();
@@ -725,17 +657,59 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   void jumpToTransform(Matrix4 target) {
     _animController.stop();
     _animation = null;
-    _writeTransform(target);
+    // Clone: holding the caller's instance would let later mutations
+    // change the transform without a notification.
+    _writeTransform(target.clone());
   }
 
   void animateToTransform(Matrix4 target) => _animateTo(target);
+
+  double get rotationAngle => rotationOf(_transformation.value);
+
+  void rotateTo(double radians, {Offset? focal, bool animate = true}) {
+    if (_viewportSize.isEmpty) {
+      // No center to pivot on before the first layout; run after it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) rotateTo(radians, focal: focal, animate: animate);
+      });
+      return;
+    }
+    final delta = radians - rotationAngle;
+    if (delta.abs() < 1e-9) return;
+    final f =
+        focal ?? Offset(_viewportSize.width / 2, _viewportSize.height / 2);
+    final base = _transformation.value.clone();
+    if (!animate ||
+        (mounted && MediaQuery.maybeDisableAnimationsOf(context) == true)) {
+      jumpToTransform(rotateAroundFocal(base: base, focal: f, radians: delta));
+      return;
+    }
+    // Not via _animateTo: _SimilarityTween decomposes about the
+    // viewport center, which would let an off-center [focal] drift
+    // mid-turn — _RotationTween keeps it pinned every frame. The
+    // literal delta is honored, so targets past ±π spin full turns.
+    _animation = _RotationTween(base: base, focal: f, delta: delta).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+    _animController
+      ..reset()
+      ..forward();
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (ctx, constraints) {
       final viewport = Size(constraints.maxWidth, constraints.maxHeight);
       if (_viewportSize != viewport) {
+        // The initial matrix depends on the viewport (centering). When
+        // the content is still untouched at the old initial — first
+        // layout, device rotation, split screen — re-center it for the
+        // new geometry before this frame paints.
+        final wasAtInitial = _transformation.value == _initialMatrix();
         _viewportSize = viewport;
+        if (wasAtInitial) {
+          _writeTransform(_initialMatrix());
+        }
         // Recompute derived state after layout settles so controller
         // listeners see the fresh canSwipe results.
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -750,6 +724,115 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       );
     },
   );
+}
+
+/// Tween between two similarity transforms (uniform scale + rotation +
+/// translation), interpolating each component in its own space about
+/// [center] and taking the shortest angular path.
+///
+/// [Matrix4Tween] lerps raw matrix entries, which shrinks rotations
+/// along the chord — a 90° difference dips to ~0.71× scale mid-flight.
+/// For rotation-free endpoints the result is identical to the entry
+/// lerp. Endpoints that are not similarities (skew or non-uniform
+/// scale, possible via `jumpToTransform`) cannot be decomposed and
+/// fall back to the entry lerp. Both paths land exactly on `end`.
+class _SimilarityTween extends Animatable<Matrix4> {
+  _SimilarityTween({
+    required Matrix4 begin,
+    required Matrix4 end,
+    required this.center,
+  }) : _beginRaw = begin,
+       _endRaw = end,
+       _componentwise = _isSimilarity(begin) && _isSimilarity(end),
+       _begin = _decompose(begin, center),
+       _end = _decompose(end, center) {
+    var d = _end.angle - _begin.angle;
+    if (d > math.pi) d -= 2 * math.pi;
+    if (d < -math.pi) d += 2 * math.pi;
+    _angleDelta = d;
+  }
+
+  final Offset center;
+  final Matrix4 _beginRaw;
+  final Matrix4 _endRaw;
+  final bool _componentwise;
+  final ({double scale, double angle, double tx, double ty}) _begin;
+  final ({double scale, double angle, double tx, double ty}) _end;
+  late final double _angleDelta;
+
+  static bool _isSimilarity(Matrix4 m) {
+    final s = m.storage;
+    final a = s[0], b = s[1], c = s[4], d = s[5];
+    final len0 = a * a + b * b;
+    final len1 = c * c + d * d;
+    final n = math.max(len0, len1);
+    if (n == 0) return false;
+    const eps = 1e-6;
+    // Equal-length orthogonal columns with positive determinant:
+    // uniform scale × rotation, no skew or reflection.
+    return (len0 - len1).abs() <= eps * n &&
+        (a * c + b * d).abs() <= eps * n &&
+        a * d - b * c > 0;
+  }
+
+  static ({double scale, double angle, double tx, double ty}) _decompose(
+    Matrix4 m,
+    Offset c,
+  ) {
+    // Conjugate about the center so the rotation pivots there.
+    final conj = Matrix4.identity()
+      ..translateByDouble(-c.dx, -c.dy, 0, 1)
+      ..multiply(m)
+      ..translateByDouble(c.dx, c.dy, 0, 1);
+    return (
+      scale: xyScale(conj),
+      angle: rotationOf(conj),
+      tx: conj.storage[12],
+      ty: conj.storage[13],
+    );
+  }
+
+  @override
+  Matrix4 transform(double t) {
+    if (t <= 0.0) return _beginRaw.clone();
+    if (t >= 1.0) return _endRaw.clone();
+    if (!_componentwise) {
+      final m = Matrix4.zero();
+      for (var i = 0; i < 16; i++) {
+        m.storage[i] =
+            _beginRaw.storage[i] +
+            (_endRaw.storage[i] - _beginRaw.storage[i]) * t;
+      }
+      return m;
+    }
+    final scale = _begin.scale + (_end.scale - _begin.scale) * t;
+    final angle = _begin.angle + _angleDelta * t;
+    final tx = _begin.tx + (_end.tx - _begin.tx) * t;
+    final ty = _begin.ty + (_end.ty - _begin.ty) * t;
+    final ca = math.cos(angle) * scale;
+    final sa = math.sin(angle) * scale;
+    return Matrix4.identity()
+      ..translateByDouble(center.dx, center.dy, 0, 1)
+      ..multiply(Matrix4(ca, sa, 0, 0, -sa, ca, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1))
+      ..translateByDouble(-center.dx, -center.dy, 0, 1);
+  }
+}
+
+/// Animates a rotation in angle space on top of [base].
+class _RotationTween extends Animatable<Matrix4> {
+  _RotationTween({
+    required this.base,
+    required this.focal,
+    required this.delta,
+  });
+
+  final Matrix4 base;
+  final Offset focal;
+  final double delta;
+
+  @override
+  Matrix4 transform(double t) =>
+      rotateAroundFocal(base: base, focal: focal, radians: delta * t);
 }
 
 class _ImageBody extends StatelessWidget {
@@ -825,6 +908,11 @@ class _ImageBody extends StatelessWidget {
     };
 
     if (spec.hero case final hero?) {
+      assert(
+        hero.thumbnailFit == null || spec is ViewfinderProviderImage,
+        'ViewfinderHero.thumbnailFit only affects provider-backed pages; '
+        'it has no effect on ViewfinderImage.child.',
+      );
       content = Hero(
         tag: hero.tag,
         createRectTween: hero.createRectTween,
@@ -860,8 +948,7 @@ class _ImageBody extends StatelessWidget {
           clipBehavior: .none,
           interactionEndFrictionCoefficient:
               spec.interactionEndFrictionCoefficient,
-          canPan: spec.canPan,
-          claimPan: spec.claimPan,
+          panGate: spec.panGate,
           rubberBandPan: spec.rubberBandPan,
           // An empty double-tap ladder means "double-tap zoom is off" —
           // including the double-tap-drag flavor.
@@ -916,8 +1003,9 @@ class _ImageWithOptionalThumb extends StatelessWidget {
       gaplessPlayback: gaplessPlayback,
       frameBuilder: thumb == null
           ? null
-          : (context, child, frame, wasSyncLoaded) => AnimatedOpacity(
-              opacity: frame == null ? 0.0 : 1.0,
+          : (context, child, frame, wasSyncLoaded) => _MainImageFade(
+              hasFrame: frame != null,
+              gaplessPlayback: gaplessPlayback,
               duration: thumbCrossFadeDuration,
               curve: thumbCrossFadeCurve,
               child: child,
@@ -945,6 +1033,47 @@ class _ImageWithOptionalThumb extends StatelessWidget {
   }
 }
 
+/// Thumb-to-main cross-fade for the main image.
+///
+/// An in-place provider swap resets the frame count to null even with
+/// `gaplessPlayback: true` (which keeps painting the previous frame);
+/// a plain `frame == null` opacity check would fade that still-valid
+/// frame out and flash the thumb. Latch "has shown a frame" and keep
+/// the image visible across gapless swaps.
+class _MainImageFade extends StatefulWidget {
+  const _MainImageFade({
+    required this.hasFrame,
+    required this.gaplessPlayback,
+    required this.duration,
+    required this.curve,
+    required this.child,
+  });
+
+  final bool hasFrame;
+  final bool gaplessPlayback;
+  final Duration duration;
+  final Curve curve;
+  final Widget child;
+
+  @override
+  State<_MainImageFade> createState() => _MainImageFadeState();
+}
+
+class _MainImageFadeState extends State<_MainImageFade> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    _revealed = widget.hasFrame || (_revealed && widget.gaplessPlayback);
+    return AnimatedOpacity(
+      opacity: _revealed ? 1.0 : 0.0,
+      duration: widget.duration,
+      curve: widget.curve,
+      child: widget.child,
+    );
+  }
+}
+
 /// External control surface for a [ViewfinderImage].
 ///
 /// Extends [ChangeNotifier] so callers can subscribe to *state-level*
@@ -956,6 +1085,10 @@ class _ImageWithOptionalThumb extends StatelessWidget {
 /// Each controller drives a single [ViewfinderImage]. Passing the same
 /// instance to multiple widgets is rejected by a debug assert; create a
 /// fresh controller per viewer.
+///
+/// Scale and rotation commands issued before the viewer's first layout
+/// apply one frame later — the viewport center they pivot on doesn't
+/// exist yet.
 class ViewfinderImageController extends ChangeNotifier {
   /// Creates a detached controller. Pass it to a [ViewfinderImage] to
   /// observe and drive that image's transform.
@@ -999,13 +1132,22 @@ class ViewfinderImageController extends ChangeNotifier {
 
   /// Called by the view whenever the transformation or viewport changes.
   /// Coalesces per-frame ticks into a single notification per state
-  /// transition. Tracks both edge modes so a listener reading either
-  /// `screen` or `content` results sees its own transitions.
+  /// transition.
   void _bump() {
     if (_disposed) return;
     final next = _state?._swipeSignals();
     if (next == _lastSignal) return;
     _lastSignal = next;
+    // A content swap notifies during build (didUpdateWidget →
+    // jumpToInitial → synchronous transform notify); a listener that
+    // calls setState would throw. Defer past the frame.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) notifyListeners();
+      });
+      return;
+    }
     notifyListeners();
   }
 
@@ -1017,52 +1159,31 @@ class ViewfinderImageController extends ChangeNotifier {
   ViewfinderScaleState get scaleState => _state?.scaleState ?? .initial;
 
   /// True when a page swipe along [axis] — in either direction — can
-  /// reasonably take over; returns `true` while detached. See
-  /// [SwipeEdgeMode] for how rotation is interpreted.
-  ///
-  /// For the direction-aware variant (needed to tell "flush against
-  /// the left edge" apart from "flush against the right edge"), use
-  /// [canSwipeToward].
-  ///
-  /// Reads from the coalesced snapshot the controller's listeners
-  /// observed, so a listener that calls `canSwipe` right after being
-  /// notified does not pay for the bbox/inverse-bbox computation a
-  /// second time. Falls back to the live state for the rare pre-first-
-  /// bump read (controller attached, no transform tick yet).
-  bool canSwipe(Axis axis, {SwipeEdgeMode mode = SwipeEdgeMode.screen}) {
+  /// reasonably take over; returns `true` while detached. For the
+  /// direction-aware variant use [canSwipeToward].
+  bool canSwipe(Axis axis) {
     return switch (axis) {
-      .horizontal =>
-        canSwipeToward(.left, mode: mode) || canSwipeToward(.right, mode: mode),
-      .vertical =>
-        canSwipeToward(.up, mode: mode) || canSwipeToward(.down, mode: mode),
+      .horizontal => canSwipeToward(.left) || canSwipeToward(.right),
+      .vertical => canSwipeToward(.up) || canSwipeToward(.down),
     };
   }
 
   /// True when a page swipe whose finger motion points in [direction]
-  /// can reasonably take over — i.e. the content has no more room to
-  /// pan that way; returns `true` while detached.
+  /// can reasonably take over — i.e. the (rotated) content has no more
+  /// screen-space room to pan that way; returns `true` while detached.
   ///
   /// [direction] is the direction of the *finger motion* (drag), not
   /// of the page navigation: a finger moving [AxisDirection.right]
   /// pulls the content right and is exhausted once the content's left
-  /// edge meets the viewport's left. With [SwipeEdgeMode.content] the
-  /// direction refers to the photo's own logical frame, which tracks
-  /// the photo through rotation. See [SwipeEdgeMode].
-  bool canSwipeToward(
-    AxisDirection direction, {
-    SwipeEdgeMode mode = SwipeEdgeMode.screen,
-  }) {
+  /// edge meets the viewport's left.
+  bool canSwipeToward(AxisDirection direction) {
     final signal = _lastSignal ?? _state?._swipeSignals();
     if (signal == null) return true;
-    return switch ((direction, mode)) {
-      (.left, .screen) => signal.leftScreen,
-      (.right, .screen) => signal.rightScreen,
-      (.up, .screen) => signal.upScreen,
-      (.down, .screen) => signal.downScreen,
-      (.left, .content) => signal.leftContent,
-      (.right, .content) => signal.rightContent,
-      (.up, .content) => signal.upContent,
-      (.down, .content) => signal.downContent,
+    return switch (direction) {
+      .left => signal.left,
+      .right => signal.right,
+      .up => signal.up,
+      .down => signal.down,
     };
   }
 
@@ -1076,9 +1197,31 @@ class ViewfinderImageController extends ChangeNotifier {
   void jumpToInitial() => _state?.jumpToInitial();
 
   /// Animate to a specific scale — relative to the initial baseline,
-  /// like [scale] — optionally around a focal point.
+  /// like [scale] — optionally around a focal point (defaults to the
+  /// viewport center).
   void animateToScale(double scale, {Offset? focal}) =>
-      _state?.animateToScale(scale, focal: focal);
+      _state?.scaleTo(scale, focal: focal);
+
+  /// Like [animateToScale], without animation — for continuous
+  /// controls such as a zoom slider.
+  void jumpToScale(double scale, {Offset? focal}) =>
+      _state?.scaleTo(scale, focal: focal, animate: false);
+
+  /// Current rotation in radians (`0` = upright). Returns `0` when not
+  /// attached.
+  double get rotation => _state?.rotationAngle ?? 0.0;
+
+  /// Rotate to an absolute angle of [radians] around [focal] (defaults
+  /// to the viewport center), preserving scale and pan, without
+  /// animation. Programmatic rotation works regardless of
+  /// `rotateEnabled`, which gates only the gesture.
+  void jumpToRotation(double radians, {Offset? focal}) =>
+      _state?.rotateTo(radians, focal: focal, animate: false);
+
+  /// Like [jumpToRotation], animated — in angle space, so the content
+  /// keeps its scale throughout the turn.
+  void animateToRotation(double radians, {Offset? focal}) =>
+      _state?.rotateTo(radians, focal: focal);
 
   /// Current transform matrix. Returns the identity when not attached.
   Matrix4 get currentTransform =>

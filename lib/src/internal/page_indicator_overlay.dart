@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../page_indicator.dart';
+import 'colors.dart' as colors;
 
 /// Internal widget that renders the configured indicator.
 ///
@@ -12,11 +13,16 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
     required this.config,
     required this.itemCount,
     required this.currentIndex,
+    this.reverse = false,
   });
 
   final ViewfinderPageIndicator config;
   final int itemCount;
   final int currentIndex;
+
+  /// Mirrors the dot order to match a `reverse: true` pager (ambient
+  /// `Directionality` already mirrors the underlying [Row] for RTL).
+  final bool reverse;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +48,7 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
         dots: cfg,
         itemCount: itemCount,
         currentIndex: currentIndex,
+        reverse: reverse,
       ),
       ViewfinderPageIndicatorLabel() => _LabelView(
         builder: cfg.labelBuilder,
@@ -59,6 +66,7 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
                 dots: cfg.dots,
                 itemCount: itemCount,
                 currentIndex: currentIndex,
+                reverse: reverse,
               ),
     };
     final aligned = Align(
@@ -74,11 +82,13 @@ class _DotsView extends StatelessWidget {
     required this.dots,
     required this.itemCount,
     required this.currentIndex,
+    required this.reverse,
   });
 
   final ViewfinderPageIndicatorDots dots;
   final int itemCount;
   final int currentIndex;
+  final bool reverse;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -92,7 +102,9 @@ class _DotsView extends StatelessWidget {
     child: Row(
       mainAxisSize: .min,
       children: [
-        for (var i = 0; i < itemCount; i++)
+        for (final i in [
+          for (var k = 0; k < itemCount; k++) reverse ? itemCount - 1 - k : k,
+        ])
           Padding(
             padding: .symmetric(horizontal: dots.spacing / 2),
             child: AnimatedContainer(
@@ -125,15 +137,17 @@ class _LabelView extends StatelessWidget {
   Widget build(BuildContext context) {
     final builder = this.builder;
     if (builder != null) return builder(context, currentIndex, itemCount);
-    return Container(
-      padding: const .symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: .circular(16),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: colors.black54,
+        borderRadius: .all(.circular(16)),
       ),
-      child: Text(
-        '${currentIndex + 1} / $itemCount',
-        style: const .new(color: Colors.white, fontSize: 13),
+      child: Padding(
+        padding: const .symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          '${currentIndex + 1} / $itemCount',
+          style: const .new(color: colors.white, fontSize: 13),
+        ),
       ),
     );
   }

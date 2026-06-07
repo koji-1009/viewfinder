@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import 'internal/colors.dart' as colors;
 import 'viewfinder.dart' show Viewfinder;
 
 /// Which axis a drag-to-dismiss gesture is accepted on.
@@ -39,7 +40,7 @@ class ViewfinderDismiss {
     this.direction = .vertical,
     this.threshold = 0.25,
     this.fadeBackground = true,
-    this.backgroundColor = Colors.black,
+    this.backgroundColor = colors.black,
     this.slideType = .wholePage,
     this.onProgress,
     this.onThresholdCrossed,

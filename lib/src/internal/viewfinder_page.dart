@@ -1,25 +1,28 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../image.dart';
 import '../initial_scale.dart';
 import '../item.dart';
+import '../pan_gate.dart';
+import 'colors.dart' as colors;
+import 'matrix_utils.dart';
+import 'pager_scope.dart';
 
 /// One page of a `Viewfinder` gallery.
 ///
 /// Translates a [ViewfinderItem] (image-backed or child-backed) into a
 /// matching [ViewfinderImage] / [ViewfinderImage.child], threading the
 /// per-gallery defaults, the per-page transform [controller], the
-/// edge-handoff [canPan] gate, and (only for the currently visible
-/// page) the per-item Hero. Internal — driven by `Viewfinder.build`.
+/// edge-handoff [panGate], and (only for the currently visible page)
+/// the per-item Hero. Internal — driven by `Viewfinder.build`.
 class ViewfinderPage extends StatelessWidget {
   const ViewfinderPage({
     super.key,
     required this.item,
     required this.isCurrent,
     required this.controller,
-    required this.canPan,
-    required this.claimPan,
+    required this.panGate,
     required this.defaultInitialScale,
     required this.doubleTapScales,
     required this.defaultMinScale,
@@ -29,7 +32,7 @@ class ViewfinderPage extends StatelessWidget {
     required this.rubberBandPan,
     required this.pageSpacing,
     required this.pagerAxis,
-    this.enableMouseWheelZoom = true,
+    required this.filterQuality,
     this.onWheelDelta,
     this.wrapProvider,
   });
@@ -37,8 +40,7 @@ class ViewfinderPage extends StatelessWidget {
   final ViewfinderItem item;
   final bool isCurrent;
   final ViewfinderImageController controller;
-  final ZoomableCanPan canPan;
-  final ZoomableClaimPan claimPan;
+  final ViewfinderPanGate panGate;
   final ViewfinderInitialScale defaultInitialScale;
   final List<double> doubleTapScales;
   final double defaultMinScale;
@@ -48,14 +50,12 @@ class ViewfinderPage extends StatelessWidget {
   final bool rubberBandPan;
   final double pageSpacing;
   final Axis pagerAxis;
+  final FilterQuality filterQuality;
 
-  /// Forwarded to [ViewfinderImage.enableMouseWheelZoom]; `false` when
-  /// the gallery repurposes the wheel for page navigation.
-  final bool enableMouseWheelZoom;
-
-  /// When non-null, scroll-wheel events over this page are consumed
-  /// and reported here (the gallery's wheel-paging mode).
-  final ValueChanged<double>? onWheelDelta;
+  /// When non-null, pager-axis-dominant scroll-wheel events over this
+  /// page are consumed and reported here (the gallery's wheel-paging
+  /// mode); cross-axis scroll keeps zooming.
+  final void Function(PointerScrollEvent event, double along)? onWheelDelta;
 
   /// Applied to an image-backed item's main provider before display —
   /// the gallery's decode-size policy. The thumb provider is left
@@ -89,16 +89,15 @@ class ViewfinderPage extends StatelessWidget {
         onLongPressStart: item.onLongPressStart,
         onSecondaryTapUp: item.onSecondaryTapUp,
         controller: controller,
-        canPan: canPan,
-        claimPan: claimPan,
+        panGate: panGate,
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
-        backgroundColor: Colors.transparent,
+        backgroundColor: colors.transparent,
+        filterQuality: filterQuality,
         thumbCrossFadeDuration: item.thumbCrossFadeDuration,
         thumbCrossFadeCurve: item.thumbCrossFadeCurve,
         gaplessPlayback: item.gaplessPlayback,
         rubberBandPan: rubberBandPan,
-        enableMouseWheelZoom: enableMouseWheelZoom,
       ),
       final ViewfinderChildItem item => ViewfinderImage.child(
         initialScale: initialScale,
@@ -111,37 +110,43 @@ class ViewfinderPage extends StatelessWidget {
         onLongPressStart: item.onLongPressStart,
         onSecondaryTapUp: item.onSecondaryTapUp,
         controller: controller,
-        canPan: canPan,
-        claimPan: claimPan,
+        panGate: panGate,
         rotateEnabled: rotateEnabled,
         interactionEndFrictionCoefficient: interactionEndFrictionCoefficient,
-        backgroundColor: Colors.transparent,
+        backgroundColor: colors.transparent,
         rubberBandPan: rubberBandPan,
-        enableMouseWheelZoom: enableMouseWheelZoom,
         contentKey: item.contentKey,
         child: item.child,
       ),
     };
 
-    // Wheel-paging mode: consume scroll-wheel events over the page and
-    // report them to the gallery. Registered through the pointer-signal
-    // resolver from this leaf-side Listener, so it wins over the
-    // enclosing scrollable's own wheel handling.
-    if (onWheelDelta case final onWheel?) {
-      page = Listener(
-        onPointerSignal: (event) {
-          if (event is! PointerScrollEvent) return;
-          GestureBinding.instance.pointerSignalResolver.register(event, (e) {
-            final scroll = e as PointerScrollEvent;
-            final delta = scroll.scrollDelta.dy != 0
-                ? scroll.scrollDelta.dy
-                : scroll.scrollDelta.dx;
-            if (delta != 0) onWheel(delta);
-          });
-        },
-        child: page,
-      );
-    }
+    // Wheel-paging mode: scroll dominant along the pager axis turns
+    // pages; cross-axis scroll falls to the viewer's zoom (the deeper
+    // ZoomableViewport skips pager-axis-dominant events, so the two
+    // split the resolver cleanly). Registered from this leaf-side
+    // Listener, so it wins over the enclosing scrollable's own wheel
+    // handling. The Listener mounts unconditionally — gating it on the
+    // mode would change the element tree on a runtime
+    // mouseWheelBehavior flip and recreate the page, dropping its
+    // live zoom.
+    page = Listener(
+      onPointerSignal: (event) {
+        final onWheel = onWheelDelta;
+        if (onWheel == null || event is! PointerScrollEvent) return;
+        final (:along, :cross) = splitScrollDelta(event.scrollDelta, pagerAxis);
+        if (along.abs() <= cross.abs()) return;
+        GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+          onWheel(event, along);
+        });
+      },
+      child: page,
+    );
+
+    page = PagerScope(
+      axis: pagerAxis,
+      wheelPaging: onWheelDelta != null,
+      child: page,
+    );
 
     // Spacing goes on the pager's own axis — horizontal gaps between
     // horizontally-paged pages, vertical gaps for a vertical pager.

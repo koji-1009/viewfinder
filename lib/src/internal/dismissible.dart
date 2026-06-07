@@ -1,6 +1,43 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 
 import '../dismiss.dart';
+
+/// Vertical drag that yields to a pinch: a second pointer arriving
+/// before acceptance rejects the gesture, handing both pointers to
+/// the scale recognizer. The stock recognizer tracks every pointer
+/// and would win the arena off the first finger's drift (its
+/// touch-slop is half the scale recognizer's pan-slop), making
+/// pinches land as dismiss drags.
+class _SingleTouchVerticalDragRecognizer extends VerticalDragGestureRecognizer {
+  _SingleTouchVerticalDragRecognizer({super.debugOwner});
+
+  int _pointers = 0;
+  bool _accepted = false;
+
+  @override
+  void acceptGesture(int pointer) {
+    _accepted = true;
+    super.acceptGesture(pointer);
+  }
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    _pointers++;
+    if (_pointers > 1 && !_accepted) {
+      resolve(GestureDisposition.rejected);
+      return;
+    }
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    _pointers = 0;
+    _accepted = false;
+    super.didStopTrackingLastPointer(pointer);
+  }
+}
 
 /// Wraps [child] with a drag-to-dismiss gesture. [enabled] should be false
 /// while the child is zoomed so pans belong to the viewer, not the wrapper.
@@ -44,6 +81,19 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
   }
 
   @override
+  void didUpdateWidget(covariant ViewfinderDismissible oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Disabling mid-drag tears down the recognizer without firing
+    // onEnd; spring back so the gallery doesn't stay translated.
+    if (!widget.enabled &&
+        oldWidget.enabled &&
+        _dragOffset != 0 &&
+        !_release.isAnimating) {
+      _release.forward(from: 0);
+    }
+  }
+
+  @override
   void dispose() {
     _release.dispose();
     super.dispose();
@@ -58,11 +108,9 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
   /// Normalized drag progress in `[0, 1]`. The denominator is the
   /// viewport height: the trigger threshold,
   /// [ViewfinderDismiss.onProgress], and the visual fade/translate
-  /// must all divide by the same extent — `slideType: onlyImage`
-  /// shrinks this widget's own render box (the thumbnail strip takes
-  /// part of the column), so `context.size` would make the threshold
-  /// diverge from the documented "fraction of viewport height" and
-  /// from the visuals.
+  /// must all divide by the same extent regardless of how the wrapper
+  /// is framed, so the documented "fraction of viewport height"
+  /// contract holds for both `slideType`s.
   double _dragProgress() {
     final size = MediaQuery.sizeOf(context).height;
     return size <= 0 ? 0.0 : (_dragOffset.abs() / size).clamp(0.0, 1.0);
@@ -92,6 +140,9 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
 
   void _handleDragEnd(DragEndDetails _) {
     if (_dragProgress() >= widget.config.threshold) {
+      // Re-arm the threshold signal: when onDismiss keeps the widget
+      // mounted, the next drag must be able to fire it again.
+      _pastThreshold = false;
       widget.config.onDismiss();
     } else {
       _release.forward(from: 0);
@@ -100,9 +151,7 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final progress = (_dragOffset.abs() / (size.height == 0 ? 1 : size.height))
-        .clamp(0.0, 1.0);
+    final progress = _dragProgress();
 
     final bg = widget.config.fadeBackground
         ? widget.config.backgroundColor.withValues(
@@ -112,10 +161,21 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
 
     return ColoredBox(
       color: bg,
-      child: GestureDetector(
+      child: RawGestureDetector(
         behavior: .opaque,
-        onVerticalDragUpdate: widget.enabled ? _handleDragUpdate : null,
-        onVerticalDragEnd: widget.enabled ? _handleDragEnd : null,
+        gestures: <Type, GestureRecognizerFactory>{
+          if (widget.enabled)
+            _SingleTouchVerticalDragRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                  _SingleTouchVerticalDragRecognizer
+                >(() => _SingleTouchVerticalDragRecognizer(debugOwner: this), (
+                  r,
+                ) {
+                  r
+                    ..onUpdate = _handleDragUpdate
+                    ..onEnd = _handleDragEnd;
+                }),
+        },
         child: Transform.translate(
           offset: Offset(0, _dragOffset),
           child: Opacity(

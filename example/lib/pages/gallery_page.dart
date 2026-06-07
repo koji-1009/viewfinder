@@ -206,6 +206,7 @@ class _GalleryViewerState extends State<_GalleryViewer> {
     return ViewfinderDismiss(
       onDismiss: () => Navigator.of(context).maybePop(),
       slideType: s.dismissSlide,
+      backgroundColor: Theme.of(context).colorScheme.surface,
     );
   }
 
@@ -214,13 +215,14 @@ class _GalleryViewerState extends State<_GalleryViewer> {
     final s = _Settings.of(context);
     final images = DemoPhotos.images;
     return Scaffold(
-      backgroundColor: Colors.black,
       body: Viewfinder(
         itemCount: images.length,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         controller: _controller,
         defaultInitialScale: s.initialScale,
         precacheAdjacent: s.precacheAdjacent,
         pagerAxis: s.pagerAxis,
+        mouseWheelBehavior: s.mouseWheelBehavior,
         rotateEnabled: s.rotateEnabled,
         swipeDragDevices: s.dragDevices,
         doubleTapScales: const [1.0, 2.5, 5.0],
@@ -269,8 +271,9 @@ class _ChromeBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ColoredBox(
-      color: Colors.black54,
+      color: scheme.surface.withValues(alpha: 0.72),
       child: SafeArea(
         bottom: false,
         child: SizedBox(
@@ -278,17 +281,17 @@ class _ChromeBar extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                icon: Icon(Icons.arrow_back, color: scheme.onSurface),
                 onPressed: () {
                   // Two-stage back: reset zoom first, then pop.
                   if (controller.resetCurrentImage()) return;
                   Navigator.of(context).maybePop();
                 },
               ),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Tap photo to toggle this bar',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: scheme.onSurface),
                 ),
               ),
               const SizedBox(width: 8),
@@ -331,6 +334,26 @@ class _SettingsSheet extends StatelessWidget {
                 settings.dismissEnabled = false;
               }
             }),
+          ),
+        ),
+        ListTile(
+          dense: true,
+          title: const Text('mouseWheelBehavior'),
+          trailing: SegmentedButton<ViewfinderMouseWheelBehavior>(
+            segments: const [
+              ButtonSegment(
+                value: ViewfinderMouseWheelBehavior.zoom,
+                label: Text('zoom'),
+              ),
+              ButtonSegment(
+                value: ViewfinderMouseWheelBehavior.paging,
+                label: Text('paging'),
+              ),
+            ],
+            selected: {settings.mouseWheelBehavior},
+            onSelectionChanged: (value) => settings.update(
+              () => settings.mouseWheelBehavior = value.first,
+            ),
           ),
         ),
         ListTile(
@@ -578,6 +601,8 @@ class _Settings extends ChangeNotifier {
       context.dependOnInheritedWidgetOfExactType<_SettingsScope>()!.notifier!;
 
   Axis pagerAxis = Axis.horizontal;
+  ViewfinderMouseWheelBehavior mouseWheelBehavior =
+      ViewfinderMouseWheelBehavior.zoom;
   int precacheAdjacent = 2;
   Set<PointerDeviceKind> dragDevices = kViewfinderDefaultSwipeDragDevices;
   bool rotateEnabled = false;

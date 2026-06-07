@@ -23,7 +23,7 @@ knob without restarting.
 asserts).
 * **Embedded zoom** — `ViewfinderImage` inline in a scrollable article, plus
 `ViewfinderImage.child` zooming a non-image widget via `contentKey`.
-* **Rotation playground** — `rotateEnabled: true` with a reset button.
+* **Rotation playground** — `rotateEnabled: true` with a rotation slider (mouse and web trackpads have no rotate gesture) and a reset button.
 
 Images come from picsum.photos (CORS-safe) via `TaroImage`, which caches bytes
 on disk so thumbnail and full-screen decodes share one HTTP fetch.

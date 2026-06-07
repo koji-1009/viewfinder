@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../item.dart';
 import '../keys.dart';
 import '../thumbnails.dart';
+import 'colors.dart' as colors;
 
 /// Thumbnail strip — internal renderer driven by `Viewfinder` from the
 /// public [ViewfinderThumbnails] config.
@@ -14,6 +15,7 @@ class ViewfinderThumbnailBar extends StatefulWidget {
     required this.currentIndex,
     required this.itemAt,
     required this.onSelect,
+    this.reverse = false,
   });
 
   final ViewfinderThumbnails config;
@@ -21,6 +23,11 @@ class ViewfinderThumbnailBar extends StatefulWidget {
   final int currentIndex;
   final ViewfinderItem Function(int index) itemAt;
   final ValueChanged<int> onSelect;
+
+  /// Mirrors the tile order to match a `reverse: true` pager (ambient
+  /// `Directionality` already mirrors the underlying [ListView] for
+  /// RTL).
+  final bool reverse;
 
   @override
   State<ViewfinderThumbnailBar> createState() => _ViewfinderThumbnailBarState();
@@ -62,7 +69,17 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     final cfg = widget.config;
     final extent = cfg.size + cfg.spacing;
     final viewport = _scrollController.position.viewportDimension;
-    final target = widget.currentIndex * extent;
+    // Tile i sits at `leading padding + i * extent` in scroll
+    // coordinates; offset 0 shows the padding, not tile 0. A reversed
+    // list anchors its scroll origin on the opposite edge, swapping
+    // which padding side leads.
+    final leading = switch ((cfg.isHorizontal, widget.reverse)) {
+      (true, false) => cfg.padding.left,
+      (true, true) => cfg.padding.right,
+      (false, false) => cfg.padding.top,
+      (false, true) => cfg.padding.bottom,
+    };
+    final target = leading + widget.currentIndex * extent;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final desired = (target - viewport / 2 + cfg.size / 2).clamp(
       0.0,
@@ -87,6 +104,7 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
     final list = ListView.builder(
       controller: _scrollController,
       scrollDirection: cfg.isHorizontal ? .horizontal : .vertical,
+      reverse: widget.reverse,
       padding: cfg.padding,
       itemCount: widget.itemCount,
       itemExtent: cfg.size + cfg.spacing,
@@ -101,12 +119,9 @@ class _ViewfinderThumbnailBarState extends State<ViewfinderThumbnailBar> {
       ),
     );
 
-    final barH = cfg.size + cfg.padding.top + cfg.padding.bottom;
-    final barW = cfg.size + cfg.padding.left + cfg.padding.right;
-
     Widget content = SizedBox(
-      height: cfg.isHorizontal ? barH : null,
-      width: cfg.isHorizontal ? null : barW,
+      height: cfg.isHorizontal ? cfg.crossExtent : null,
+      width: cfg.isHorizontal ? null : cfg.crossExtent,
       child: list,
     );
 
@@ -202,7 +217,7 @@ class _DefaultThumbnailTile extends StatelessWidget {
         gaplessPlayback: true,
         errorBuilder:
             config.errorBuilder ??
-            (_, _, _) => const ColoredBox(color: Colors.white12),
+            (_, _, _) => const ColoredBox(color: colors.white12),
       ),
       ViewfinderChildItem(:final child) => SizedBox(
         width: config.size,
@@ -213,14 +228,20 @@ class _DefaultThumbnailTile extends StatelessWidget {
     return AnimatedOpacity(
       duration: const .new(milliseconds: 150),
       opacity: selected ? 1.0 : config.unselectedOpacity,
-      child: Container(
+      child: SizedBox(
         width: config.size,
         height: config.size,
-        decoration: BoxDecoration(
-          border: selected ? config.selectedBorder : null,
+        child: DecoratedBox(
+          // Foreground, so the selection border stays visible over a
+          // cover-fit image.
+          position: .foreground,
+          decoration: BoxDecoration(
+            border: selected ? config.selectedBorder : null,
+          ),
+          // A small source decodes below the tile size (ResizeImage
+          // never upscales), so the cover fit can paint past the tile.
+          child: ClipRect(child: img),
         ),
-        clipBehavior: .hardEdge,
-        child: img,
       ),
     );
   }

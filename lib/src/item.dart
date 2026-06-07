@@ -20,7 +20,17 @@ sealed class ViewfinderItem {
     this.onLongPress,
     this.onLongPressStart,
     this.onSecondaryTapUp,
-  });
+  }) : assert(
+         minScale == null || (minScale > 0 && minScale <= 1.0),
+         'minScale is relative to the initial scale '
+         '(1.0 = the initialScale baseline).',
+       ),
+       assert(
+         maxScale == null || maxScale >= 1.0,
+         'maxScale is relative to the initial scale '
+         '(1.0 = the initialScale baseline).',
+       ),
+       assert(minScale == null || maxScale == null || maxScale >= minScale);
 
   /// `ImageProvider`-backed page. The provider is fed straight to
   /// `Image(provider)`; wrap with `ResizeImage` yourself if you want to

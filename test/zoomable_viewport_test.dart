@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
+import 'package:viewfinder/src/pan_gate.dart';
 
 double _xyScaleOf(Matrix4 m) {
   final s = m.storage;
@@ -424,6 +425,61 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.value.getMaxScaleOnAxis(), closeTo(1.0, 0.001));
     });
+
+    testWidgets('browser pinch (PointerScaleEvent) zooms even with '
+        'enableMouseWheelZoom=false', (tester) async {
+      final controller = TransformationController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomableViewport(
+              transformationController: controller,
+              enableMouseWheelZoom: false,
+              child: Container(color: Colors.blue),
+            ),
+          ),
+        ),
+      );
+
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+      final testPointer = TestPointer(1, PointerDeviceKind.mouse);
+      testPointer.hover(center);
+      await tester.sendEventToBinding(testPointer.scale(2.0));
+      await tester.pumpAndSettle();
+      expect(controller.value.getMaxScaleOnAxis(), closeTo(2.0, 0.01));
+    });
+
+    testWidgets('trackpad two-finger scroll zooms only while '
+        'enableMouseWheelZoom is on', (tester) async {
+      Future<double> scaleAfterTrackpadScroll({required bool wheel}) async {
+        final controller = TransformationController();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ZoomableViewport(
+                transformationController: controller,
+                enableMouseWheelZoom: wheel,
+                child: Container(color: Colors.blue),
+              ),
+            ),
+          ),
+        );
+        final center = tester.getCenter(find.byType(ZoomableViewport));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.trackpad,
+        );
+        await gesture.panZoomStart(center);
+        await tester.pump();
+        await gesture.panZoomUpdate(center, pan: const Offset(0, -120));
+        await tester.pump();
+        await gesture.panZoomEnd();
+        await tester.pumpAndSettle();
+        return _xyScaleOf(controller.value);
+      }
+
+      expect(await scaleAfterTrackpadScroll(wheel: true), greaterThan(1.1));
+      expect(await scaleAfterTrackpadScroll(wheel: false), closeTo(1.0, 0.001));
+    });
   });
 
   group('ZoomableViewport double-tap-drag', () {
@@ -540,21 +596,19 @@ void main() {
   });
 
   group('ZoomableViewport arena-aware edge yield', () {
-    testWidgets('canPan=false on Axis.vertical yields vertical drag', (
-      tester,
-    ) async {
+    testWidgets('release verdict on a downward drag yields it', (tester) async {
       final controller = TransformationController(
         Matrix4.identity()..scaleByDouble(2, 2, 1, 1),
       );
-      final sawSigns = <int>[];
+      final saw = <AxisDirection>[];
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: ZoomableViewport(
               transformationController: controller,
-              canPan: (axis, sign) {
-                if (axis == Axis.vertical) sawSigns.add(sign);
-                return false;
+              panGate: (direction) {
+                saw.add(direction);
+                return ViewfinderPanVerdict.release;
               },
               child: Container(color: Colors.blue),
             ),
@@ -566,13 +620,11 @@ void main() {
       await p.moveBy(const Offset(0, 50));
       await p.up();
       await tester.pumpAndSettle();
-      expect(sawSigns, contains(1));
+      expect(saw, contains(AxisDirection.down));
       expect(controller.value.storage[13], 0.0);
     });
 
-    testWidgets('canPanHorizontally=true pans the image (baseline)', (
-      tester,
-    ) async {
+    testWidgets('compete verdict pans the image (baseline)', (tester) async {
       final controller = TransformationController(
         Matrix4.identity()..scaleByDouble(2, 2, 1, 1),
       );
@@ -581,7 +633,7 @@ void main() {
           home: Scaffold(
             body: ZoomableViewport(
               transformationController: controller,
-              canPan: (axis, sign) => true,
+              panGate: (_) => ViewfinderPanVerdict.compete,
               doubleTapDragZoom: false, // isolate from DTD arena effects
               child: Container(color: Colors.blue),
             ),
@@ -604,21 +656,21 @@ void main() {
       expect(controller.value.storage[12], lessThan(0));
     });
 
-    testWidgets('vertical pan consults the gate on Axis.vertical', (
+    testWidgets('an upward drag consults the gate with AxisDirection.up', (
       tester,
     ) async {
       final controller = TransformationController(
         Matrix4.identity()..scaleByDouble(2, 2, 1, 1),
       );
-      final sawAxes = <Axis>[];
+      final saw = <AxisDirection>[];
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: ZoomableViewport(
               transformationController: controller,
-              canPan: (axis, sign) {
-                sawAxes.add(axis);
-                return true;
+              panGate: (direction) {
+                saw.add(direction);
+                return ViewfinderPanVerdict.compete;
               },
               child: Container(color: Colors.blue),
             ),
@@ -632,25 +684,25 @@ void main() {
       await p.up();
       await tester.pumpAndSettle();
 
-      expect(sawAxes, contains(Axis.vertical));
+      expect(saw, contains(AxisDirection.up));
     });
 
-    testWidgets('canPanHorizontally=false yields the gesture — image '
-        'does not pan, leaving the pointer available for an ancestor', (
+    testWidgets('release verdict on a leftward drag yields the gesture — '
+        'image does not pan, leaving the pointer for an ancestor', (
       tester,
     ) async {
       final controller = TransformationController(
         Matrix4.identity()..scaleByDouble(2, 2, 1, 1),
       );
-      final sawSigns = <int>[];
+      final saw = <AxisDirection>[];
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: ZoomableViewport(
               transformationController: controller,
-              canPan: (axis, sign) {
-                if (axis == Axis.horizontal) sawSigns.add(sign);
-                return false;
+              panGate: (direction) {
+                saw.add(direction);
+                return ViewfinderPanVerdict.release;
               },
               child: Container(color: Colors.blue),
             ),
@@ -664,8 +716,8 @@ void main() {
       await p.up();
       await tester.pumpAndSettle();
 
-      // The gate was consulted with the right sign (finger moved left).
-      expect(sawSigns, contains(-1));
+      // The gate was consulted with the finger-motion direction.
+      expect(saw, contains(AxisDirection.left));
       // Image did NOT pan — the gesture was yielded.
       expect(controller.value.storage[12], 0.0);
     });
@@ -1272,8 +1324,8 @@ void main() {
     });
   });
 
-  group('ZoomableViewport claimPan', () {
-    testWidgets('claimPan=true claims the arena at hit-slop, panning '
+  group('ZoomableViewport claim verdict', () {
+    testWidgets('claim verdict wins the arena at hit-slop, panning '
         'before the scale recognizer\'s own pan-slop', (tester) async {
       final controller = TransformationController(
         Matrix4.identity()..scaleByDouble(3, 3, 1, 1),
@@ -1283,7 +1335,7 @@ void main() {
           home: Scaffold(
             body: ZoomableViewport(
               transformationController: controller,
-              claimPan: (_, _) => true,
+              panGate: (_) => ViewfinderPanVerdict.claim,
               child: Container(color: Colors.blue),
             ),
           ),
@@ -1303,7 +1355,7 @@ void main() {
       expect(during, isNot(equals(before)));
     });
 
-    testWidgets('without claimPan the same 24-px drag is not yet '
+    testWidgets('without a gate the same 24-px drag is not yet '
         'accepted (baseline)', (tester) async {
       final controller = TransformationController(
         Matrix4.identity()..scaleByDouble(3, 3, 1, 1),

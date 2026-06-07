@@ -1,7 +1,4 @@
-import 'dart:ui' as ui;
-
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,43 +9,7 @@ import 'package:viewfinder/src/internal/thumbnail_bar.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
 import 'package:viewfinder/viewfinder.dart';
 
-// `dart:ui`'s real image codec is not wired up in `flutter test`, so
-// any `MemoryImage` (or other byte-decoding provider) raises "Codec
-// failed to produce an image" — both on the display path and on
-// `precacheImage`. We sidestep the codec entirely by handing the
-// framework a pre-baked `ui.Image` (created via `createTestImage`)
-// through a synchronous `ImageProvider`.
-late ui.Image _testImage;
-
-@immutable
-class _SyncImageProvider extends ImageProvider<_SyncImageProvider> {
-  const _SyncImageProvider(this._tag);
-  final Object _tag;
-
-  @override
-  Future<_SyncImageProvider> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture(this);
-  }
-
-  @override
-  ImageStreamCompleter loadImage(
-    _SyncImageProvider key,
-    ImageDecoderCallback decode,
-  ) {
-    return OneFrameImageStreamCompleter(
-      SynchronousFuture(ImageInfo(image: _testImage.clone())),
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is _SyncImageProvider && other._tag == _tag;
-
-  @override
-  int get hashCode => _tag.hashCode;
-}
-
-ImageProvider _memoryImage() => const _SyncImageProvider('default');
+import 'image_support.dart';
 
 ViewfinderItem _childItemBuilder(BuildContext _, int _) =>
     const ViewfinderItem.child(
@@ -58,17 +19,8 @@ ViewfinderItem _childItemBuilder(BuildContext _, int _) =>
       ),
     );
 
-Future<void> _settleImages(WidgetTester tester) async {
-  await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-  });
-  await tester.pumpAndSettle();
-}
-
 void main() {
-  setUpAll(() async {
-    _testImage = await createTestImage(width: 1, height: 1);
-  });
+  setUpAll(prepareTestImage);
 
   group('ViewfinderInitialScale', () {
     test('contain: contain fit and base 1.0', () {
@@ -217,7 +169,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: controller,
               initialScale: const ViewfinderInitialScale.contain(2.0),
               maxScale: 10,
@@ -225,7 +177,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       // The matrix carries the absolute multiplier...
       final m = controller.currentTransform.storage;
       expect(m[0], closeTo(2.0, 0.001));
@@ -242,14 +194,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             minScale: 0.25,
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Pinch-shrink. Without the fix, controller.scale would still
     // return 1.0 (Matrix4.getMaxScaleOnAxis sees the Z=1 column and
@@ -305,7 +257,7 @@ void main() {
                         itemCount: 1,
                         controller: galleryController,
                         itemBuilder: (_, _) =>
-                            ViewfinderItem(image: _memoryImage()),
+                            ViewfinderItem(image: memoryImage()),
                       ),
                     ),
                   ),
@@ -320,7 +272,7 @@ void main() {
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Zoom in.
     final viewer = find.byType(ZoomableViewport);
@@ -363,13 +315,13 @@ void main() {
           builder: (_, setState) {
             setActive = setState;
             return Scaffold(
-              body: ViewfinderImage(image: _memoryImage(), controller: active),
+              body: ViewfinderImage(image: memoryImage(), controller: active),
             );
           },
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     a.animateToScale(2);
     await tester.pumpAndSettle();
     expect(a.scale, greaterThan(1.01));
@@ -395,7 +347,7 @@ void main() {
             setScale = setState;
             return Scaffold(
               body: ViewfinderImage(
-                image: _memoryImage(),
+                image: memoryImage(),
                 controller: controller,
                 initialScale: scale,
                 maxScale: 10,
@@ -405,7 +357,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.scale, closeTo(1.0, 0.001));
     expect(controller.currentTransform.storage[0], closeTo(1.0, 0.001));
 
@@ -424,7 +376,7 @@ void main() {
       // Distinct providers (different tags) → equality returns false,
       // mirroring real-world swap-in.
       final controller = ViewfinderImageController();
-      ImageProvider current = const _SyncImageProvider('a');
+      ImageProvider current = memoryImage('a');
       late StateSetter setImage;
       await tester.pumpWidget(
         MaterialApp(
@@ -438,13 +390,13 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       controller.animateToScale(3.0);
       await tester.pumpAndSettle();
       expect(controller.scaleState, ViewfinderScaleState.zoomed);
 
-      setImage(() => current = const _SyncImageProvider('b'));
+      setImage(() => current = memoryImage('b'));
       await tester.pump();
       // Transform reset is synchronous via didUpdateWidget.
       expect(controller.scaleState, ViewfinderScaleState.initial);
@@ -479,7 +431,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       controller.animateToScale(3.0);
       await tester.pumpAndSettle();
@@ -513,7 +465,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       controller.animateToScale(3.0);
       await tester.pumpAndSettle();
@@ -542,7 +494,7 @@ void main() {
               rebuilds++;
               return Scaffold(
                 body: ViewfinderImage(
-                  image: const _SyncImageProvider('rebuild'),
+                  image: memoryImage('rebuild'),
                   controller: controller,
                 ),
               );
@@ -550,7 +502,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       expect(rebuilds, 1);
 
       controller.animateToScale(3.0);
@@ -572,13 +524,13 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             semanticLabel: 'my photo caption',
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final sem = tester.widgetList<Semantics>(find.byType(Semantics));
     expect(
       sem.any(
@@ -600,23 +552,30 @@ void main() {
             body: Viewfinder(
               itemCount: 2,
               thumbnails: ViewfinderThumbnails(size: 32, position: pos),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       expect(
         find.byType(ViewfinderThumbnailBar),
         findsOneWidget,
         reason: 'position=$pos should build a ThumbnailBar',
       );
-      // Bottom/top use Column, left/right use Row.
-      if (pos == ViewfinderThumbnailPosition.top ||
-          pos == ViewfinderThumbnailPosition.bottom) {
-        expect(find.byType(Column), findsWidgets);
-      } else {
-        expect(find.byType(Row), findsWidgets);
+      // The strip overlays the full-bleed viewer on its edge.
+      final barRect = tester.getRect(find.byType(ViewfinderThumbnailBar));
+      final viewer = tester.getRect(find.byType(PageView));
+      expect(viewer.size, tester.getSize(find.byType(Viewfinder)));
+      switch (pos) {
+        case ViewfinderThumbnailPosition.bottom:
+          expect(barRect.bottom, viewer.bottom);
+        case ViewfinderThumbnailPosition.top:
+          expect(barRect.top, viewer.top);
+        case ViewfinderThumbnailPosition.left:
+          expect(barRect.left, viewer.left);
+        case ViewfinderThumbnailPosition.right:
+          expect(barRect.right, viewer.right);
       }
     }
   });
@@ -637,14 +596,14 @@ void main() {
               body: Viewfinder(
                 itemCount: 2,
                 controller: active,
-                itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
               ),
             );
           },
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     setActive(() => active = b);
     await tester.pumpAndSettle();
     // After swap, new controller should drive the gallery.
@@ -668,14 +627,14 @@ void main() {
             return Scaffold(
               body: Viewfinder(
                 itemCount: count,
-                itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
               ),
             );
           },
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     setCount(() => count = 1);
     await tester.pumpAndSettle();
     // Shrinking itemCount should dispose out-of-range controllers
@@ -710,14 +669,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             doubleTapScales: const [1.0, 2.0],
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     expect(find.byType(ZoomableViewport), findsOneWidget);
     expect(controller.scaleState, ViewfinderScaleState.initial);
@@ -755,14 +714,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             maxScale: 10,
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     controller.animateToScale(3);
     await tester.pumpAndSettle();
     expect(controller.scale, closeTo(3.0, 0.01));
@@ -779,14 +738,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             doubleTapScales: const [1.0, 2.0],
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final viewer = find.byType(ZoomableViewport);
     final center = tester.getCenter(viewer);
     // First double-tap: 1 → 2.
@@ -813,14 +772,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             doubleTapScales: const [1.0, 2.0],
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final viewer = find.byType(ZoomableViewport);
     final center = tester.getCenter(viewer);
@@ -842,14 +801,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             doubleTapScales: const [],
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final viewer = find.byType(ZoomableViewport);
     final center = tester.getCenter(viewer);
@@ -877,12 +836,12 @@ void main() {
             onPageChanged: pageChanges.add,
             thumbnails: const ViewfinderThumbnails(size: 40),
             indicator: const ViewfinderPageIndicatorAdaptive(),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     expect(find.byWidgetPredicate((w) => w is ViewfinderImage), findsOneWidget);
     expect(find.byType(ViewfinderThumbnailBar), findsOneWidget);
@@ -903,12 +862,12 @@ void main() {
             body: Viewfinder(
               itemCount: 3,
               controller: ctrl,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       // Zoom page 0 via double-tap.
       final viewer = find.byType(ZoomableViewport);
@@ -946,12 +905,12 @@ void main() {
           body: Viewfinder(
             itemCount: 3,
             reverse: true,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final pv = tester.widget<PageView>(find.byType(PageView));
     expect(pv.reverse, isTrue);
   });
@@ -961,10 +920,10 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: ViewfinderImage(image: _memoryImage())),
+          home: Scaffold(body: ViewfinderImage(image: memoryImage())),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       final img = tester.widget<Image>(find.byType(Image).first);
       expect(img.gaplessPlayback, isTrue);
     },
@@ -976,11 +935,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ViewfinderImage(image: _memoryImage(), gaplessPlayback: false),
+          body: ViewfinderImage(image: memoryImage(), gaplessPlayback: false),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final img = tester.widget<Image>(find.byType(Image).first);
     expect(img.gaplessPlayback, isFalse);
   });
@@ -996,12 +955,12 @@ void main() {
             body: Viewfinder(
               itemCount: 1,
               itemBuilder: (_, _) =>
-                  ViewfinderItem(image: _memoryImage(), gaplessPlayback: false),
+                  ViewfinderItem(image: memoryImage(), gaplessPlayback: false),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       final img = tester.widget<Image>(find.byType(Image).first);
       expect(img.gaplessPlayback, isFalse);
     },
@@ -1017,8 +976,8 @@ void main() {
             body: Viewfinder(
               itemCount: 1,
               itemBuilder: (_, _) => ViewfinderItem(
-                image: _memoryImage(),
-                thumbImage: _memoryImage(),
+                image: memoryImage(),
+                thumbImage: memoryImage(),
                 thumbCrossFadeDuration: const Duration(milliseconds: 75),
                 thumbCrossFadeCurve: Curves.linear,
               ),
@@ -1026,15 +985,10 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
-      final main = tester
-          .widgetList<Image>(find.byType(Image))
-          .firstWhere((i) => i.frameBuilder != null);
-      final ctx = tester.element(
-        find.byWidgetPredicate((w) => w is ViewfinderImage),
+      await settleImages(tester);
+      final faded = tester.widget<AnimatedOpacity>(
+        find.byType(AnimatedOpacity),
       );
-      final faded =
-          main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
       expect(faded.duration, const Duration(milliseconds: 75));
       expect(faded.curve, Curves.linear);
     },
@@ -1052,7 +1006,7 @@ void main() {
             width: 400,
             height: 400,
             child: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               onScaleStart: (_) => startCount++,
               onScaleEnd: (_) => endCount++,
             ),
@@ -1060,7 +1014,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Simulate a single-pointer pan — fires the same scale recognizer.
     final center = tester.getCenter(find.byType(ZoomableViewport));
@@ -1084,7 +1038,7 @@ void main() {
               width: 400,
               height: 400,
               child: ViewfinderImage(
-                image: _memoryImage(),
+                image: memoryImage(),
                 controller: c,
                 rubberBandPan: false,
               ),
@@ -1092,7 +1046,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       // Zoom 3× so there is over-pan room.
       c.animateToScale(3.0);
@@ -1128,11 +1082,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: ViewfinderImage(image: _memoryImage(), controller: c),
+            body: ViewfinderImage(image: memoryImage(), controller: c),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       final target = Matrix4.identity()..scaleByDouble(2.0, 2.0, 1, 1);
       c.jumpToTransform(target);
@@ -1149,11 +1103,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: ViewfinderImage(image: _memoryImage(), controller: c),
+            body: ViewfinderImage(image: memoryImage(), controller: c),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       final target = Matrix4.identity()..scaleByDouble(3.0, 3.0, 1, 1);
       c.animateToTransform(target);
@@ -1173,12 +1127,12 @@ void main() {
               itemCount: 3,
               controller: ctrl,
               allowEdgeHandoff: false,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       // No zoom. Fling the pager — should swipe normally, because the
       // handoff knob only governs the zoomed-edge gesture path.
@@ -1199,12 +1153,12 @@ void main() {
               itemCount: 3,
               controller: ctrl,
               allowEdgeHandoff: false,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       // Zoom page 0 via double-tap.
       final viewer = find.byType(ZoomableViewport);
@@ -1242,12 +1196,12 @@ void main() {
             itemCount: 3,
             controller: controller,
             thumbnails: const ViewfinderThumbnails(size: 64),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     // Tap the second thumbnail by finding the Nth Image widget inside
     // the thumbnail bar.
     final bar = find.byType(ViewfinderThumbnailBar);
@@ -1267,12 +1221,12 @@ void main() {
             body: Viewfinder(
               itemCount: 1,
               thumbnails: const ViewfinderThumbnails(size: 64),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       final thumb = tester.widget<Image>(
         find
             .descendant(
@@ -1303,12 +1257,12 @@ void main() {
               errorBuilder: (_, _, _) =>
                   const SizedBox.shrink(key: placeholderKey),
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final thumb = tester.widget<Image>(
       find
           .descendant(
@@ -1342,7 +1296,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     // Each child item's thumb should render the child inside a SizedBox.
     expect(
       find.descendant(
@@ -1367,13 +1321,13 @@ void main() {
                 body: Viewfinder(
                   itemCount: 2,
                   thumbnails: ViewfinderThumbnails(size: 32, position: pos),
-                  itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+                  itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
                 ),
               ),
             ),
           ),
         );
-        await _settleImages(tester);
+        await settleImages(tester);
 
         final safeArea = tester.widget<SafeArea>(
           find.descendant(
@@ -1419,13 +1373,13 @@ void main() {
             body: Viewfinder(
               itemCount: 2,
               thumbnails: const ViewfinderThumbnails(size: 32, safeArea: false),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     expect(
       find.descendant(
@@ -1446,7 +1400,7 @@ void main() {
         home: Scaffold(
           body: Viewfinder(
             itemCount: 2,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             thumbnails: ViewfinderThumbnails.custom(
               size: 48,
               itemBuilder: (context, i, selected) => Container(
@@ -1459,7 +1413,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // The default chrome uses AnimatedOpacity per tile; custom builders
     // get none.
@@ -1482,7 +1436,7 @@ void main() {
         home: Scaffold(
           body: Viewfinder(
             itemCount: 2,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             thumbnails: ViewfinderThumbnails.custom(
               size: 48,
               itemBuilder: (context, i, selected) {
@@ -1498,7 +1452,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(built, containsAll([0, 1]));
     expect(find.text('0'), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
@@ -1518,12 +1472,12 @@ void main() {
               direction: ViewfinderDismissDirection.up,
               threshold: 0.1,
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final center = tester.getCenter(find.byType(Viewfinder));
     await tester.dragFrom(center, const Offset(0, 500));
     await tester.pumpAndSettle();
@@ -1548,12 +1502,12 @@ void main() {
               threshold: 0.1,
               fadeBackground: false, // exercise this branch too
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final center = tester.getCenter(find.byType(Viewfinder));
     // Upward drag is ignored when direction = down.
     await tester.dragFrom(center, const Offset(0, -500));
@@ -1578,12 +1532,12 @@ void main() {
               onDismiss: () => dismissed++,
               threshold: 0.8, // high threshold
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final center = tester.getCenter(find.byType(Viewfinder));
     // Small drag well below 80% threshold — should animate back.
     await tester.dragFrom(center, const Offset(0, 50));
@@ -1606,12 +1560,12 @@ void main() {
                 threshold: 0.9,
                 onProgress: progressLog.add,
               ),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       final gallery = find.byType(Viewfinder);
       // Drive a drag below the dismiss threshold so the spring-back
@@ -1642,12 +1596,12 @@ void main() {
                 onDismiss: () => dismissed++,
                 threshold: 0.1,
               ),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       final gallery = find.byType(Viewfinder);
       final center = tester.getCenter(gallery);
@@ -1665,12 +1619,12 @@ void main() {
           body: Viewfinder(
             itemCount: 5,
             controller: controller,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     controller.jumpTo(3);
     await tester.pump(); // one frame is enough for jump (no animation)
     expect(controller.currentIndex, 3);
@@ -1683,12 +1637,12 @@ void main() {
           body: Viewfinder(
             itemCount: 2,
             pageSpacing: 40,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     // Find a Padding that's a descendant of PageView with exactly
     // horizontal: pageSpacing/2 insets.
     final padding = tester.widgetList<Padding>(
@@ -1714,12 +1668,12 @@ void main() {
           body: Viewfinder(
             itemCount: 3,
             controller: controller,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.currentIndex, 0);
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
     await tester.pumpAndSettle();
@@ -1741,12 +1695,12 @@ void main() {
             itemCount: 3,
             controller: controller,
             dismiss: ViewfinderDismiss(onDismiss: () => dismissed++),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     expect(controller.currentIndex, 0);
 
@@ -1780,12 +1734,12 @@ void main() {
             itemCount: 2,
             controller: galleryController,
             dismiss: ViewfinderDismiss(onDismiss: () => dismissed++),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Zoom in by simulating a double-tap at the center.
     final viewer = find.byType(ZoomableViewport);
@@ -1822,12 +1776,12 @@ void main() {
           body: Viewfinder(
             itemCount: 2,
             controller: galleryController,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Not zoomed → returns false.
     expect(galleryController.resetCurrentImage(), isFalse);
@@ -1859,12 +1813,12 @@ void main() {
             itemCount: 3,
             controller: controller,
             enableKeyboardShortcuts: false,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
@@ -1879,13 +1833,13 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       // At initial scale: free to swipe.
       expect(imageController.canSwipe(Axis.horizontal), isTrue);
@@ -1916,13 +1870,13 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       expect(imageController.canSwipe(Axis.vertical), isTrue);
 
@@ -1955,12 +1909,12 @@ void main() {
             itemCount: 3,
             controller: galleryController,
             pagerAxis: Axis.vertical,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Reach into the active ViewfinderImage's controller via the
     // PageView's currently-built page. The state tree exposes it via
@@ -2013,14 +1967,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             doubleTapScales: const [1.0, 3.0],
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Zoom via controller so we can pan-test without racing double-tap.
     controller.animateToScale(3.0);
@@ -2054,7 +2008,7 @@ void main() {
                         itemCount: 1,
                         controller: galleryController,
                         itemBuilder: (_, _) => ViewfinderItem(
-                          image: _memoryImage(),
+                          image: memoryImage(),
                           hero: const ViewfinderHero('photo'),
                         ),
                       ),
@@ -2071,7 +2025,7 @@ void main() {
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Grab the internal image controller via resetCurrentImage semantics.
     // Zoom in, then pop; assert gallery controller no longer reports zoom
@@ -2146,14 +2100,14 @@ void main() {
             itemCount: 5,
             controller: ViewfinderController(initialIndex: 2),
             itemBuilder: (_, i) => ViewfinderItem(
-              image: _memoryImage(),
+              image: memoryImage(),
               hero: ViewfinderHero('photo-$i'),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final heroes = tester.widgetList<Hero>(find.byType(Hero)).toList();
     expect(heroes, hasLength(1));
@@ -2162,7 +2116,7 @@ void main() {
     // Swipe to page 3; the Hero should follow, still exactly one.
     await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
     await tester.pumpAndSettle();
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final afterSwipe = tester.widgetList<Hero>(find.byType(Hero)).toList();
     expect(afterSwipe, hasLength(1));
@@ -2187,7 +2141,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             hero: ViewfinderHero(
               'tag',
               createRectTween: rectTween,
@@ -2199,7 +2153,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final hero = tester.widget<Hero>(find.byType(Hero));
     expect(hero.tag, 'tag');
@@ -2219,14 +2173,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             onTapUp: (d) => up = d,
             onTapDown: (d) => down = d,
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final tapPoint = tester.getCenter(
       find.byWidgetPredicate((w) => w is ViewfinderImage),
@@ -2308,12 +2262,12 @@ void main() {
             itemCount: 1,
             chromeController: chrome,
             indicator: const ViewfinderPageIndicatorAdaptive(),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Find the IgnorePointer that wraps the overlay stack holding the
     // indicator, via tree ancestry.
@@ -2359,12 +2313,12 @@ void main() {
             itemCount: 1,
             chromeController: chrome,
             thumbnails: const ViewfinderThumbnails(size: 40),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(chrome.visible, isTrue);
 
     final viewer = find.byType(ZoomableViewport);
@@ -2385,15 +2339,15 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
-            thumbImage: _memoryImage(),
+            image: memoryImage(),
+            thumbImage: memoryImage(),
             thumbCrossFadeDuration: const Duration(milliseconds: 50),
             thumbCrossFadeCurve: Curves.linear,
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Two Image widgets: thumb + main.
     final images = tester.widgetList<Image>(find.byType(Image)).toList();
@@ -2404,23 +2358,19 @@ void main() {
     // At least one (the thumb) doesn't — no need to fade its own load.
     expect(images.any((i) => i.frameBuilder == null), isTrue);
 
-    // Invoke the frameBuilder for both the pre-frame (frame=null,
-    // opacity 0) and post-frame (frame=0, opacity 1) cases. This both
-    // exercises the closure body and asserts the cross-fade contract.
+    // Mount the frameBuilder output for the pre-frame (frame=null,
+    // opacity 0) and post-frame (frame=0, opacity 1) cases to assert
+    // the cross-fade contract.
     final ctx = tester.element(
       find.byWidgetPredicate((w) => w is ViewfinderImage),
     );
-    final beforeFirstFrame =
-        main.frameBuilder!(ctx, const SizedBox(), null, false)
-            as AnimatedOpacity;
-    expect(beforeFirstFrame.opacity, 0.0);
-    expect(beforeFirstFrame.duration, const Duration(milliseconds: 50));
-    expect(beforeFirstFrame.curve, Curves.linear);
-    final afterFirstFrame =
-        main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
-    expect(afterFirstFrame.opacity, 1.0);
-    expect(afterFirstFrame.curve, Curves.linear);
-
+    final beforeFirstFrame = main.frameBuilder!(
+      ctx,
+      const SizedBox(),
+      null,
+      false,
+    );
+    final afterFirstFrame = main.frameBuilder!(ctx, const SizedBox(), 0, true);
     // The thumb's errorBuilder collapses to nothing — if the thumb
     // can't decode, the main image (stacked on top) carries the page.
     final thumb = images.firstWhere((i) => i.frameBuilder == null);
@@ -2428,16 +2378,29 @@ void main() {
       thumb.errorBuilder!(ctx, Exception('boom'), StackTrace.current),
       isA<SizedBox>(),
     );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Column(children: [beforeFirstFrame, afterFirstFrame])),
+    );
+    final fades = tester
+        .widgetList<AnimatedOpacity>(find.byType(AnimatedOpacity))
+        .toList();
+    expect(fades, hasLength(2));
+    expect(fades[0].opacity, 0.0);
+    expect(fades[0].duration, const Duration(milliseconds: 50));
+    expect(fades[0].curve, Curves.linear);
+    expect(fades[1].opacity, 1.0);
+    expect(fades[1].curve, Curves.linear);
   });
 
   testWidgets('ViewfinderImage without thumbImage has no second Image '
       'widget', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ViewfinderImage(image: _memoryImage())),
+        home: Scaffold(body: ViewfinderImage(image: memoryImage())),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(tester.widgetList<Image>(find.byType(Image)).length, 1);
   });
 
@@ -2453,12 +2416,12 @@ void main() {
               onDismiss: () {},
               slideType: ViewfinderDismissSlideType.onlyImage,
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Dismissible wraps the pager (inside the Column), not the outer
     // body. Find the ThumbnailBar and the Dismissible, assert the bar
@@ -2484,12 +2447,12 @@ void main() {
             itemCount: 2,
             thumbnails: const ViewfinderThumbnails(size: 40),
             dismiss: ViewfinderDismiss(onDismiss: () {}),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final dismissibleFinder = find.byType(ViewfinderDismissible);
     final thumbBarFinder = find.byType(ViewfinderThumbnailBar);
@@ -2513,13 +2476,13 @@ void main() {
             height: 400,
             child: Viewfinder(
               itemCount: 1,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     final center = tester.getCenter(find.byType(ZoomableViewport));
 
     // Pinch hard to zoom deeply (content extent >> viewport).
@@ -2564,13 +2527,13 @@ void main() {
             child: Viewfinder(
               itemCount: 3,
               controller: galleryController,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final center = tester.getCenter(find.byType(ZoomableViewport));
     // Two-finger pinch to zoom in.
@@ -2610,12 +2573,12 @@ void main() {
             itemCount: 1,
             chromeController: chrome,
             indicator: const ViewfinderPageIndicatorAdaptive(),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(chrome.visible, isTrue);
 
     // Tap the gallery area. Because ViewfinderImage's GestureDetector
@@ -2637,12 +2600,12 @@ void main() {
           body: Viewfinder(
             itemCount: 20,
             indicator: const ViewfinderPageIndicatorAdaptive(maxDots: 5),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(find.text('1 / 20'), findsOneWidget);
   });
 
@@ -2655,12 +2618,12 @@ void main() {
           body: Viewfinder(
             itemCount: 30,
             indicator: const ViewfinderPageIndicatorDots(),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     // No numeric label.
     expect(find.text('1 / 30'), findsNothing);
     // One dot (AnimatedContainer) per item, all rendered.
@@ -2680,12 +2643,12 @@ void main() {
           body: Viewfinder(
             itemCount: 3,
             indicator: const ViewfinderPageIndicatorLabel(),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(find.text('1 / 3'), findsOneWidget);
   });
 
@@ -2705,12 +2668,12 @@ void main() {
                 textDirection: TextDirection.ltr,
               ),
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(find.text('page=3 of 7'), findsOneWidget);
     // Default pill must NOT render alongside the custom label.
     expect(find.text('3 / 7'), findsNothing);
@@ -2725,12 +2688,12 @@ void main() {
           body: Viewfinder(
             itemCount: 4,
             indicator: const ViewfinderPageIndicatorAdaptive(maxDots: 5),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(find.text('1 / 4'), findsNothing);
     final overlay = find.byType(ViewfinderPageIndicatorOverlay);
     expect(
@@ -2756,12 +2719,12 @@ void main() {
                   ),
                 ),
               ),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       expect(find.text('idx=0/10'), findsOneWidget);
     },
   );
@@ -2775,7 +2738,7 @@ void main() {
             body: Viewfinder(
               itemCount: 0,
               indicator: const ViewfinderPageIndicatorAdaptive(),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
@@ -2812,7 +2775,7 @@ void main() {
               body: Viewfinder(
                 itemCount: 3,
                 indicator: indicator,
-                itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
               ),
             ),
           ),
@@ -2845,12 +2808,12 @@ void main() {
           body: Viewfinder(
             itemCount: 3,
             controller: controller,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     // Internal state used the clamped index when building PageView, so
     // the gallery is on the last actual page.
     expect(find.byType(PageView), findsOneWidget);
@@ -2867,12 +2830,12 @@ void main() {
         body: Viewfinder(
           itemCount: count,
           controller: controller,
-          itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+          itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
         ),
       ),
     );
     await tester.pumpWidget(build(5));
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.currentIndex, 4);
 
     // Shrink — now the previously-last page is gone.
@@ -2890,7 +2853,7 @@ void main() {
           home: Scaffold(
             body: Viewfinder(
               itemCount: 0,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
@@ -2910,7 +2873,7 @@ void main() {
             itemCount: 0,
             thumbnails: const ViewfinderThumbnails(size: 40),
             indicator: const ViewfinderPageIndicatorAdaptive(),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
@@ -2932,13 +2895,13 @@ void main() {
             child: Viewfinder(
               itemCount: 2,
               controller: controller,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final center = tester.getCenter(find.byType(ZoomableViewport));
 
@@ -2994,12 +2957,12 @@ void main() {
           body: SizedBox(
             width: 400,
             height: 400,
-            child: ViewfinderImage(image: _memoryImage()),
+            child: ViewfinderImage(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Fast horizontal swipe with no preceding zoom — release with
     // velocity but scale == 1.0, so the fling guard rejects and the
@@ -3023,14 +2986,14 @@ void main() {
             width: 400,
             height: 400,
             child: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     imageController.animateToScale(4.0);
     await tester.pumpAndSettle();
@@ -3067,14 +3030,14 @@ void main() {
             width: 400,
             height: 400,
             child: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     imageController.animateToScale(4.0);
     await tester.pumpAndSettle();
@@ -3113,14 +3076,14 @@ void main() {
             width: 400,
             height: 400,
             child: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     Matrix4 currentMatrix() {
       final t = tester.widget<Transform>(
@@ -3172,12 +3135,12 @@ void main() {
           body: Viewfinder(
             itemCount: 3,
             controller: controller,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // The ScrollConfiguration the gallery installs should expose
     // every PointerDeviceKind to its descendant Scrollable.
@@ -3207,12 +3170,12 @@ void main() {
             itemCount: 3,
             controller: controller,
             swipeDragDevices: const {PointerDeviceKind.touch},
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final pageView = find.byType(PageView);
     await tester.fling(
@@ -3241,11 +3204,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Viewfinder.images(List.generate(3, (_) => _memoryImage())),
+          body: Viewfinder.images(List.generate(3, (_) => memoryImage())),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(find.bySemanticsLabel('Photo gallery, 1 of 3'), findsOneWidget);
   });
 
@@ -3258,10 +3221,10 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: Viewfinder.images(
-              List.generate(2, (_) => _memoryImage()),
+              List.generate(2, (_) => memoryImage()),
               thumbImage: (i) {
                 thumbCalls.add(i);
-                return _memoryImage();
+                return memoryImage();
               },
               semanticLabel: (i) {
                 labelCalls.add(i);
@@ -3271,7 +3234,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       // Both callbacks fire with the page index while the gallery's
       // itemBuilder runs. Page 0 is current; page 1 is pre-built by
       // PageView. Use containsAll so we don't depend on call order or
@@ -3288,14 +3251,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Viewfinder.images(
-            List.generate(3, (_) => _memoryImage()),
+            List.generate(3, (_) => memoryImage()),
             controller: ViewfinderController(initialIndex: 1),
             hero: (i) => ViewfinderHero('photo-$i'),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Only the current page wears a Hero (page 1, index 1).
     final heroes = tester.widgetList<Hero>(find.byType(Hero)).toList();
@@ -3311,7 +3274,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Viewfinder.images(
-            [_memoryImage()],
+            [memoryImage()],
             dismiss: ViewfinderDismiss(
               onDismiss: () => dismissed++,
               threshold: 0.1,
@@ -3320,7 +3283,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final center = tester.getCenter(find.byType(Viewfinder));
     await tester.dragFrom(center, const Offset(0, 500));
@@ -3336,8 +3299,8 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: Viewfinder.images(
-              [_memoryImage()],
-              thumbImage: (_) => _memoryImage(),
+              [memoryImage()],
+              thumbImage: (_) => memoryImage(),
               thumbCrossFadeDuration: const Duration(milliseconds: 75),
               thumbCrossFadeCurve: Curves.linear,
               gaplessPlayback: false,
@@ -3345,16 +3308,14 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       final main = tester
           .widgetList<Image>(find.byType(Image))
           .firstWhere((i) => i.frameBuilder != null);
       expect(main.gaplessPlayback, isFalse);
-      final ctx = tester.element(
-        find.byWidgetPredicate((w) => w is ViewfinderImage),
+      final faded = tester.widget<AnimatedOpacity>(
+        find.byType(AnimatedOpacity),
       );
-      final faded =
-          main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
       expect(faded.duration, const Duration(milliseconds: 75));
       expect(faded.curve, Curves.linear);
     },
@@ -3368,8 +3329,8 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: Viewfinder.single(
-              image: _memoryImage(),
-              thumbImage: _memoryImage(),
+              image: memoryImage(),
+              thumbImage: memoryImage(),
               thumbCrossFadeDuration: const Duration(milliseconds: 75),
               thumbCrossFadeCurve: Curves.linear,
               gaplessPlayback: false,
@@ -3377,16 +3338,14 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       final main = tester
           .widgetList<Image>(find.byType(Image))
           .firstWhere((i) => i.frameBuilder != null);
       expect(main.gaplessPlayback, isFalse);
-      final ctx = tester.element(
-        find.byWidgetPredicate((w) => w is ViewfinderImage),
+      final faded = tester.widget<AnimatedOpacity>(
+        find.byType(AnimatedOpacity),
       );
-      final faded =
-          main.frameBuilder!(ctx, const SizedBox(), 0, true) as AnimatedOpacity;
       expect(faded.duration, const Duration(milliseconds: 75));
       expect(faded.curve, Curves.linear);
     },
@@ -3400,7 +3359,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: Viewfinder.images(
-              [_memoryImage(), _memoryImage(), _memoryImage()],
+              [memoryImage(), memoryImage(), memoryImage()],
               reverse: true,
               allowEdgeHandoff: false,
               rubberBandPan: false,
@@ -3408,7 +3367,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
       final inner = tester.widget<Viewfinder>(find.byType(Viewfinder));
       expect(inner.reverse, isTrue);
       expect(inner.allowEdgeHandoff, isFalse);
@@ -3426,7 +3385,7 @@ void main() {
         itemCount: 1,
         pagerAxis: Axis.vertical,
         dismiss: ViewfinderDismiss(onDismiss: () {}),
-        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+        itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
       ),
       throwsA(isA<AssertionError>()),
     );
@@ -3435,7 +3394,7 @@ void main() {
       () => Viewfinder(
         itemCount: 1,
         pagerAxis: Axis.vertical,
-        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+        itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
       ),
       returnsNormally,
     );
@@ -3444,7 +3403,7 @@ void main() {
       () => Viewfinder(
         itemCount: 1,
         dismiss: ViewfinderDismiss(onDismiss: () {}),
-        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+        itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
       ),
       returnsNormally,
     );
@@ -3466,7 +3425,7 @@ void main() {
               width: 400,
               height: 400,
               child: ViewfinderImage(
-                image: _memoryImage(),
+                image: memoryImage(),
                 controller: imageController,
                 rotateEnabled: true,
               ),
@@ -3474,7 +3433,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       // 3× scale plus 30° rotation around the viewport center: the
       // rotated AABB overflows on both sides → the user is at neither
@@ -3503,7 +3462,7 @@ void main() {
               width: 400,
               height: 400,
               child: ViewfinderImage(
-                image: _memoryImage(),
+                image: memoryImage(),
                 controller: imageController,
                 rotateEnabled: true,
               ),
@@ -3511,7 +3470,7 @@ void main() {
           ),
         ),
       );
-      await _settleImages(tester);
+      await settleImages(tester);
 
       final m = Matrix4.identity()
         ..translateByDouble(200.0, 200.0, 0, 1)
@@ -3526,96 +3485,11 @@ void main() {
     },
   );
 
-  testWidgets(
-    'SwipeEdgeMode.content decouples axis meaning from screen orientation: '
-    '90° rotation + screen-y pan gives photo-H edge handoff while screen-H '
-    'still reports overflow',
-    (tester) async {
-      // At 90° CCW the photo's logical horizontal axis runs along
-      // screen-y. So a pan in screen-y can bring the photo's
-      // logical-H edge into view while the rotated AABB still
-      // overflows screen-x as much as ever.
-      //
-      // Setup: 90° CCW + 2× scale centered, then translate +200 in
-      // screen-y. M_center maps photo (0,0) to screen (600, -200);
-      // the +200 pan brings it to (600, 0), so the viewport's top in
-      // photo-space lands at photo-x = 0. In photo-space the
-      // viewport's photo-x range is exactly [0, 200], which trips
-      // content-mode H ("logical left edge reached"). Screen-mode H
-      // still overflows on both sides (bbox.minX = -200, max = 600).
-      //
-      // The vertical axis diverges in the opposite direction:
-      // screen-V says "flush at top" (bbox.minY = 0 → handoff
-      // allowed) while content-V says "still mid-photo in
-      // photo-space" (photoBbox.minY = 100, maxY = 300).
-      final imageController = ViewfinderImageController();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: ViewfinderImage(
-                image: _memoryImage(),
-                controller: imageController,
-                rotateEnabled: true,
-              ),
-            ),
-          ),
-        ),
-      );
-      await _settleImages(tester);
-
-      // M = T(0,200) · T(200,200) · R(π/2) · S(2) · T(-200,-200).
-      // Combined leading translation: T(200, 400).
-      final m = Matrix4.identity()
-        ..translateByDouble(200.0, 400.0, 0, 1)
-        ..rotateZ(1.5708)
-        ..scaleByDouble(2.0, 2.0, 1, 1)
-        ..translateByDouble(-200.0, -200.0, 0, 1);
-      imageController.jumpToTransform(m);
-      await tester.pumpAndSettle();
-
-      expect(imageController.scaleState, ViewfinderScaleState.zoomed);
-      expect(
-        imageController.canSwipe(Axis.horizontal),
-        isFalse,
-        reason: 'screen mode H: rotated AABB overflows screen-x',
-      );
-      expect(
-        imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
-        isTrue,
-        reason:
-            'content mode H: viewport pulled back into photo-space '
-            'reaches photo-x = 0',
-      );
-      expect(
-        imageController.canSwipe(Axis.vertical),
-        isTrue,
-        reason: 'screen mode V: rotated AABB.minY is flush at viewport top',
-      );
-      expect(
-        imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
-        isFalse,
-        reason:
-            'content mode V: photo-V edges remain interior in '
-            'photo-space (photo-y range [100, 300])',
-      );
-    },
-  );
-
-  testWidgets('SwipeEdgeMode.content returns false at 180° centered, matching '
-      'screen mode (regression guard against forward-edge semantics)', (
+  testWidgets('canSwipe reports both axes blocked at 180° centered', (
     tester,
   ) async {
-    // The pre-fix forward-projection semantics returned true at
-    // 180° centered because the photo's logical left/right edges
-    // had crossed each other in screen-x — a self-justifying
-    // interpretation that treated "logical-left edge anywhere to
-    // the right of viewport's left" as "edge reached". The
-    // inverse-projection semantics correctly says "still
-    // mid-photo": at 180° centered scale 2, the viewport pulls
-    // back to photo-x range [100, 300], well inside [0, 400].
+    // At 180° centered scale 2 the rotated AABB overflows the
+    // viewport on every side — no edge reached, no handoff.
     final imageController = ViewfinderImageController();
     await tester.pumpWidget(
       MaterialApp(
@@ -3624,7 +3498,7 @@ void main() {
             width: 400,
             height: 400,
             child: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
               rotateEnabled: true,
             ),
@@ -3632,7 +3506,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final m = Matrix4.identity()
       ..translateByDouble(200.0, 200.0, 0, 1)
@@ -3645,58 +3519,16 @@ void main() {
     expect(imageController.scaleState, ViewfinderScaleState.zoomed);
     expect(imageController.canSwipe(Axis.horizontal), isFalse);
     expect(imageController.canSwipe(Axis.vertical), isFalse);
-    expect(
-      imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
-      isFalse,
-    );
-    expect(
-      imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
-      isFalse,
-    );
-  });
-
-  testWidgets('SwipeEdgeMode.content and screen agree at zero rotation', (
-    tester,
-  ) async {
-    final imageController = ViewfinderImageController();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 400,
-            height: 400,
-            child: ViewfinderImage(
-              image: _memoryImage(),
-              controller: imageController,
-            ),
-          ),
-        ),
-      ),
-    );
-    await _settleImages(tester);
-
-    // Center-anchored 3× zoom, no rotation: both modes should
-    // report the same thing on both axes.
-    imageController.animateToScale(3.0);
-    await tester.pumpAndSettle();
-
-    expect(
-      imageController.canSwipe(Axis.horizontal),
-      imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
-    );
-    expect(
-      imageController.canSwipe(Axis.vertical),
-      imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
-    );
   });
 
   testWidgets('canSwipe surrenders all gates on a singular jumpToTransform '
       'matrix instead of throwing', (tester) async {
     // jumpToTransform bypasses the boundary clamp by design, so a
-    // pathological caller-supplied matrix can be degenerate
-    // (determinant = 0, e.g., scale 0). The transform listener fires
-    // on every set, so a throw inside _swipeSignals would crash the
-    // app; the guard returns safe defaults instead.
+    // pathological caller-supplied matrix can be degenerate (e.g.,
+    // scale 0). The transform listener fires on every set; the gates
+    // must return safe defaults instead of throwing. (A zero scale
+    // reads as the initial scale state, whose early return surrenders
+    // every gate.)
     final imageController = ViewfinderImageController();
     await tester.pumpWidget(
       MaterialApp(
@@ -3705,14 +3537,14 @@ void main() {
             width: 400,
             height: 400,
             child: ViewfinderImage(
-              image: _memoryImage(),
+              image: memoryImage(),
               controller: imageController,
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // All-zeros 4x4: rank 0, determinant 0. Singular.
     imageController.jumpToTransform(Matrix4.zero());
@@ -3721,14 +3553,6 @@ void main() {
     // No throw, and the gates default open.
     expect(imageController.canSwipe(Axis.horizontal), isTrue);
     expect(imageController.canSwipe(Axis.vertical), isTrue);
-    expect(
-      imageController.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content),
-      isTrue,
-    );
-    expect(
-      imageController.canSwipe(Axis.vertical, mode: SwipeEdgeMode.content),
-      isTrue,
-    );
   });
 
   testWidgets(
@@ -3747,13 +3571,13 @@ void main() {
               children: [
                 Expanded(
                   child: ViewfinderImage(
-                    image: _memoryImage(),
+                    image: memoryImage(),
                     controller: shared,
                   ),
                 ),
                 Expanded(
                   child: ViewfinderImage(
-                    image: _memoryImage(),
+                    image: memoryImage(),
                     controller: shared,
                   ),
                 ),
@@ -3785,7 +3609,7 @@ void main() {
               setSlot = setState;
               final viewer = ViewfinderImage(
                 key: key,
-                image: _memoryImage(),
+                image: memoryImage(),
                 controller: controller,
               );
               return Column(
@@ -3799,7 +3623,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Initial bind: controller drives the viewer.
     controller.animateToScale(3.0);
@@ -3821,10 +3645,10 @@ void main() {
   testWidgets('Viewfinder.single: shows exactly one page', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: Viewfinder.single(image: _memoryImage())),
+        home: Scaffold(body: Viewfinder.single(image: memoryImage())),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(find.bySemanticsLabel('Photo gallery, 1 of 1'), findsOneWidget);
   });
 
@@ -3836,7 +3660,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Viewfinder.single(
-            image: _memoryImage(),
+            image: memoryImage(),
             dismiss: ViewfinderDismiss(
               onDismiss: () => dismissed++,
               threshold: 0.1,
@@ -3845,7 +3669,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final center = tester.getCenter(find.byType(Viewfinder));
     await tester.dragFrom(center, const Offset(0, 500));
@@ -3904,13 +3728,13 @@ void main() {
             child: Viewfinder(
               itemCount: 3,
               controller: controller,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.currentIndex, 1);
 
     await zoomAndAnchorLeft(tester);
@@ -3964,13 +3788,13 @@ void main() {
             child: Viewfinder(
               itemCount: 3,
               controller: controller,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     await zoomAndAnchorLeft(tester);
     expect(controller.currentIndex, 1);
 
@@ -3999,13 +3823,13 @@ void main() {
               itemCount: 3,
               reverse: true,
               controller: controller,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     await zoomAndAnchorLeft(tester);
     expect(controller.currentIndex, 1);
 
@@ -4035,13 +3859,13 @@ void main() {
             child: Viewfinder(
               itemCount: 3,
               controller: controller,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     await zoomAndAnchorLeft(tester);
     expect(controller.currentIndex, 1);
 
@@ -4080,13 +3904,13 @@ void main() {
                 onDismiss: () => dismissed++,
                 threshold: 0.1,
               ),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Zoom in deeply, then anchor against the left edge so the pager
     // axis reports "at an edge" (the dismiss wrapper used to stay
@@ -4130,11 +3954,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ViewfinderImage(image: _memoryImage(), controller: controller),
+          body: ViewfinderImage(image: memoryImage(), controller: controller),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Scale 3 with origin pinned at (0,0): content spans 0..3w, so the
     // left edge is flush (no room to the left) while plenty of content
@@ -4162,7 +3986,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             initialScale: const ViewfinderInitialScale.contain(2.0),
             doubleTapScales: const [1.0, 2.5],
@@ -4171,7 +3995,7 @@ void main() {
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.scale, closeTo(1.0, 0.001));
 
     final center = tester.getCenter(find.byType(ZoomableViewport));
@@ -4192,14 +4016,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ViewfinderImage(
-            image: _memoryImage(),
+            image: memoryImage(),
             controller: controller,
             initialScale: const ViewfinderInitialScale.contain(0.8),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.currentTransform.storage[0], closeTo(0.8, 0.001));
 
     // Aggressive pinch-shrink: the absolute floor is minScale(1.0) ×
@@ -4229,7 +4053,7 @@ void main() {
 
   test('ViewfinderImage: minScale above 1.0 is rejected at construction', () {
     expect(
-      () => ViewfinderImage(image: _memoryImage(), minScale: 2.0),
+      () => ViewfinderImage(image: memoryImage(), minScale: 2.0),
       throwsAssertionError,
     );
   });
@@ -4239,7 +4063,7 @@ void main() {
       () => Viewfinder(
         itemCount: 1,
         maxScale: 0.5,
-        itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+        itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
       ),
       throwsAssertionError,
     );
@@ -4258,12 +4082,12 @@ void main() {
           body: Viewfinder(
             itemCount: 3,
             controller: controller,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     expect(controller.currentIndex, 2);
   });
 
@@ -4282,14 +4106,14 @@ void main() {
               body: Viewfinder(
                 itemCount: 3,
                 controller: active,
-                itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
               ),
             );
           },
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
     a.jumpTo(2);
     await tester.pumpAndSettle();
     expect(a.currentIndex, 2);
@@ -4312,12 +4136,12 @@ void main() {
             itemCount: 2,
             pagerAxis: Axis.vertical,
             pageSpacing: 10,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     final padding = tester.widgetList<Padding>(
       find.ancestor(
@@ -4351,13 +4175,13 @@ void main() {
                 size: 40,
                 itemBuilder: (_, i, _) => Text('t$i'),
               ),
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // The last tile is only buildable when the strip scrolled to it;
     // tile 0 must have been scrolled (and disposed) out of view.
@@ -4384,12 +4208,12 @@ void main() {
               slideType: ViewfinderDismissSlideType.onlyImage,
               onProgress: progress.add,
             ),
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // Viewport height 600; pager box is shrunk by the 116-px thumbnail
     // bar. A 134-px offset is 0.223 of the viewport (below the 0.25
@@ -4426,13 +4250,13 @@ void main() {
             body: Viewfinder(
               itemCount: 3,
               controller: controller,
-              itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
             ),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     // RTL lays page 2 visually to the left of page 1.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -4455,12 +4279,12 @@ void main() {
             itemCount: 3,
             pagerAxis: Axis.vertical,
             controller: controller,
-            itemBuilder: (_, _) => ViewfinderItem(image: _memoryImage()),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
         ),
       ),
     );
-    await _settleImages(tester);
+    await settleImages(tester);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();

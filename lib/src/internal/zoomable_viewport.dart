@@ -4,31 +4,17 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../pan_gate.dart';
 import 'matrix_utils.dart';
+import 'pager_scope.dart';
 
 /// Callback fired when panning hits a boundary.
 ///
 /// [axis] is the axis along which the pan was clamped. [sign] is +1 when
 /// the pan would have moved content in the positive direction (i.e., the
 /// user is pulling content past the right / bottom edge) and -1 for the
-/// opposite. Used by the gallery to let [PageView] take over the drag.
+/// opposite.
 typedef ZoomableEdgeCallback = void Function(Axis axis, int sign);
-
-/// Gate called by the arena-aware gesture recognizer to decide whether a
-/// pan in the given direction should be consumed. Returning `false`
-/// yields the pointer to the arena so an ancestor scroll view can claim
-/// the drag.
-typedef ZoomableCanPan = bool Function(Axis axis, int sign);
-
-/// Gate consulted after [ZoomableCanPan] has allowed a single-pointer
-/// pan. Returning `true` claims the gesture arena immediately at
-/// hit-slop instead of letting [ScaleGestureRecognizer] wait for the
-/// larger pan-slop. Without the eager claim, an ancestor scrollable
-/// (e.g. [PageView], whose drag recognizer accepts at hit-slop) wins
-/// the arena first and steals a pan the viewer meant to keep — for
-/// instance a zoomed photo flush against its left edge being panned
-/// further left to reveal content on the right.
-typedef ZoomableClaimPan = bool Function(Axis axis, int sign);
 
 /// Default friction coefficient for post-release fling.
 ///
@@ -73,8 +59,7 @@ class ZoomableViewport extends StatefulWidget {
     this.rotateEnabled = false,
     this.clipBehavior = .none,
     this.onEdgeHit,
-    this.canPan,
-    this.claimPan,
+    this.panGate,
     this.doubleTapDragZoom = true,
     this.interactionEndFrictionCoefficient = kViewfinderDefaultFlingDrag,
     this.enableMouseWheelZoom = true,
@@ -95,23 +80,9 @@ class ZoomableViewport extends StatefulWidget {
   /// Fired on each frame where a pan hits a boundary.
   final ZoomableEdgeCallback? onEdgeHit;
 
-  /// When supplied, a single-pointer pan in a direction that would
-  /// exceed the image's edge on the detected axis is rejected before
-  /// this widget claims the gesture arena, letting an ancestor scroll
-  /// view (e.g. [PageView]) pick it up.
-  ///
-  /// The callback is consulted per axis: returning `false` for
-  /// `(Axis.horizontal, 1)` means a finger moving right into a blocked
-  /// state should yield.
-  final ZoomableCanPan? canPan;
-
-  /// When supplied (and [canPan] allowed the pan), a single-pointer pan
-  /// in a direction for which this returns `true` claims the gesture
-  /// arena immediately at hit-slop. Use when an ancestor scrollable
-  /// also competes for the drag and would otherwise win at its own
-  /// hit-slop before [ScaleGestureRecognizer]'s pan-slop acceptance —
-  /// the gallery claims pans that should stay inside a zoomed page.
-  final ZoomableClaimPan? claimPan;
+  /// Consulted once a single-pointer pan's dominant direction is
+  /// known. `null` behaves as [ViewfinderPanVerdict.compete].
+  final ViewfinderPanGate? panGate;
 
   /// When true, a double-tap followed by a vertical drag (without
   /// releasing) continuously scales around the first tap location —
@@ -123,11 +94,12 @@ class ZoomableViewport extends StatefulWidget {
   /// quickly. See [kViewfinderDefaultFlingDrag] for the default.
   final double interactionEndFrictionCoefficient;
 
-  /// Whether mouse scroll wheel events should zoom around the pointer
-  /// location. Defaults to `true` because the enclosing gallery is
-  /// typically a full-screen photo viewer; callers embedding
-  /// [ZoomableViewport] in a scrollable page can disable it to let
-  /// wheel events bubble.
+  /// Whether scroll-style input — mouse wheel and trackpad two-finger
+  /// scroll — zooms around the pointer location. Defaults to `true`
+  /// because the enclosing gallery is typically a full-screen photo
+  /// viewer; callers embedding [ZoomableViewport] in a scrollable page
+  /// can disable it to let scrolling bubble. Pinch (touch, trackpad,
+  /// or browser pinch) zooms regardless.
   final bool enableMouseWheelZoom;
 
   /// When `true` (default), pulling a zoomed image past its boundary
@@ -180,6 +152,10 @@ class _ZoomableViewportState extends State<ZoomableViewport>
   // fling and snap-back.
   bool _selfWrite = false;
 
+  // From the enclosing gallery page's PagerScope, if any.
+  Axis? _pagerAxis;
+  Axis? _wheelPagingAxis;
+
   @override
   void initState() {
     super.initState();
@@ -190,6 +166,14 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       duration: const .new(milliseconds: 220),
     )..addListener(_onSnapBackTick);
     widget.transformationController.addListener(_onTransformChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = PagerScope.maybeOf(context);
+    _pagerAxis = scope?.axis;
+    _wheelPagingAxis = (scope?.wheelPaging ?? false) ? scope?.axis : null;
   }
 
   @override
@@ -428,12 +412,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       widget.maxScale,
     );
     final effective = targetScale / currentScaleAtStart;
-
-    final delta = Matrix4.identity()
-      ..translateByDouble(_dtdFocal.dx, _dtdFocal.dy, 0, 1)
-      ..scaleByDouble(effective, effective, 1, 1)
-      ..translateByDouble(-_dtdFocal.dx, -_dtdFocal.dy, 0, 1);
-
+    final delta = scaleAroundFocal(focal: _dtdFocal, scale: effective);
     _setTransform(_clampMatrix(delta.multiplied(start)));
   }
 
@@ -448,28 +427,44 @@ class _ZoomableViewportState extends State<ZoomableViewport>
   static const double _kMouseWheelPixelsPerUnit = 200.0;
 
   void _onPointerSignal(PointerSignalEvent event) {
-    if (!widget.enableMouseWheelZoom) return;
-    if (event is! PointerScrollEvent) return;
     if (!widget.scaleEnabled) return;
+    // Browser pinch (web trackpads / ctrl+wheel) arrives as a scale
+    // signal, not a PanZoom gesture — a deliberate zoom, so it is not
+    // gated by the wheel knob.
+    final double factor;
+    switch (event) {
+      case PointerScaleEvent(:final scale):
+        factor = scale;
+      case PointerScrollEvent(:final scrollDelta)
+          when widget.enableMouseWheelZoom:
+        final double zoomDelta;
+        if (_wheelPagingAxis case final axis?) {
+          final (:along, :cross) = splitScrollDelta(scrollDelta, axis);
+          // Pager-axis-dominant scroll belongs to the pager.
+          if (along.abs() > cross.abs()) return;
+          zoomDelta = cross;
+        } else {
+          zoomDelta = scrollDelta.dy;
+        }
+        factor = math
+            .pow(2.0, -zoomDelta / _kMouseWheelPixelsPerUnit)
+            .toDouble();
+      default:
+        return;
+    }
 
     _stopFling();
     _stopSnapBack();
     final focal = event.localPosition;
     final start = widget.transformationController.value;
     final currentScale = xyScale(start);
-    final factor = math
-        .pow(2.0, -event.scrollDelta.dy / _kMouseWheelPixelsPerUnit)
-        .toDouble();
     final targetScale = (currentScale * factor).clamp(
       widget.minScale,
       widget.maxScale,
     );
     if ((targetScale - currentScale).abs() < 1e-6) return;
     final effective = targetScale / currentScale;
-    final delta = Matrix4.identity()
-      ..translateByDouble(focal.dx, focal.dy, 0, 1)
-      ..scaleByDouble(effective, effective, 1, 1)
-      ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
+    final delta = scaleAroundFocal(focal: focal, scale: effective);
     _setTransform(_clampMatrix(delta.multiplied(start)));
     // Consume so scrollables above us don't also handle it.
     GestureBinding.instance.pointerSignalResolver.register(event, (event) {});
@@ -564,23 +559,16 @@ class _ZoomableViewportState extends State<ZoomableViewport>
 
   // ---------------- gestures plumbing ---------------- //
 
-  bool _canPanAt(Axis axis, int sign) {
-    final gate = widget.canPan;
-    if (gate == null) return true;
-    return gate(axis, sign);
-  }
-
-  bool _claimPanAt(Axis axis, int sign) {
-    final gate = widget.claimPan;
-    if (gate == null) return false;
-    return gate(axis, sign);
-  }
+  ViewfinderPanVerdict _verdictAt(AxisDirection direction) =>
+      widget.panGate?.call(direction) ?? ViewfinderPanVerdict.compete;
 
   Map<Type, GestureRecognizerFactory> _buildGestures() {
     // Registration order is also arena priority. Put double-tap-drag
     // FIRST so that, when a user has double-tapped and begun dragging,
     // it wins the pointer over the single-pointer pan path of
-    // ScaleGestureRecognizer.
+    // ScaleGestureRecognizer. The order also lets DTD reject itself on
+    // a second pointer before the scale recognizer's two-finger claim
+    // sees that pointer's events.
     return <Type, GestureRecognizerFactory>{
       if (widget.doubleTapDragZoom && widget.scaleEnabled)
         DoubleTapDragRecognizer:
@@ -588,6 +576,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
               () => DoubleTapDragRecognizer(debugOwner: this),
               (r) {
                 r
+                  ..yieldAxis = _pagerAxis
                   ..onDragStart = _onDoubleTapDragStart
                   ..onDragUpdate = _onDoubleTapDragUpdate
                   ..onDragEnd = _onDoubleTapDragEnd;
@@ -597,11 +586,14 @@ class _ZoomableViewportState extends State<ZoomableViewport>
           GestureRecognizerFactoryWithHandlers<_ArenaAwareScaleRecognizer>(
             () => _ArenaAwareScaleRecognizer(
               debugOwner: this,
-              canPanAt: _canPanAt,
-              claimPanAt: _claimPanAt,
+              verdictAt: _verdictAt,
             ),
             (r) {
               r
+                // Trackpad two-finger scroll zooms only when wheel
+                // scroll does — both are scroll-style input. Pinch
+                // zooms regardless.
+                ..trackpadScrollCausesScale = widget.enableMouseWheelZoom
                 ..onStart = _onScaleStart
                 ..onUpdate = _onScaleUpdate
                 ..onEnd = _onScaleEnd;
@@ -646,9 +638,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
         return ClipRect(
           clipBehavior: widget.clipBehavior,
           child: Listener(
-            onPointerSignal: widget.enableMouseWheelZoom
-                ? _onPointerSignal
-                : null,
+            onPointerSignal: widget.scaleEnabled ? _onPointerSignal : null,
             child: RawGestureDetector(
               gestures: _buildGestures(),
               behavior: .opaque,
@@ -672,38 +662,29 @@ class _ZoomableViewportState extends State<ZoomableViewport>
 // ---------------------------------------------------------------------------
 // Arena-aware scale recognizer.
 //
-// Behaves like [ScaleGestureRecognizer] but, once direction is resolvable:
-// - if [canPanAt] reports movement in the detected direction is not
-//   allowed (e.g. image already at edge, parent PageView should take
-//   over), stops tracking the pointer so it falls through to the next
-//   arena candidate;
-// - otherwise, if [claimPanAt] reports the pan should be kept, claims
-//   the arena immediately — beating ancestor drag recognizers that
-//   would accept at their own hit-slop before this recognizer's larger
-//   pan-slop.
+// Behaves like [ScaleGestureRecognizer] but, once a single pointer's
+// dominant direction is resolvable, applies the [verdictAt] gate:
+// release → stop tracking so the next arena candidate (e.g. a parent
+// PageView) wins; claim → accept immediately at hit-slop, before
+// ancestor drag recognizers; compete → normal arena rules.
 // ---------------------------------------------------------------------------
 
 class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
-  _ArenaAwareScaleRecognizer({
-    super.debugOwner,
-    required this.canPanAt,
-    required this.claimPanAt,
-  }) : super(
-         // Trackpad two-finger-swipe should zoom (matches macOS / web
-         // photo-viewer expectation).
-         trackpadScrollCausesScale: true,
-         supportedDevices: const <PointerDeviceKind>{
-           PointerDeviceKind.touch,
-           PointerDeviceKind.mouse,
-           PointerDeviceKind.stylus,
-           PointerDeviceKind.invertedStylus,
-           PointerDeviceKind.trackpad,
-           PointerDeviceKind.unknown,
-         },
-       );
+  // trackpadScrollCausesScale is set by the owning state, mirroring
+  // its wheel-zoom knob.
+  _ArenaAwareScaleRecognizer({super.debugOwner, required this.verdictAt})
+    : super(
+        supportedDevices: const <PointerDeviceKind>{
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.invertedStylus,
+          PointerDeviceKind.trackpad,
+          PointerDeviceKind.unknown,
+        },
+      );
 
-  final ZoomableCanPan canPanAt;
-  final ZoomableClaimPan claimPanAt;
+  final ViewfinderPanGate verdictAt;
 
   final Map<int, _TrackedPointer> _tracked = <int, _TrackedPointer>{};
   bool _resolved = false;
@@ -730,6 +711,13 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
     super.addAllowedPointer(event);
   }
 
+  /// Movement that confirms two fingers as a pinch/pan. Well under an
+  /// ancestor drag's kTouchSlop (18) — without the eager claim the
+  /// pager would win the arena off finger 1's drift, because the scale
+  /// recognizer's own acceptance waits for the focal point (the finger
+  /// average) to cross the larger pan-slop.
+  static const double _kTwoFingerClaimSlop = 6.0;
+
   @override
   void handleEvent(PointerEvent event) {
     if (!_resolved &&
@@ -739,6 +727,18 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
         _gateYieldedPointer(event)) {
       // The pointer was handed to the arena; don't forward the event.
       return;
+    }
+    // Two fingers on the content are never a page swipe; claim as soon
+    // as the gesture demonstrably moves. Not on the second pointer's
+    // down: a motionless two-finger touch must not fire
+    // onScaleStart/onScaleEnd or steal taps.
+    if (!_accepted && _tracked.length >= 2 && event is PointerMoveEvent) {
+      final tp = _tracked[event.pointer];
+      if (tp != null &&
+          (event.localPosition - tp.startPosition).distance >
+              _kTwoFingerClaimSlop) {
+        resolve(GestureDisposition.accepted);
+      }
     }
     super.handleEvent(event);
   }
@@ -752,36 +752,28 @@ class _ArenaAwareScaleRecognizer extends ScaleGestureRecognizer {
     final delta = event.localPosition - tp.startPosition;
     final slop = computeHitSlop(tp.kind, gestureSettings);
     if (delta.distance <= slop) return false;
-    _resolved = true;
-    // Flutter's own convention: strict dominance (no weighting).
-    // Strict axis dominance: test the axis that moved more, and
-    // yield the pointer if the gate says that direction isn't
-    // consumable (image at edge, parent scroller should win) —
-    // or claim it outright when the claim gate says the pan must
-    // stay here (zoomed pan that an ancestor scrollable would
-    // otherwise steal at its smaller hit-slop).
-    final (Axis, int)? dominant = switch (delta) {
-      _ when delta.dx.abs() > delta.dy.abs() => (
-        Axis.horizontal,
-        delta.dx >= 0 ? 1 : -1,
-      ),
-      _ when delta.dy.abs() > delta.dx.abs() => (
-        Axis.vertical,
-        delta.dy >= 0 ? 1 : -1,
-      ),
-      // Exact diagonal: no dominant axis, no gating.
+    // Flutter's own convention: strict axis dominance (no weighting);
+    // an exact diagonal has no dominant direction — leave the gate
+    // armed for the next move instead of latching unresolved.
+    final AxisDirection? dominant = switch (delta) {
+      _ when delta.dx.abs() > delta.dy.abs() =>
+        delta.dx >= 0 ? AxisDirection.right : AxisDirection.left,
+      _ when delta.dy.abs() > delta.dx.abs() =>
+        delta.dy >= 0 ? AxisDirection.down : AxisDirection.up,
       _ => null,
     };
-    if (dominant case (final axis, final sign)) {
-      if (!canPanAt(axis, sign)) {
+    if (dominant == null) return false;
+    _resolved = true;
+    switch (verdictAt(dominant)) {
+      case ViewfinderPanVerdict.release:
         resolvePointer(event.pointer, .rejected);
         stopTrackingPointer(event.pointer);
         _tracked.remove(event.pointer);
         return true;
-      }
-      if (claimPanAt(axis, sign)) {
+      case ViewfinderPanVerdict.claim:
         resolve(.accepted);
-      }
+      case ViewfinderPanVerdict.compete:
+        break;
     }
     return false;
   }
@@ -843,6 +835,11 @@ class DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
   DoubleTapDragStart? onDragStart;
   DoubleTapDragUpdate? onDragUpdate;
   DoubleTapDragEnd? onDragEnd;
+
+  /// Axis a surrounding pager scrolls on; a drag dominant along it is
+  /// yielded as a page swipe instead of becoming a zoom drag. Null
+  /// (standalone viewer) keeps every direction.
+  Axis? yieldAxis;
 
   _State _state = _State.idle;
   Offset? _firstTapPosition;
@@ -909,8 +906,21 @@ class DoubleTapDragRecognizer extends OneSequenceGestureRecognizer {
     if (_state == _State.dragging) {
       onDragUpdate?.call(event.localPosition);
     } else if (_state == _State.tap2Down && _secondTapStart != null) {
-      final drift = (event.localPosition - _secondTapStart!).distance;
-      if (drift > kTouchSlop) {
+      final delta = event.localPosition - _secondTapStart!;
+      if (delta.distance > kTouchSlop) {
+        // A pager-axis-dominant motion is a page swipe that merely
+        // followed a tap (chrome toggle) within the double-tap window
+        // — yield it. The zoom drag itself stays vertical by
+        // convention regardless of the pager axis.
+        final dominant = delta.dx.abs() > delta.dy.abs()
+            ? Axis.horizontal
+            : Axis.vertical;
+        if (dominant == yieldAxis) {
+          resolve(.rejected);
+          stopTrackingPointer(event.pointer);
+          _reset();
+          return;
+        }
         _state = _State.dragging;
         resolve(.accepted);
         onDragStart?.call(_secondTapStart!);
@@ -1018,10 +1028,7 @@ class FlingRunner {
     // point captured at release.
     final scaleNow = simScale.x(t).clamp(minScale, maxScale);
     final scaleFactor = scaleNow / startScale;
-    final delta = Matrix4.identity()
-      ..translateByDouble(focal.dx, focal.dy, 0, 1)
-      ..scaleByDouble(scaleFactor, scaleFactor, 1, 1)
-      ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
+    final delta = scaleAroundFocal(focal: focal, scale: scaleFactor);
     final m = delta.multiplied(startMatrix);
 
     // Pan displacement from gesture-end to t, layered on top of the

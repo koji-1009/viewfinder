@@ -27,8 +27,9 @@ class EmbeddedZoomPage extends StatelessWidget {
           const DemoHint(
             icon: Icons.article_outlined,
             message:
-                'ViewfinderImage works inline, not just full-screen. Scroll '
-                'the article; pinch / double-tap / wheel-zoom either figure. '
+                'ViewfinderImage works inline, not just full-screen. '
+                'Scrolling always scrolls the article — zoom the figures '
+                'with pinch or double-tap (enableMouseWheelZoom: false). '
                 'The second figure uses ViewfinderImage.child to zoom a '
                 'non-image widget.',
           ),
@@ -58,7 +59,12 @@ class EmbeddedZoomPage extends StatelessWidget {
                         initialScale: const ViewfinderInitialScale.cover(),
                         doubleTapScales: const [1, 2.5, 5],
                         maxScale: 8,
-                        backgroundColor: Colors.black12,
+                        // Embedded in a scrollable: scrolling belongs
+                        // to the article.
+                        enableMouseWheelZoom: false,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         semanticLabel: 'Embedded landscape photo',
                       ),
                     ),
@@ -87,6 +93,7 @@ class EmbeddedZoomPage extends StatelessWidget {
                         initialScale: const ViewfinderInitialScale.contain(0.9),
                         doubleTapScales: const [1, 2, 4],
                         maxScale: 6,
+                        enableMouseWheelZoom: false,
                         backgroundColor: Theme.of(
                           context,
                         ).colorScheme.surfaceContainer,

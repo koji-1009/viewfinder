@@ -9,6 +9,11 @@ import 'package:taro/taro.dart';
 /// picsum.photos is CORS-safe, so the same URLs work on the hosted web
 /// demo without a proxy.
 ///
+/// ~1600 px sources: plenty of zoom headroom for a demo while keeping
+/// the decoded textures small enough that hero flights and the grid
+/// stay smooth (a 4000 px source decodes to ~48 MB RGBA — ×14 photos
+/// repainting every transition frame).
+///
 /// 14 photos at mixed aspect ratios — enough to push the page indicator
 /// past its `maxDots` default of 12 (so the numeric `i / N` fallback
 /// kicks in for free), and enough to make the thumbnail strip's
@@ -17,20 +22,20 @@ class DemoPhotos {
   const DemoPhotos._();
 
   static const List<String> _urls = [
-    'https://picsum.photos/id/1015/4000/3000',
-    'https://picsum.photos/id/1018/4000/2666',
-    'https://picsum.photos/id/1019/4000/2666',
-    'https://picsum.photos/id/1025/3000/2000',
-    'https://picsum.photos/id/1029/3500/2333',
-    'https://picsum.photos/id/1037/4000/2666',
-    'https://picsum.photos/id/1039/4000/2500',
-    'https://picsum.photos/id/1041/3000/4000',
-    'https://picsum.photos/id/1043/2000/3000',
-    'https://picsum.photos/id/1050/4000/2666',
-    'https://picsum.photos/id/1055/3000/2000',
-    'https://picsum.photos/id/1059/3000/3000',
-    'https://picsum.photos/id/1074/4000/2666',
-    'https://picsum.photos/id/1080/4000/2250',
+    'https://picsum.photos/id/1015/1600/1200',
+    'https://picsum.photos/id/1018/1600/1066',
+    'https://picsum.photos/id/1019/1600/1066',
+    'https://picsum.photos/id/1025/1600/1066',
+    'https://picsum.photos/id/1029/1600/1066',
+    'https://picsum.photos/id/1037/1600/1066',
+    'https://picsum.photos/id/1039/1600/1000',
+    'https://picsum.photos/id/1041/1200/1600',
+    'https://picsum.photos/id/1043/1066/1600',
+    'https://picsum.photos/id/1050/1600/1066',
+    'https://picsum.photos/id/1055/1600/1066',
+    'https://picsum.photos/id/1059/1600/1600',
+    'https://picsum.photos/id/1074/1600/1066',
+    'https://picsum.photos/id/1080/1600/900',
   ];
 
   /// Full-resolution providers, one per photo.
@@ -91,8 +96,12 @@ class DemoBrokenImage extends StatelessWidget {
   const DemoBrokenImage({super.key});
 
   @override
-  Widget build(BuildContext context) => const Center(
-    child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
+  Widget build(BuildContext context) => Center(
+    child: Icon(
+      Icons.broken_image,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      size: 48,
+    ),
   );
 }
 

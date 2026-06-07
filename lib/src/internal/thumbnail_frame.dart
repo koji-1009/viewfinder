@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../thumbnails.dart';
 
-/// Lays out a [bar] (thumbnail strip) and the main [child] (pager) along
-/// the axis dictated by [position]. Internal — `Viewfinder` uses this
-/// to keep its build method declarative.
+/// Overlays the [bar] (thumbnail strip) on the edge of the full-bleed
+/// [child] (pager) dictated by [position]. Internal — `Viewfinder` uses
+/// this to keep its build method declarative.
 class ThumbnailFrame extends StatelessWidget {
   const ThumbnailFrame({
     super.key,
@@ -18,30 +18,19 @@ class ThumbnailFrame extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => switch (position) {
-    .bottom => Column(
+  Widget build(BuildContext context) {
+    final alignment = switch (position) {
+      .bottom => Alignment.bottomCenter,
+      .top => Alignment.topCenter,
+      .left => Alignment.centerLeft,
+      .right => Alignment.centerRight,
+    };
+    return Stack(
+      fit: .expand,
       children: [
-        Expanded(child: child),
-        bar,
+        child,
+        Align(alignment: alignment, child: bar),
       ],
-    ),
-    .top => Column(
-      children: [
-        bar,
-        Expanded(child: child),
-      ],
-    ),
-    .left => Row(
-      children: [
-        bar,
-        Expanded(child: child),
-      ],
-    ),
-    .right => Row(
-      children: [
-        Expanded(child: child),
-        bar,
-      ],
-    ),
-  };
+    );
+  }
 }

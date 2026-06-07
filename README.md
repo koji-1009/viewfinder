@@ -26,8 +26,9 @@ A hosted build of the example app — try the gallery, single-photo viewer, vert
 
 * **Native-feel gestures** — pinch, pan, fling on translation and scale, double-tap ladder, double-tap-and-drag continuous zoom (iOS Photos style), opt-in two-finger rotation, rubber-band over-pan with snap-back on release, long-press / right-click hooks for save-and-share menus.
 * **Built for every input** — touch, stylus, trackpad, mouse, mouse wheel (zoom or page-turn), hardware keyboard. Mouse-drag swipes pages on web and desktop out of the box.
+* **Widgets layer only** — imports nothing from Material, so it drops into Material, Cupertino, and plain-widgets apps alike (and is ready for the Flutter 3.44 material/SDK split).
 * **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis — and only in the direction the photo has actually run out of content.
-* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss with overscroll-to-dismiss, loop paging, tap-to-toggle chrome controller with optional immersive system UI. All opt-in.
+* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip overlaying the full-bleed viewer (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss with overscroll-to-dismiss, loop paging, tap-to-toggle chrome controller with optional immersive system UI. All opt-in.
 * **Accessible by default** — page changes are announced to screen readers, thumbnails and indicators carry semantics, the platform reduce-motion setting is honored, and RTL locales get correctly mirrored paging and arrow keys.
 * **Robust pop / back-button** — pop while zoomed snaps every page back to its initial transform first, so any Hero flight starts from a sensible source rect; the first back / Esc on a zoomed photo resets the zoom, the second pops.
 * **No runtime dependencies** beyond the Flutter SDK.
@@ -135,7 +136,7 @@ Knobs on `Viewfinder` that control how pages flow.
 | `swipeDragDevices`        | `kViewfinderDefaultSwipeDragDevices` | Pointer kinds allowed to swipe the underlying `PageView`. Default includes mouse / trackpad / touch / stylus. Pass a narrower set to opt out.                                                                             |
 | `enableKeyboardShortcuts` | `true`                               | Arrow keys (visual order — RTL/`reverse`-aware), PageUp/Down (logical order), Esc (two-stage). Disable to take over the keyboard.                                                                                         |
 | `allowImplicitScrolling`  | `true`                               | Forwarded to `PageView.allowImplicitScrolling` for accessible focus traversal.                                                                                                                                            |
-| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` turns the wheel into page navigation (pinch / double-tap still zoom).                                                                                                         |
+| `mouseWheelBehavior`      | `.zoom`                              | `.zoom` zooms around the pointer; `.paging` splits scrolling by axis — along the pager turns pages (one per gesture), across it zooms. During the ~280 ms turn animation the pager ignores drags.                         |
 | `onScaleStateChanged`     | —                                    | Fires when the current page transitions initial ⇄ zoomed — the hook for app chrome that reacts to zoom. Coalesced, not per-frame.                                                                                         |
 | `keepAlivePages`          | `false`                              | Keep off-screen pages' `State` alive (e.g. a `.child` page's video position). The pan/zoom transform still resets on page leave.                                                                                          |
 | `restorationId`           | —                                    | Forwarded to `PageView.restorationId`; the page position survives state restoration.                                                                                                                                      |
@@ -183,7 +184,7 @@ All variants take `alignment`, `padding`, and `safeArea` (default `true` — a b
 ## Inputs
 
 * **Touch / stylus / trackpad / mouse** — wired by default.
-* **Mouse wheel** — zooms around the pointer location; switch to page-turning with `mouseWheelBehavior: .paging`.
+* **Mouse wheel / trackpad scroll** — zooms around the pointer location. With `mouseWheelBehavior: .paging`, scrolling along the pager axis turns pages while cross-axis scrolling keeps zooming. Browser pinch zooms regardless.
 * **Trackpad pinch (macOS)** — wired in.
 * **Mouse drag on web/desktop** — swipes pages out of the box (`swipeDragDevices` includes mouse).
 * **Mouse right-click / long-press** — `onSecondaryTapUp` / `onLongPress` hooks for context menus and save/share actions.
@@ -219,8 +220,15 @@ final controller = ViewfinderImageController();
 // Zoom. Scales are relative to the initial scale (1.0 = as first shown).
 controller.animateToScale(3.0);
 controller.animateToScale(2.0, focal: tapPosition);
+controller.jumpToScale(2.0);          // instant — for slider-style control
 controller.reset();
 controller.scale;                     // double, 1.0 = initial
+
+// Rotation (radians, 0 = upright). Works regardless of rotateEnabled,
+// which gates only the gesture; scale and pan are preserved.
+controller.jumpToRotation(math.pi / 2);
+controller.animateToRotation(0, focal: tapPosition);
+controller.rotation;                  // double
 
 // Direct matrix control (absolute matrices).
 final m = controller.currentTransform;
@@ -231,13 +239,27 @@ controller.animateToTransform(targetMatrix);
 controller.canSwipe(Axis.horizontal); // bool — at either edge of that axis
 controller.canSwipe(Axis.vertical);   // bool
 controller.canSwipeToward(AxisDirection.left); // direction-aware: no more room for a leftward drag
-controller.canSwipe(Axis.horizontal, mode: SwipeEdgeMode.content); // photo-frame edge instead
 controller.scaleState;                // ViewfinderScaleState
 ```
 
-`canSwipeToward` takes the direction of the _finger motion_: a finger moving right pulls the content right and is exhausted once the content's left edge meets the viewport's left. The bundled gallery uses exactly this to hand off pans to the pager only in the direction the photo has run out of content.
+`canSwipeToward` takes the direction of the _finger motion_: a finger moving right pulls the content right and is exhausted once the content's left edge meets the viewport's left. The check runs in screen space (the rotated content's AABB against the viewport), matching what a screen-axis pager needs. The bundled gallery uses exactly this to hand off pans to the pager only in the direction the photo has run out of content.
 
-The default `mode: SwipeEdgeMode.screen` matches the bundled gallery — a screen-axis pager. Pass `SwipeEdgeMode.content` when you have a custom pager that should follow the photo's own axes through rotation (e.g., a pager that stays aligned with the photo's logical horizontal even at 90° rotation). At zero rotation both modes agree.
+Embedding a standalone `ViewfinderImage` in your own scrollable? `panGate` is the other half of the handoff: once a single-pointer pan's dominant direction is known, return a `ViewfinderPanVerdict` — `release` hands the drag to your pager, `claim` keeps a zoomed pan away from ancestor recognizers that would win at their smaller hit-slop, `compete` leaves normal arena rules in place.
+
+```dart
+ViewfinderImage(
+  image: provider,
+  controller: controller,
+  panGate: (direction) {
+    if (controller.scaleState == ViewfinderScaleState.initial) {
+      return ViewfinderPanVerdict.release;       // pager owns unzoomed drags
+    }
+    return controller.canSwipeToward(direction)
+        ? ViewfinderPanVerdict.release           // at the edge: hand off
+        : ViewfinderPanVerdict.claim;            // zoomed pan stays inside
+  },
+)
+```
 
 ### `ViewfinderChromeController` — chrome visibility
 
@@ -264,7 +286,7 @@ Tap the photo: toggle. Zoom in: auto-hide. Page change: auto-hide timer restarts
 
 `ViewfinderHero` forwards every option Flutter's `Hero` exposes (`createRectTween`, `flightShuttleBuilder`, `placeholderBuilder`, `transitionOnUserGestures`). Three known Hero-with-photo-viewer pitfalls are handled internally:
 
-* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the photo's natural bounds, never from a visibly zoomed crop.
+* **Source rect coherence on pop** — when the route pops while a page is zoomed in, every page jumps back to its initial transform _before_ the Hero flight captures its source rect. The flight starts from the page's initial rendering, never from a visibly zoomed crop. (The rect is the full page — for a `contain`-fit photo it includes the letterbox; `thumbnailFit` keeps the visible photo coherent through the flight.)
 * **Adjacent-page Hero leak** — only the currently-visible page carries its Hero tag. `PageView` pre-builds neighbors (especially with `allowImplicitScrolling`); without this rule, every pre-built page would fly on pop.
 * **Fit-mismatch flicker** — Flutter's default flight shuttle is the destination hero's child, so a pop flight renders your (typically cover-fit) thumbnail stretched across the viewer's rect. Provider-backed heroes instead fly the viewer's own rendering by default. Declare your thumbnail's fit (`ViewfinderHero('tag', thumbnailFit: BoxFit.cover)`) and the shuttle interpolates between the two fits, landing exactly on the thumbnail's crop at the other end too; pass `flightShuttleBuilder` to take over entirely.
 
@@ -394,6 +416,8 @@ Stable keys are attached for widget tests — no fishing through internal types:
 await tester.tap(find.byKey(ViewfinderKeys.thumbnail(3)));
 expect(find.byKey(ViewfinderKeys.page(3)), findsOneWidget);
 ```
+
+`ViewfinderKeys.page` applies to bounded galleries only — a `loop: true` pager runs on internal raw-index keys, so the per-page key finds nothing there (thumbnail keys are unaffected).
 
 `ViewfinderImage`'s runtime type is a package-internal subclass, so `find.byType(ViewfinderImage)` does not match; when you need the widget itself use `find.byWidgetPredicate((w) => w is ViewfinderImage)`. To drive zoom programmatically in a test, pass a `ViewfinderImageController` and call `animateToScale` / `jumpToTransform`.
 

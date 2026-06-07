@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import 'internal/colors.dart' as colors;
 import 'viewfinder.dart' show Viewfinder;
 
 /// Where the thumbnail strip sits relative to the main viewer.
@@ -38,10 +39,10 @@ class ViewfinderThumbnails {
     this.padding = const .all(8),
     this.safeArea = true,
     this.selectedBorder = const Border.fromBorderSide(
-      BorderSide(color: Colors.white, width: 2),
+      BorderSide(color: colors.white, width: 2),
     ),
     this.unselectedOpacity = 0.55,
-    this.backgroundColor = const .new(0x8A000000),
+    this.backgroundColor = colors.black54,
     this.errorBuilder,
     this.itemBuilder,
     this.semanticLabelBuilder,
@@ -56,11 +57,11 @@ class ViewfinderThumbnails {
     this.spacing = 4,
     this.padding = const .all(8),
     this.safeArea = true,
-    this.backgroundColor = const .new(0x8A000000),
+    this.backgroundColor = colors.black54,
     required ViewfinderThumbnailItemBuilder this.itemBuilder,
     this.semanticLabelBuilder,
   }) : selectedBorder = const Border.fromBorderSide(
-         BorderSide(color: Colors.white, width: 2),
+         BorderSide(color: colors.white, width: 2),
        ),
        unselectedOpacity = 0.55,
        errorBuilder = null;
@@ -98,8 +99,8 @@ class ViewfinderThumbnails {
 
   /// Applied to the default tile only — fires when a thumbnail's
   /// [ImageProvider] fails to decode. Defaults to a neutral grey
-  /// placeholder (`ColoredBox(color: Colors.white12)`) when null, which
-  /// avoids the broken-image icon Flutter would otherwise render.
+  /// placeholder (a 12%-white `ColoredBox`) when null, which avoids
+  /// the broken-image icon Flutter would otherwise render.
   /// Ignored when [itemBuilder] is provided — the builder owns the
   /// entire visual treatment, including error handling.
   final ImageErrorWidgetBuilder? errorBuilder;
@@ -119,6 +120,11 @@ class ViewfinderThumbnails {
     .top || .bottom => true,
     .left || .right => false,
   };
+
+  /// Strip thickness on its cross axis — tile [size] plus the padding
+  /// stacked across the strip. Excludes any safe-area inset.
+  double get crossExtent =>
+      size + (isHorizontal ? padding.vertical : padding.horizontal);
 
   /// Identity tuple backing [==] and [hashCode] — one field list
   /// instead of two parallel ones (records compare and hash
