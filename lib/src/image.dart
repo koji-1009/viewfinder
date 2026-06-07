@@ -23,6 +23,7 @@ typedef ViewfinderScaleChanged = void Function(double scale);
 /// directional swipe gates.
 typedef _SwipeSignals = ({
   ViewfinderScaleState scale,
+  bool fits,
   bool left,
   bool right,
   bool up,
@@ -448,13 +449,21 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     }
   }
 
+  /// The gallery's decode-size policy wraps providers in a
+  /// [ResizeImage] sized from the viewport, so a plain resize (device
+  /// rotation, split screen) rebuilds with different wrapper
+  /// dimensions. Content identity lives in the wrapped provider; the
+  /// wrapper alone changing must not reset the user's pan/zoom.
+  static ImageProvider _unwrapResize(ImageProvider p) =>
+      p is ResizeImage ? p.imageProvider : p;
+
   static bool _isContentSwap(ViewfinderImage a, ViewfinderImage b) =>
       switch ((a, b)) {
         (
           ViewfinderProviderImage(image: final ai),
           ViewfinderProviderImage(image: final bi),
         ) =>
-          ai != bi,
+          _unwrapResize(ai) != _unwrapResize(bi),
         (
           ViewfinderChildImage(contentKey: final ak),
           ViewfinderChildImage(contentKey: final bk),
@@ -504,15 +513,25 @@ class _ViewfinderImageState extends State<ViewfinderImage>
 
   double get _absMaxScale => widget.maxScale * _baseScale;
 
+  Offset get _viewportCenter => _viewportSize.center(Offset.zero);
+
+  /// Defers [retry] to the frame after the first layout while the
+  /// viewport is still empty — there is no center to pivot on yet.
+  /// Returns true when deferred.
+  bool _deferUntilLayout(VoidCallback retry) {
+    if (!_viewportSize.isEmpty) return false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) retry();
+    });
+    return true;
+  }
+
   Matrix4 _initialMatrix() {
     final s = _baseScale;
     if ((s - 1.0).abs() < 0.001) return Matrix4.identity();
     // Center the scaled content — scaling about the origin would
     // anchor contain(<1) to the top-left and crop cover(>1) toward it.
-    return scaleAroundFocal(
-      focal: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
-      scale: s,
-    );
+    return scaleAroundFocal(focal: _viewportCenter, scale: s);
   }
 
   /// Writes [m] to the transformation controller, marked as our own so
@@ -555,17 +574,19 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   _SwipeSignals _allFreeSignals(ViewfinderScaleState scale) =>
-      (scale: scale, left: true, right: true, up: true, down: true);
+      (scale: scale, fits: true, left: true, right: true, up: true, down: true);
 
   /// Field names are the direction of the finger motion of the
   /// would-be swipe: a finger moving right reveals what lies beyond
   /// the content's *left* edge, so `right` is true when no such room
   /// is left (that edge has met the viewport's, or the content fits).
+  ///
+  /// Always derived from the bbox — `scaleState` is rotation-blind
+  /// (and an initial-scale factor above 1 overflows at its baseline),
+  /// so it cannot stand in for "the content fits".
   _SwipeSignals _swipeSignals() {
     final scale = scaleState;
-    if (scale == .initial || _viewportSize.isEmpty) {
-      return _allFreeSignals(scale);
-    }
+    if (_viewportSize.isEmpty) return _allFreeSignals(scale);
     const epsilon = 0.5;
     final viewport = _viewportSize;
     final bbox = contentBbox(_transformation.value, viewport);
@@ -573,6 +594,7 @@ class _ViewfinderImageState extends State<ViewfinderImage>
     final fitsV = bbox.maxY - bbox.minY <= viewport.height + epsilon;
     return (
       scale: scale,
+      fits: fitsH && fitsV,
       right: fitsH || bbox.minX >= -epsilon,
       left: fitsH || bbox.maxX <= viewport.width + epsilon,
       down: fitsV || bbox.minY >= -epsilon,
@@ -581,19 +603,22 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   void _animateTo(Matrix4 target) {
+    // Clone defensively: the deferred retry below (and the tween) must
+    // not be shifted by a caller mutating its matrix afterwards.
+    final end = target.clone();
+    if (_deferUntilLayout(() => _animateTo(end))) return;
     // Honor the platform's reduce-motion setting: jump instead of
     // animating (double-tap zoom, reset, animateToScale/Transform).
     if (mounted && MediaQuery.maybeDisableAnimationsOf(context) == true) {
-      jumpToTransform(target);
+      jumpToTransform(end);
       return;
     }
     _animation =
         _SimilarityTween(
-          // Clone both endpoints so a caller reusing its matrix can't
-          // shift the flight or the landing.
+          // Clone the begin endpoint too, for the same reason.
           begin: _transformation.value.clone(),
-          end: target.clone(),
-          center: Offset(_viewportSize.width / 2, _viewportSize.height / 2),
+          end: end,
+          center: _viewportCenter,
         ).animate(
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
         );
@@ -605,6 +630,14 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   void _handleDoubleTapDown(TapDownDetails d) =>
       _lastTapLocalPos = d.localPosition;
 
+  /// Matrix landing on the absolute scale [clamped]: snaps onto the
+  /// initial matrix when the target is the baseline (so a relative
+  /// `1.0` always lands back exactly), otherwise scales around [focal].
+  Matrix4 _matrixForAbsScale(double clamped, Offset focal) =>
+      (clamped - _baseScale).abs() < 0.001
+      ? _initialMatrix()
+      : scaleAroundFocal(focal: focal, scale: clamped);
+
   void _handleDoubleTap() {
     if (widget.doubleTapScales.isEmpty) return;
     final base = _baseScale;
@@ -615,14 +648,15 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       currentScale: currentScale,
     );
     final clamped = target.clamp(_absMinScale, _absMaxScale).toDouble();
-    _animateTo(
-      (clamped - base).abs() < 0.001
-          ? _initialMatrix()
-          : scaleAroundFocal(focal: _lastTapLocalPos, scale: clamped),
-    );
+    _animateTo(_matrixForAbsScale(clamped, _lastTapLocalPos));
   }
 
-  void reset() => _animateTo(_initialMatrix());
+  void reset() {
+    // Defer here (not just inside _animateTo) so the initial matrix is
+    // computed against the laid-out viewport, not the empty one.
+    if (_deferUntilLayout(reset)) return;
+    _animateTo(_initialMatrix());
+  }
 
   void jumpToInitial() {
     _animController.stop();
@@ -631,20 +665,15 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   }
 
   void scaleTo(double scale, {Offset? focal, bool animate = true}) {
-    if (_viewportSize.isEmpty) {
-      // No center to pivot on before the first layout; run after it.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) scaleTo(scale, focal: focal, animate: animate);
-      });
+    if (_deferUntilLayout(
+      () => scaleTo(scale, focal: focal, animate: animate),
+    )) {
       return;
     }
-    final base = _baseScale;
-    final clamped = (scale * base).clamp(_absMinScale, _absMaxScale).toDouble();
-    final f =
-        focal ?? Offset(_viewportSize.width / 2, _viewportSize.height / 2);
-    final target = (clamped - base).abs() < 0.001
-        ? _initialMatrix()
-        : scaleAroundFocal(focal: f, scale: clamped);
+    final clamped = (scale * _baseScale)
+        .clamp(_absMinScale, _absMaxScale)
+        .toDouble();
+    final target = _matrixForAbsScale(clamped, focal ?? _viewportCenter);
     if (animate) {
       _animateTo(target);
     } else {
@@ -667,17 +696,14 @@ class _ViewfinderImageState extends State<ViewfinderImage>
   double get rotationAngle => rotationOf(_transformation.value);
 
   void rotateTo(double radians, {Offset? focal, bool animate = true}) {
-    if (_viewportSize.isEmpty) {
-      // No center to pivot on before the first layout; run after it.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) rotateTo(radians, focal: focal, animate: animate);
-      });
+    if (_deferUntilLayout(
+      () => rotateTo(radians, focal: focal, animate: animate),
+    )) {
       return;
     }
     final delta = radians - rotationAngle;
     if (delta.abs() < 1e-9) return;
-    final f =
-        focal ?? Offset(_viewportSize.width / 2, _viewportSize.height / 2);
+    final f = focal ?? _viewportCenter;
     final base = _transformation.value.clone();
     if (!animate ||
         (mounted && MediaQuery.maybeDisableAnimationsOf(context) == true)) {
@@ -1101,6 +1127,9 @@ class ViewfinderImageController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // Commands are `_state?.…` — nulling makes post-dispose calls
+    // no-ops instead of driving a still-mounted image.
+    _state = null;
     super.dispose();
   }
 
@@ -1157,6 +1186,15 @@ class ViewfinderImageController extends ChangeNotifier {
 
   /// Whether the user has zoomed in past the initial scale.
   ViewfinderScaleState get scaleState => _state?.scaleState ?? .initial;
+
+  /// True when the content currently fits entirely within the viewport
+  /// (no pan room on either axis); returns `true` while detached.
+  /// `false` while zoomed past the viewport, rotated so the bounding
+  /// box overflows, or at an initial-scale factor above 1.
+  bool get contentFits {
+    final signal = _lastSignal ?? _state?._swipeSignals();
+    return signal?.fits ?? true;
+  }
 
   /// True when a page swipe along [axis] — in either direction — can
   /// reasonably take over; returns `true` while detached. For the

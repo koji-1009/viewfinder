@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -3677,6 +3679,73 @@ void main() {
     expect(dismissed, 1);
   });
 
+  testWidgets('ViewfinderDismiss: a dismissal whose callback does not '
+      'navigate springs back to rest', (tester) async {
+    var dismissed = 0;
+    final progress = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 1,
+            dismiss: ViewfinderDismiss(
+              threshold: 0.1,
+              onDismiss: () => dismissed++,
+              onProgress: progress.add,
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(Viewfinder));
+    await tester.dragFrom(center, const Offset(0, 200));
+    await tester.pumpAndSettle();
+
+    expect(dismissed, 1);
+    // The callback neither popped nor pushed; the gallery returns to
+    // rest instead of staying dragged out.
+    expect(progress.last, 0.0);
+  });
+
+  testWidgets('ViewfinderDismiss: a dismissal that navigates keeps the '
+      'dragged-out state for the exit visuals', (tester) async {
+    final navKey = GlobalKey<NavigatorState>();
+    final progress = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navKey,
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 1,
+            dismiss: ViewfinderDismiss(
+              threshold: 0.1,
+              onDismiss: () => navKey.currentState!.push(
+                PageRouteBuilder<void>(
+                  opaque: false,
+                  pageBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+              onProgress: progress.add,
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(Viewfinder));
+    await tester.dragFrom(center, const Offset(0, 200));
+    await tester.pumpAndSettle();
+
+    // A route was pushed on top; the dragged-out state stays to feed
+    // the exit visuals.
+    expect(progress.last, greaterThan(0.1));
+  });
+
   // -------------------------------------------------------------------
   // Directional edge handoff
   // -------------------------------------------------------------------
@@ -4293,5 +4362,200 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 0);
+  });
+
+  testWidgets('contentFits / canSwipe report the overflowing bbox of a '
+      'rotation at the initial scale', (tester) async {
+    // Regression: the swipe signals used to short-circuit on
+    // scaleState == initial, which is rotation-blind — a photo rotated
+    // at its initial scale overflowed the viewport yet reported every
+    // direction free, so the pager stole the pans to its hidden parts.
+    final imageController = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 200,
+              height: 400,
+              child: ViewfinderImage(
+                image: memoryImage(),
+                controller: imageController,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+    expect(imageController.contentFits, isTrue);
+
+    imageController.jumpToRotation(math.pi / 2);
+    await tester.pumpAndSettle();
+
+    // Still at the initial scale, but the rotated bbox (400×200 in a
+    // 200×400 box) overflows horizontally.
+    expect(imageController.scaleState, ViewfinderScaleState.initial);
+    expect(imageController.contentFits, isFalse);
+    expect(imageController.canSwipe(Axis.horizontal), isFalse);
+  });
+
+  testWidgets('Viewfinder: a contain(1.5) page owns pager-axis pans at its '
+      'initial state, then hands off at the edge', (tester) async {
+    // Regression: the pan gate used to key on scaleState == zoomed, so
+    // a page whose content overflows at its baseline (initial-scale
+    // factor above 1) released every pan to the pager — the
+    // overflowing content was unreachable.
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 2,
+              controller: controller,
+              defaultInitialScale: const ViewfinderInitialScale.contain(1.5),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // The drag pans the overflowing content instead of turning the page.
+    await tester.drag(find.byType(Viewfinder), const Offset(-150, 0));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 0);
+    final transform = tester
+        .widget<ZoomableViewport>(find.byType(ZoomableViewport).first)
+        .transformationController
+        .value;
+    expect(transform.storage[12], lessThan(-150.0));
+
+    // At the edge the next drag hands off to the pager as usual.
+    await tester.drag(find.byType(Viewfinder), const Offset(-250, 0));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+  });
+
+  testWidgets('ViewfinderController.jumpTo before the first layout applies '
+      'right after it', (tester) async {
+    // Regression: _goTo used to silently drop a navigation issued
+    // while the PageView had no clients (attached, pre-first-layout).
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 4,
+            controller: controller,
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+      phase: EnginePhase.build,
+    );
+    controller.jumpTo(2);
+    await settleImages(tester);
+    expect(controller.currentIndex, 2);
+  });
+
+  testWidgets('a pinch after a singular jumpToTransform keeps the matrix '
+      'finite', (tester) async {
+    // Regression: the gesture scale clamp divided by the start
+    // matrix's scale, so a zero-scale start poisoned the transform
+    // with NaN that no later clamp could recover from.
+    final imageController = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: imageController,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    imageController.jumpToTransform(Matrix4.zero());
+    await tester.pumpAndSettle();
+
+    final center = tester.getCenter(
+      find.byWidgetPredicate((w) => w is ViewfinderImage),
+    );
+    final p1 = await tester.startGesture(
+      center - const Offset(40, 0),
+      pointer: 1,
+    );
+    final p2 = await tester.startGesture(
+      center + const Offset(40, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await p1.moveTo(center - const Offset(100, 0));
+    await p2.moveTo(center + const Offset(100, 0));
+    await tester.pump();
+    await p1.up();
+    await p2.up();
+    await tester.pumpAndSettle();
+
+    final m = imageController.currentTransform;
+    expect(m.storage.every((v) => v.isFinite), isTrue);
+  });
+
+  testWidgets('ViewfinderDismiss: a new drag during the spring-back takes '
+      'over instead of being decayed to zero', (tester) async {
+    // Regression: the spring-back animation kept running under a new
+    // drag, decaying the live offset each tick and zeroing it at
+    // completion while the finger was still down.
+    final progress = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 1,
+            dismiss: ViewfinderDismiss(
+              onDismiss: () {},
+              onProgress: progress.add,
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(Viewfinder));
+    // First moves stay at 20 px (over the drag slop of 18, under the
+    // scale recognizer's pan slop of 36) so the dismiss drag wins the
+    // arena the way real incremental finger input does.
+    // Drag below the threshold and release → spring-back starts.
+    final g1 = await tester.startGesture(center);
+    await g1.moveBy(const Offset(0, 20));
+    await g1.moveBy(const Offset(0, 50));
+    await g1.moveBy(const Offset(0, 50));
+    await tester.pump();
+    await g1.up();
+    // Mid spring-back (180 ms), grab again and keep dragging.
+    await tester.pump(const Duration(milliseconds: 90));
+    final g2 = await tester.startGesture(center);
+    await g2.moveBy(const Offset(0, 20));
+    await g2.moveBy(const Offset(0, 60));
+    await tester.pump();
+    // Hold past the original spring window: the offset must survive.
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(progress.last, greaterThan(0.05));
+
+    await g2.up();
+    await tester.pumpAndSettle();
   });
 }

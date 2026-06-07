@@ -48,8 +48,10 @@ class ViewfinderDismiss {
 
   /// Invoked after the user releases past [threshold]. The widget itself
   /// does not pop the route or otherwise unmount — the callback owns that
-  /// step. Failing to remove the widget here will leave the gallery in
-  /// its dragged-out, partially translucent state.
+  /// step. When the callback navigates away (pops the route, or pushes a
+  /// confirmation dialog on top), the gallery keeps its dragged-out state
+  /// to feed the exit visuals; when it does not, the gallery springs back
+  /// to rest.
   final VoidCallback onDismiss;
 
   /// Axis on which the drag-to-dismiss gesture is accepted.

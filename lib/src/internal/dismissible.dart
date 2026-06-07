@@ -132,6 +132,13 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
     cb(progress);
   }
 
+  void _handleDragStart(DragStartDetails _) {
+    // A new grab takes over from a running spring-back; left running,
+    // its listener would decay the live drag each tick and zero it at
+    // completion, snapping the content back under the finger.
+    _release.stop();
+  }
+
   void _handleDragUpdate(DragUpdateDetails d) {
     if (!_acceptsDelta(d.delta.dy)) return;
     setState(() => _dragOffset += d.delta.dy);
@@ -144,6 +151,16 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
       // mounted, the next drag must be able to fire it again.
       _pastThreshold = false;
       widget.config.onDismiss();
+      // When the callback navigated (popped the route, or pushed a
+      // confirmation dialog on top), the dragged-out state feeds the
+      // exit visuals. When it did not — including a `maybePop` that
+      // no-ops — spring back so the gallery is not left displaced.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _dragOffset == 0 || _release.isAnimating) return;
+        if (ModalRoute.isCurrentOf(context) ?? true) {
+          _release.forward(from: 0);
+        }
+      });
     } else {
       _release.forward(from: 0);
     }
@@ -172,10 +189,15 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
                   r,
                 ) {
                   r
+                    ..onStart = _handleDragStart
                     ..onUpdate = _handleDragUpdate
                     ..onEnd = _handleDragEnd;
                 }),
         },
+        // Cheap despite animating per drag frame: a compositing
+        // RenderOpacity is its own repaint boundary, so alpha changes
+        // update the cached layer without re-rasterizing the gallery
+        // subtree, and the translation above it only moves that layer.
         child: Transform.translate(
           offset: Offset(0, _dragOffset),
           child: Opacity(
