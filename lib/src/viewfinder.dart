@@ -997,9 +997,12 @@ class _ViewfinderState extends State<Viewfinder> {
     }
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) == true;
     if (animate && !reduceMotion) {
+      // easeOutCubic front-loads the motion like a finger fling; 400 ms
+      // matches the tail of a PageScrollPhysics swipe settle (a flat
+      // 280 ms read as an abrupt jump next to real swipes).
       return _pageController.animateToPage(
         targetRaw,
-        duration: const .new(milliseconds: 280),
+        duration: const .new(milliseconds: 400),
         curve: Curves.easeOutCubic,
       );
     }
