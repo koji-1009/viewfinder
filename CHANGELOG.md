@@ -17,6 +17,8 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 
 * Edge handoff is direction-aware: a zoomed photo flush against one edge pans toward its hidden side instead of swiping pages, and such pans are no longer stolen by the pager or dismiss recognizers. Drag-to-dismiss is disabled while zoomed.
 * Drag-to-dismiss yields to pinches: a second finger landing before the drag is accepted hands both pointers to the zoom.
+* Two moving fingers claim the gesture immediately, so the pager's drag can no longer steal a pinch off the first finger's drift.
+* `reset()` / `animateToTransform` from a rotated state no longer dip in scale mid-animation.
 * `contain(factor)` / `cover(factor)` center the photo instead of anchoring it to the top-left.
 * The two-stage Android back / Esc no longer stays blocked after a zoom whose pan released the swipe lock.
 * The thumbnail strip overlays the full-bleed viewer instead of reserving layout space — hiding the chrome reveals the whole photo; bottom/top indicators and chrome overlays are inset past the strip automatically.

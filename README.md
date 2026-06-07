@@ -26,8 +26,9 @@ A hosted build of the example app — try the gallery, single-photo viewer, vert
 
 * **Native-feel gestures** — pinch, pan, fling on translation and scale, double-tap ladder, double-tap-and-drag continuous zoom (iOS Photos style), opt-in two-finger rotation, rubber-band over-pan with snap-back on release, long-press / right-click hooks for save-and-share menus.
 * **Built for every input** — touch, stylus, trackpad, mouse, mouse wheel (zoom or page-turn), hardware keyboard. Mouse-drag swipes pages on web and desktop out of the box.
+* **Widgets layer only** — imports nothing from Material, so it drops into Material, Cupertino, and plain-widgets apps alike (and is ready for the Flutter 3.44 material/SDK split).
 * **Plays well with parents** — an arena-aware gesture layer hands edge pans back to a parent `PageView` so a zoomed photo can swipe to the next page without lifting the finger, on either axis — and only in the direction the photo has actually run out of content.
-* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss with overscroll-to-dismiss, loop paging, tap-to-toggle chrome controller with optional immersive system UI. All opt-in.
+* **Gallery affordances included** — `Viewfinder.images([...])` covers the common case; thumbnail strip overlaying the full-bleed viewer (4 positions or fully custom), page indicator (dots / label / adaptive), drag-to-dismiss with overscroll-to-dismiss, loop paging, tap-to-toggle chrome controller with optional immersive system UI. All opt-in.
 * **Accessible by default** — page changes are announced to screen readers, thumbnails and indicators carry semantics, the platform reduce-motion setting is honored, and RTL locales get correctly mirrored paging and arrow keys.
 * **Robust pop / back-button** — pop while zoomed snaps every page back to its initial transform first, so any Hero flight starts from a sensible source rect; the first back / Esc on a zoomed photo resets the zoom, the second pops.
 * **No runtime dependencies** beyond the Flutter SDK.
