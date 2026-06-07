@@ -24,9 +24,11 @@ class ViewfinderThumbnailBar extends StatefulWidget {
   final ViewfinderItem Function(int index) itemAt;
   final ValueChanged<int> onSelect;
 
-  /// Mirrors the tile order to match a `reverse: true` pager (ambient
+  /// Mirrors the tile order to match a `reverse: true` pager. Pass the
+  /// raw flag, not the reverse×RTL combination: ambient
   /// `Directionality` already mirrors the underlying [ListView] for
-  /// RTL).
+  /// RTL, exactly as it mirrors the `PageView` — combining would
+  /// mirror twice.
   final bool reverse;
 
   @override
@@ -212,25 +214,21 @@ class _DefaultThumbnailTile extends StatelessWidget {
       ViewfinderImageItem(:final image) => Image(
         image: ResizeImage(image, width: thumbPx, height: thumbPx),
         fit: .cover,
-        width: config.size,
-        height: config.size,
         gaplessPlayback: true,
         errorBuilder:
             config.errorBuilder ??
             (_, _, _) => const ColoredBox(color: colors.white12),
       ),
-      ViewfinderChildItem(:final child) => SizedBox(
-        width: config.size,
-        height: config.size,
-        child: child,
-      ),
+      ViewfinderChildItem(:final child) => child,
     };
-    return AnimatedOpacity(
-      duration: const .new(milliseconds: 150),
-      opacity: selected ? 1.0 : config.unselectedOpacity,
-      child: SizedBox(
-        width: config.size,
-        height: config.size,
+    // The single sizer for the tile — both branches and the border /
+    // clip below inherit its tight constraints.
+    return SizedBox(
+      width: config.size,
+      height: config.size,
+      child: AnimatedOpacity(
+        duration: const .new(milliseconds: 150),
+        opacity: selected ? 1.0 : config.unselectedOpacity,
         child: DecoratedBox(
           // Foreground, so the selection border stays visible over a
           // cover-fit image.

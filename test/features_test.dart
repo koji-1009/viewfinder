@@ -492,6 +492,86 @@ void main() {
     expect(controller.currentIndex, 2);
   });
 
+  testWidgets('mouseWheelBehavior.paging: reverse flips the wheel to match '
+      'the visual order', (tester) async {
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              controller: controller,
+              reverse: true,
+              mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(Viewfinder));
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(center);
+    // In a reversed gallery lower indices sit visually to the RIGHT,
+    // so scrolling right goes to the previous logical page — the same
+    // spatial convention as the arrow keys.
+    await tester.sendEventToBinding(pointer.scroll(const Offset(120, 0)));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 0);
+
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(-120, 0)));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+  });
+
+  testWidgets('decodeSizeMultiplier: a viewport resize preserves the zoom', (
+    tester,
+  ) async {
+    // Regression: the decode-size wrapper is a viewport-sized
+    // ResizeImage, so a resize used to read as a content swap and
+    // silently reset the user's pan/zoom.
+    final scaleEvents = <ViewfinderScaleState>[];
+    Widget host(Size size) => MediaQuery(
+      data: MediaQueryData(size: size),
+      child: MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox.fromSize(
+              size: size,
+              child: Viewfinder(
+                itemCount: 1,
+                decodeSizeMultiplier: 2.0,
+                onScaleStateChanged: (_, s) => scaleEvents.add(s),
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(host(const Size(400, 600)));
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport));
+    await tester.tapAt(center);
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(scaleEvents, [ViewfinderScaleState.zoomed]);
+
+    // Rotate the device: the wrapper's dimensions change, the content
+    // does not — the zoom must survive.
+    await tester.pumpWidget(host(const Size(600, 400)));
+    await settleImages(tester);
+    expect(scaleEvents, [ViewfinderScaleState.zoomed]);
+  });
+
   testWidgets('vertical pager: a tap followed by a vertical drag swipes '
       'the page instead of double-tap-drag zooming', (tester) async {
     final controller = ViewfinderController();
@@ -1395,6 +1475,83 @@ void main() {
     final tile0 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(0)));
     final tile2 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(2)));
     expect(tile0.dx, greaterThan(tile2.dx));
+  });
+
+  // The RTL mirror must apply exactly once to each overlay: the
+  // framework mirrors the dots Row and the thumbnail ListView the same
+  // way it mirrors the PageView, and `reverse` flips on top of that.
+  // (See `_effectiveReverse` for the convention.)
+
+  /// Center of the active (larger) dot and of every dot.
+  (Offset active, List<Offset> all) dotCenters(WidgetTester tester) {
+    Offset? active;
+    final all = <Offset>[];
+    for (final e in find.byType(AnimatedContainer).evaluate()) {
+      final box = e.renderObject! as RenderBox;
+      final center = box.localToGlobal(box.size.center(Offset.zero));
+      all.add(center);
+      if (box.size.width > 9) active = center; // activeDotSize 10 vs 8
+    }
+    return (active!, all);
+  }
+
+  testWidgets('RTL mirrors the dots and the thumbnail strip to match the '
+      'pager', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Viewfinder(
+              itemCount: 3,
+              indicator: const ViewfinderPageIndicatorDots(),
+              thumbnails: const ViewfinderThumbnails(),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // Under RTL page 0 sits visually on the right; tile 0 and the
+    // active dot (current page 0) must too.
+    final tile0 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(0)));
+    final tile2 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(2)));
+    expect(tile0.dx, greaterThan(tile2.dx));
+    final (active, all) = dotCenters(tester);
+    expect(all, hasLength(3));
+    expect(active.dx, all.map((c) => c.dx).reduce(math.max));
+  });
+
+  testWidgets('RTL + reverse: true composes the overlays back to LTR '
+      'order', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Viewfinder(
+              itemCount: 3,
+              reverse: true,
+              indicator: const ViewfinderPageIndicatorDots(),
+              thumbnails: const ViewfinderThumbnails(),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // reverse flips the RTL mirror back: page 0 sits visually on the
+    // left, and so must tile 0 and the active dot.
+    final tile0 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(0)));
+    final tile2 = tester.getCenter(find.byKey(ViewfinderKeys.thumbnail(2)));
+    expect(tile0.dx, lessThan(tile2.dx));
+    final (active, all) = dotCenters(tester);
+    expect(all, hasLength(3));
+    expect(active.dx, all.map((c) => c.dx).reduce(math.min));
   });
 
   testWidgets('chrome overlays clear the thumbnail strip including its '

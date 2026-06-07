@@ -16,6 +16,7 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 ### Bug fixes
 
 * Edge handoff is direction-aware: a zoomed photo flush against one edge pans toward its hidden side instead of swiping pages, and such pans are no longer stolen by the pager or dismiss recognizers. Drag-to-dismiss is disabled while zoomed.
+* Content that overflows the viewport at its initial state (a `contain` / `cover` factor above 1, or rotation) owns pager-axis pans and can fling, instead of being unreachable behind page swipes; edge hand-off still applies.
 * Drag-to-dismiss yields to pinches: a second finger landing before the drag is accepted hands both pointers to the zoom.
 * Two moving fingers claim the gesture immediately, so the pager's drag can no longer steal a pinch off the first finger's drift.
 * `reset()` / `animateToTransform` from a rotated state no longer dip in scale mid-animation.
@@ -32,12 +33,12 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 * `gaplessPlayback` with a `thumbImage` no longer flashes the thumb on a provider swap.
 * Page indicators keep clear of system intrusions (`ViewfinderPageIndicator.safeArea`, default `true`).
 * The thumbnail strip scrolls the selected tile to center on first render, including the strip's leading padding.
-* Disabling dismiss mid-drag springs back instead of leaving the page displaced; the dismiss threshold signal re-arms when `onDismiss` keeps the widget mounted.
+* Disabling dismiss mid-drag springs back instead of leaving the page displaced; the dismiss threshold signal re-arms when `onDismiss` keeps the widget mounted, and a dismissal whose callback doesn't navigate away springs back instead of leaving the gallery dragged out.
 * `ViewfinderController.currentIndex` is clamped after an out-of-range `initialIndex`; a swapped-in controller adopts the current page.
 * `pageSpacing` pads along the pager axis on vertical pagers.
 * Dismiss `threshold` / `onProgress` divide by the viewport height in `slideType: onlyImage`, matching the visuals.
 * Browser pinch zoom (`PointerScaleEvent`) is handled; trackpad two-finger scroll follows the wheel-zoom setting, so `mouseWheelBehavior: paging` pages on trackpads too.
-* `mouseWheelBehavior: paging` splits scrolling by axis: along the pager turns one page per scroll gesture (the momentum tail no longer stutters the transition or skips pages), across it zooms.
+* `mouseWheelBehavior: paging` splits scrolling by axis: along the pager turns one page per scroll gesture (the momentum tail no longer stutters the transition or skips pages), across it zooms. The paging direction tracks `reverse` / RTL like the arrow keys.
 * A tap followed by a horizontal drag swipes the page; double-tap-drag zoom claims only vertically dominant drags.
 
 ### API additions
@@ -45,9 +46,9 @@ The library imports only `package:flutter/widgets.dart` — no Material dependen
 * `loop: true` — wrap-around paging; `jumpTo` / `animateTo` travel the shortest direction.
 * `ViewfinderHero.thumbnailFit` — the default shuttle interpolates between the thumbnail's fit and the viewer's over the flight, landing exactly on the thumbnail's crop.
 * `Viewfinder.filterQuality` — sampling quality for every page.
-* `onLongPress` / `onLongPressStart` / `onSecondaryTapUp` on `ViewfinderImage` and `ViewfinderItem`; forwarded by `Viewfinder.images` (index-aware) and `Viewfinder.single`.
+* `onLongPress` / `onLongPressStart` / `onSecondaryTapUp` on `ViewfinderImage` and `ViewfinderItem`; forwarded by `Viewfinder.images` (index-aware) and `Viewfinder.single`. `Viewfinder.single` also forwards `rubberBandPan`.
 * `Viewfinder.onScaleStateChanged` — coalesced initial ⇄ zoomed transitions of the current page.
-* `ViewfinderImageController.canSwipeToward(AxisDirection)`.
+* `ViewfinderImageController.canSwipeToward(AxisDirection)`; `ViewfinderImageController.contentFits` — whether the content currently fits the viewport.
 * `ViewfinderImageController.rotation` / `jumpToRotation` / `animateToRotation` — programmatic rotation about a focal point, preserving scale and pan; the animation runs in angle space.
 * `ViewfinderImageController.jumpToScale` — instant counterpart of `animateToScale`, for slider-style control.
 * Screen-reader page announcements (`announcePageChanges`, `pageAnnouncementBuilder`); semantics on thumbnail tiles and the dots indicator (`semanticLabelBuilder`).

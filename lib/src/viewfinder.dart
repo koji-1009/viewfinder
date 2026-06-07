@@ -268,6 +268,7 @@ class Viewfinder extends StatefulWidget {
     Duration thumbCrossFadeDuration = const .new(milliseconds: 200),
     Curve thumbCrossFadeCurve = Curves.easeOut,
     bool gaplessPlayback = true,
+    bool rubberBandPan = true,
     ViewfinderScaleStateChanged? onScaleStateChanged,
     bool immersiveSystemUi = false,
     ViewfinderMouseWheelBehavior mouseWheelBehavior = .zoom,
@@ -306,6 +307,7 @@ class Viewfinder extends StatefulWidget {
       chromeController: chromeController,
       chromeOverlays: chromeOverlays,
       chromeFadeDuration: chromeFadeDuration,
+      rubberBandPan: rubberBandPan,
       onScaleStateChanged: onScaleStateChanged,
       immersiveSystemUi: immersiveSystemUi,
       mouseWheelBehavior: mouseWheelBehavior,
@@ -552,10 +554,11 @@ enum ViewfinderMouseWheelBehavior {
   /// Scrolling zooms the photo around the pointer (default).
   zoom,
 
-  /// Scrolling along the pager axis navigates pages (toward the next
-  /// page on down/right); scrolling across it zooms. One scroll
-  /// gesture turns one page. Pinch, double-tap, and double-tap-drag
-  /// still zoom.
+  /// Scrolling along the pager axis navigates pages (toward the
+  /// visually next page on down/right, tracking `reverse` / RTL —
+  /// the same spatial convention as the arrow keys); scrolling across
+  /// it zooms. One scroll gesture turns one page. Pinch, double-tap,
+  /// and double-tap-drag still zoom.
   paging,
 }
 
@@ -585,8 +588,6 @@ class _ViewfinderState extends State<Viewfinder> {
   // mode, where the pager runs on an unbounded index that maps to
   // logical pages modulo itemCount.
   int _currentRawIndex = 0;
-  bool _swipeLocked = false;
-  bool _currentZoomed = false;
   // Raw-index-keyed: each PageView slot owns a distinct controller, so
   // the single-state-attached invariant of `ViewfinderImageController`
   // is preserved even when two slots happen to render the same content
@@ -679,17 +680,10 @@ class _ViewfinderState extends State<Viewfinder> {
     if (rawIndex != _currentRawIndex) return;
     final c = _imageControllers[rawIndex];
     if (c == null) return;
-    final lock = !_canSwipeAlongPager(c);
-    final zoomed = c.scaleState == .zoomed;
-    // The zoom state feeds PopScope.canPop in build — without the
-    // rebuild a reset that doesn't also flip the swipe lock would
-    // leave the back navigation blocked.
-    if (lock != _swipeLocked || zoomed != _currentZoomed) {
-      setState(() {
-        _swipeLocked = lock;
-        _currentZoomed = zoomed;
-      });
-    }
+    // The swipe lock, the dismiss gate, and PopScope.canPop are
+    // derived in build from this controller; _bump coalesces to state
+    // transitions, so this is not a per-frame rebuild.
+    setState(() {});
     _emitScaleState(_currentIndex, c.scaleState);
     _syncChromeWithZoom();
   }
@@ -842,10 +836,6 @@ class _ViewfinderState extends State<Viewfinder> {
       c.dispose();
     }
     _imageControllers.clear();
-    // Fresh controllers start at the initial state; stale flags here
-    // would mis-gate the pager and PopScope until the next transition.
-    _swipeLocked = false;
-    _currentZoomed = false;
     // The rebase changes the raw index space; a target from the old
     // space would mis-base the next relative page turn.
     _navTargetRaw = null;
@@ -959,10 +949,6 @@ class _ViewfinderState extends State<Viewfinder> {
     setState(() {
       _currentRawIndex = rawIndex;
       _currentIndex = logical;
-      // Re-derive swipe lock and zoom state for the new page.
-      final c = _imageControllers[rawIndex];
-      _swipeLocked = c != null && !_canSwipeAlongPager(c);
-      _currentZoomed = c?.scaleState == .zoomed;
     });
     // The page we just left keeps its own TransformationController
     // alive (PageView retains adjacent pages). If the user had zoomed
@@ -1003,7 +989,23 @@ class _ViewfinderState extends State<Viewfinder> {
       _navTargetRaw == null ? _currentIndex : _logicalFor(_navTargetRaw!);
 
   Future<void> _goTo(int index, {bool animate = true}) {
-    if (!_pageController.hasClients) return Future<void>.value();
+    if (!_pageController.hasClients ||
+        !_pageController.position.hasViewportDimension) {
+      // The PageView's position gets its dimensions on first layout. A
+      // navigation issued before that (e.g. controller.jumpTo right
+      // after build) would only rewrite the position's startup page —
+      // no onPageChanged — leaving the gallery's own index bookkeeping
+      // behind. Run after the layout instead.
+      final completer = Completer<void>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          completer.complete(_goTo(index, animate: animate));
+        } else {
+          completer.complete();
+        }
+      });
+      return completer.future;
+    }
     final int targetRaw;
     if (_loopEnabled) {
       // Wrap the target and travel the shortest way around the loop —
@@ -1062,8 +1064,9 @@ class _ViewfinderState extends State<Viewfinder> {
   static const double _kWheelNewGestureJumpFactor = 2.0;
 
   /// Wheel-paging handler ([ViewfinderMouseWheelBehavior.paging]):
-  /// positive deltas (scroll down / right) go to the next logical
-  /// page, negative to the previous.
+  /// wheel input is spatial like the arrow keys — positive deltas
+  /// (scroll down / right) go to the visually next page, tracking
+  /// reverse / RTL.
   ///
   /// One scroll gesture turns one page: deltas accumulate toward a
   /// threshold (so a discrete wheel notch turns immediately while a
@@ -1113,11 +1116,14 @@ class _ViewfinderState extends State<Viewfinder> {
     // when the interrupted animation's future completes.
     final gen = ++_wheelSettleGen;
     setState(() => _wheelSettling = true);
-    _goTo(_navBaseIndex + (delta > 0 ? 1 : -1)).whenComplete(() {
-      if (mounted && gen == _wheelSettleGen) {
-        setState(() => _wheelSettling = false);
-      }
-    });
+    final visualStep = _effectiveReverse ? -1 : 1;
+    _goTo(_navBaseIndex + (delta > 0 ? visualStep : -visualStep)).whenComplete(
+      () {
+        if (mounted && gen == _wheelSettleGen) {
+          setState(() => _wheelSettling = false);
+        }
+      },
+    );
   }
 
   void _armWheelCooldown() {
@@ -1196,6 +1202,15 @@ class _ViewfinderState extends State<Viewfinder> {
   /// indices. [Viewfinder.reverse] flips it explicitly; a horizontal
   /// [PageView] additionally lays out right-to-left under an RTL
   /// [Directionality], so the two XOR.
+  ///
+  /// Convention for direction consumers — there is exactly one place
+  /// the RTL mirror may be applied, never two:
+  /// - Layout widgets (the [PageView], the dots indicator's `Row`, the
+  ///   thumbnail `ListView`) receive the raw [Viewfinder.reverse]: the
+  ///   framework already mirrors them under RTL, so handing them this
+  ///   XOR would mirror twice.
+  /// - Non-layout logic with no framework mirroring (arrow keys, edge
+  ///   handoff, wheel paging) uses this getter.
   bool get _effectiveReverse {
     final rtl =
         widget.pagerAxis == .horizontal &&
@@ -1219,24 +1234,29 @@ class _ViewfinderState extends State<Viewfinder> {
     ViewfinderImageController c,
     AxisDirection direction,
   ) {
-    final zoomed = c.scaleState == .zoomed;
-    // Pans a page keeps for itself: claim while zoomed (ancestors
+    // The image owns pans while its content overflows the viewport —
+    // zoomed past the baseline, an initial-scale factor above 1, or
+    // rotated at the initial scale. `scaleState` alone is blind to
+    // the latter two, which would leave overflowing content
+    // unreachable: every pan would go to the pager (or dismiss).
+    final engaged = !c.contentFits;
+    // Pans a page keeps for itself: claim while engaged (ancestors
     // accept at hit-slop, before the scale recognizer's pan-slop);
-    // compete while unzoomed so taps/swipes/dismiss resolve normally.
-    final ViewfinderPanVerdict keep = zoomed ? .claim : .compete;
+    // compete otherwise so taps/swipes/dismiss resolve normally.
+    final ViewfinderPanVerdict keep = engaged ? .claim : .compete;
     // Only gate the axis the PageView scrolls on; the other axis is
     // always the image's own.
     if (axisDirectionToAxis(direction) != widget.pagerAxis) return keep;
     // Adjacent pre-built pages keep their own pan.
     if (rawIndex != _currentRawIndex) return keep;
-    // Not zoomed: the pager owns pager-axis drags — unconditional,
+    // Content fits: the pager owns pager-axis drags — unconditional,
     // regardless of the handoff setting. (Touch would resolve the same
     // way via arena timing; the mouse pan-slop of 4 px would not.)
-    if (!zoomed) return .release;
-    // Zoomed: handoff disabled means the image consumes all pan even
+    if (!engaged) return .release;
+    // Engaged: handoff disabled means the image consumes all pan even
     // at the edge — user must reset zoom before swiping.
     if (!widget.allowEdgeHandoff) return .claim;
-    // Zoomed: release to the PageView only when the content has no
+    // Engaged: release to the PageView only when the content has no
     // more room in the drag's own direction AND a page exists in the
     // drag's navigation direction (a looping pager always has one).
     if (c.canSwipeToward(direction)) {
@@ -1277,6 +1297,15 @@ class _ViewfinderState extends State<Viewfinder> {
 
   @override
   Widget build(BuildContext context) {
+    // Derived per build from the current page's controller — the
+    // single source of truth for the swipe lock, the dismiss gate,
+    // and PopScope.canPop. The controller's listener rebuilds on each
+    // (coalesced) state transition.
+    final currentImage = _imageControllers[_currentRawIndex];
+    final swipeLocked =
+        currentImage != null && !_canSwipeAlongPager(currentImage);
+    final currentZoomed = currentImage?.scaleState == .zoomed;
+
     Widget pageView = PageView.builder(
       controller: _pageController,
       scrollDirection: widget.pagerAxis,
@@ -1287,7 +1316,7 @@ class _ViewfinderState extends State<Viewfinder> {
       onPageChanged: _onPageChanged,
       allowImplicitScrolling: widget.allowImplicitScrolling,
       restorationId: widget.restorationId,
-      physics: _swipeLocked || _wheelSettling
+      physics: swipeLocked || _wheelSettling
           ? const NeverScrollableScrollPhysics()
           : widget.scrollPhysics ?? const PageScrollPhysics(),
       itemBuilder: (context, rawIndex) {
@@ -1379,7 +1408,7 @@ class _ViewfinderState extends State<Viewfinder> {
         when dismiss.slideType == .onlyImage) {
       pager = ViewfinderDismissible(
         config: dismiss,
-        enabled: !_swipeLocked,
+        enabled: !swipeLocked,
         child: pager,
       );
     }
@@ -1459,7 +1488,7 @@ class _ViewfinderState extends State<Viewfinder> {
         when dismiss.slideType == .wholePage) {
       body = ViewfinderDismissible(
         config: dismiss,
-        enabled: !_swipeLocked,
+        enabled: !swipeLocked,
         child: body,
       );
     }
@@ -1481,7 +1510,7 @@ class _ViewfinderState extends State<Viewfinder> {
     //    the callback *before* the Hero flight reads the source rect,
     //    so hero transitions stay coherent.
     body = PopScope<Object?>(
-      canPop: !_currentZoomed,
+      canPop: !currentZoomed,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           _jumpAllImagesToInitial();
@@ -1523,10 +1552,12 @@ class ViewfinderController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Jump to [index] without animation. No-op if not attached.
+  /// Jump to [index] without animation. No-op if not attached; issued
+  /// before the pager's first layout, it applies right after it.
   void jumpTo(int index) => _state?._goTo(index, animate: false);
 
-  /// Animate to [index]. No-op if not attached.
+  /// Animate to [index]. No-op if not attached; issued before the
+  /// pager's first layout, it applies right after it.
   void animateTo(int index) => _state?._goTo(index, animate: true);
 
   /// Reset the current page's zoom if it is zoomed in.

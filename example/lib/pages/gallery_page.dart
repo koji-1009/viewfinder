@@ -66,7 +66,7 @@ class _GalleryGrid extends StatelessWidget {
             ),
           ),
           SliverPadding(
-            padding: .all(8),
+            padding: const .all(8),
             sliver: SliverGrid.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
@@ -76,11 +76,11 @@ class _GalleryGrid extends StatelessWidget {
               itemCount: images.length,
               itemBuilder: (ctx, i) {
                 final thumb = ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image(image: images[i], fit: BoxFit.cover),
+                  borderRadius: .circular(8),
+                  child: Image(image: images[i], fit: .cover),
                 );
                 return InkWell(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: .circular(8),
                   // Pushed routes live outside this page's
                   // _SettingsScope subtree; re-provide the same
                   // settings instance.
@@ -161,23 +161,23 @@ class _GalleryViewerState extends State<_GalleryViewer> {
   ViewfinderThumbnails? _buildThumbnails(_Settings s) {
     if (!s.thumbnailsEnabled) return null;
     if (s.thumbnailsCustomBuilder) {
-      return ViewfinderThumbnails.custom(
+      return .custom(
         position: s.thumbnailsPosition,
         size: 64,
         safeArea: s.thumbnailsSafeArea,
         itemBuilder: (context, index, selected) => Material(
           color: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: .circular(8),
             side: BorderSide(
               color: selected ? Colors.amber : Colors.transparent,
               width: 3,
             ),
           ),
-          clipBehavior: Clip.hardEdge,
+          clipBehavior: .hardEdge,
           child: Image(
             image: DemoPhotos.images[index],
-            fit: BoxFit.cover,
+            fit: .cover,
             width: 64,
             height: 64,
           ),
@@ -241,10 +241,7 @@ class _GalleryViewerState extends State<_GalleryViewer> {
           // thumbnailFit matches the grid tiles, so the pop flight
           // lands exactly on their cover crop.
           hero: s.heroEnabled
-              ? ViewfinderHero(
-                  'gallery-photo-$index',
-                  thumbnailFit: BoxFit.cover,
-                )
+              ? ViewfinderHero('gallery-photo-$index', thumbnailFit: .cover)
               : null,
           semanticLabel: 'Photo ${index + 1}',
           errorBuilder: (_, _, _) => const DemoBrokenImage(),
@@ -287,7 +284,7 @@ class _ChromeBar extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Tap photo to toggle this bar',
-                  style: TextStyle(color: scheme.onSurface),
+                  style: .new(color: scheme.onSurface),
                 ),
               ),
               const SizedBox(width: 8),
@@ -310,7 +307,7 @@ class _SettingsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = _Settings.of(context);
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const .symmetric(horizontal: 16),
       children: [
         const _SectionLabel('Pager'),
         ListTile(
@@ -318,15 +315,15 @@ class _SettingsSheet extends StatelessWidget {
           title: const Text('pagerAxis'),
           trailing: SegmentedButton<Axis>(
             segments: const [
-              ButtonSegment(value: Axis.horizontal, label: Text('horiz')),
-              ButtonSegment(value: Axis.vertical, label: Text('vert')),
+              ButtonSegment(value: .horizontal, label: Text('horiz')),
+              ButtonSegment(value: .vertical, label: Text('vert')),
             ],
             selected: {settings.pagerAxis},
             onSelectionChanged: (value) => settings.update(() {
               settings.pagerAxis = value.first;
               // Vertical pager + dismiss assert together; drop dismiss
               // automatically so the live toggle never crashes.
-              if (settings.pagerAxis == Axis.vertical) {
+              if (settings.pagerAxis == .vertical) {
                 settings.dismissEnabled = false;
               }
             }),
@@ -337,14 +334,8 @@ class _SettingsSheet extends StatelessWidget {
           title: const Text('mouseWheelBehavior'),
           trailing: SegmentedButton<ViewfinderMouseWheelBehavior>(
             segments: const [
-              ButtonSegment(
-                value: ViewfinderMouseWheelBehavior.zoom,
-                label: Text('zoom'),
-              ),
-              ButtonSegment(
-                value: ViewfinderMouseWheelBehavior.paging,
-                label: Text('paging'),
-              ),
+              ButtonSegment(value: .zoom, label: Text('zoom')),
+              ButtonSegment(value: .paging, label: Text('paging')),
             ],
             selected: {settings.mouseWheelBehavior},
             onSelectionChanged: (value) => settings.update(
@@ -411,18 +402,9 @@ class _SettingsSheet extends StatelessWidget {
           title: const Text('defaultInitialScale'),
           subtitle: SegmentedButton<ViewfinderInitialScale>(
             segments: const [
-              ButtonSegment(
-                value: ViewfinderInitialScale.contain(),
-                label: Text('contain'),
-              ),
-              ButtonSegment(
-                value: ViewfinderInitialScale.cover(),
-                label: Text('cover'),
-              ),
-              ButtonSegment(
-                value: ViewfinderInitialScale.contain(1.5),
-                label: Text('contain(1.5)'),
-              ),
+              ButtonSegment(value: .contain(), label: Text('contain')),
+              ButtonSegment(value: .cover(), label: Text('cover')),
+              ButtonSegment(value: .contain(1.5), label: Text('contain(1.5)')),
             ],
             selected: {settings.initialScale},
             onSelectionChanged: (s) =>
@@ -445,22 +427,22 @@ class _SettingsSheet extends StatelessWidget {
               showSelectedIcon: false,
               segments: const [
                 ButtonSegment(
-                  value: ViewfinderThumbnailPosition.top,
+                  value: .top,
                   icon: Icon(Icons.keyboard_arrow_up),
                   tooltip: 'top',
                 ),
                 ButtonSegment(
-                  value: ViewfinderThumbnailPosition.bottom,
+                  value: .bottom,
                   icon: Icon(Icons.keyboard_arrow_down),
                   tooltip: 'bottom',
                 ),
                 ButtonSegment(
-                  value: ViewfinderThumbnailPosition.left,
+                  value: .left,
                   icon: Icon(Icons.keyboard_arrow_left),
                   tooltip: 'left',
                 ),
                 ButtonSegment(
-                  value: ViewfinderThumbnailPosition.right,
+                  value: .right,
                   icon: Icon(Icons.keyboard_arrow_right),
                   tooltip: 'right',
                 ),
@@ -505,14 +487,14 @@ class _SettingsSheet extends StatelessWidget {
         SwitchListTile(
           dense: true,
           title: const Text('enabled'),
-          subtitle: settings.pagerAxis == Axis.vertical
+          subtitle: settings.pagerAxis == .vertical
               ? const Text(
                   'Disabled while pagerAxis is vertical — both read '
                   'vertical drags.',
                 )
               : null,
           value: settings.dismissEnabled,
-          onChanged: settings.pagerAxis == Axis.vertical
+          onChanged: settings.pagerAxis == .vertical
               ? null
               : (v) => settings.update(() => settings.dismissEnabled = v),
         ),
@@ -522,14 +504,8 @@ class _SettingsSheet extends StatelessWidget {
             title: const Text('slideType'),
             subtitle: SegmentedButton<ViewfinderDismissSlideType>(
               segments: const [
-                ButtonSegment(
-                  value: ViewfinderDismissSlideType.wholePage,
-                  label: Text('wholePage'),
-                ),
-                ButtonSegment(
-                  value: ViewfinderDismissSlideType.onlyImage,
-                  label: Text('onlyImage'),
-                ),
+                ButtonSegment(value: .wholePage, label: Text('wholePage')),
+                ButtonSegment(value: .onlyImage, label: Text('onlyImage')),
               ],
               selected: {settings.dismissSlide},
               onSelectionChanged: (s) =>
@@ -563,9 +539,7 @@ class _SettingsSheet extends StatelessWidget {
               selected: {settings.chromeAutoHideAfter?.inSeconds ?? -1},
               onSelectionChanged: (s) => settings.update(() {
                 final v = s.first;
-                settings.chromeAutoHideAfter = v < 0
-                    ? null
-                    : Duration(seconds: v);
+                settings.chromeAutoHideAfter = v < 0 ? null : .new(seconds: v);
               }),
             ),
           ),
@@ -582,7 +556,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(0, 16, 0, 4),
+    padding: const .fromLTRB(0, 16, 0, 4),
     child: Text(text, style: Theme.of(context).textTheme.titleSmall),
   );
 }
@@ -596,18 +570,16 @@ class _Settings extends ChangeNotifier {
   static _Settings of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_SettingsScope>()!.notifier!;
 
-  Axis pagerAxis = Axis.horizontal;
-  ViewfinderMouseWheelBehavior mouseWheelBehavior =
-      ViewfinderMouseWheelBehavior.zoom;
+  Axis pagerAxis = .horizontal;
+  ViewfinderMouseWheelBehavior mouseWheelBehavior = .zoom;
   int precacheAdjacent = 2;
   Set<PointerDeviceKind> dragDevices = kViewfinderDefaultSwipeDragDevices;
   bool rotateEnabled = false;
-  ViewfinderInitialScale initialScale = const ViewfinderInitialScale.contain();
+  ViewfinderInitialScale initialScale = const .contain();
   bool heroEnabled = true;
 
   bool thumbnailsEnabled = true;
-  ViewfinderThumbnailPosition thumbnailsPosition =
-      ViewfinderThumbnailPosition.bottom;
+  ViewfinderThumbnailPosition thumbnailsPosition = .bottom;
   bool thumbnailsCustomBuilder = false;
   bool thumbnailsSafeArea = true;
 
@@ -615,12 +587,11 @@ class _Settings extends ChangeNotifier {
   bool indicatorForceNumeric = false;
 
   bool dismissEnabled = true;
-  ViewfinderDismissSlideType dismissSlide =
-      ViewfinderDismissSlideType.wholePage;
+  ViewfinderDismissSlideType dismissSlide = .wholePage;
 
   bool chromeEnabled = true;
   bool chromeAutoHideWhileZoomed = true;
-  Duration? chromeAutoHideAfter = const Duration(seconds: 3);
+  Duration? chromeAutoHideAfter = const .new(seconds: 3);
 
   void update(VoidCallback f) {
     f();
@@ -631,15 +602,15 @@ class _Settings extends ChangeNotifier {
 /// Preset device sets for the swipeDragDevices dropdown. Const so the
 /// dropdown's identity-based selection works.
 const Set<PointerDeviceKind> _touchLikeDevices = {
-  PointerDeviceKind.touch,
-  PointerDeviceKind.stylus,
-  PointerDeviceKind.invertedStylus,
+  .touch,
+  .stylus,
+  .invertedStylus,
 };
 
 const Set<PointerDeviceKind> _allButMouseDevices = {
-  PointerDeviceKind.touch,
-  PointerDeviceKind.stylus,
-  PointerDeviceKind.invertedStylus,
-  PointerDeviceKind.trackpad,
-  PointerDeviceKind.unknown,
+  .touch,
+  .stylus,
+  .invertedStylus,
+  .trackpad,
+  .unknown,
 };

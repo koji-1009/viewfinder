@@ -37,6 +37,24 @@ const double _kDoubleTapDragPixelsPerUnit = 150.0;
 /// released. Symmetric with [kMinFlingVelocity] (50 px/sec) for pan.
 const double _kMinScaleFlingVelocity = 0.3;
 
+/// What scroll-style input (mouse wheel, trackpad two-finger scroll)
+/// means for a viewport. Resolved once from the widget's
+/// [ZoomableViewport.enableMouseWheelZoom] knob and the enclosing
+/// gallery's wheel-paging mode, so every read site consults a single
+/// unambiguous value instead of re-combining the two.
+enum _ScrollZoomPolicy {
+  /// Scroll-style input never zooms; it bubbles to enclosing
+  /// scrollables.
+  off,
+
+  /// Scroll on either axis zooms around the pointer.
+  anyAxis,
+
+  /// Only cross-axis scroll zooms; pager-axis scroll belongs to the
+  /// gallery's wheel paging.
+  crossAxisOnly,
+}
+
 /// The zoom-and-pan surface that backs the photo viewer.
 ///
 /// - Focal-preserving pinch/pan/rotate via a custom
@@ -154,7 +172,12 @@ class _ZoomableViewportState extends State<ZoomableViewport>
 
   // From the enclosing gallery page's PagerScope, if any.
   Axis? _pagerAxis;
-  Axis? _wheelPagingAxis;
+  bool _wheelPaging = false;
+
+  _ScrollZoomPolicy get _scrollZoomPolicy {
+    if (!widget.enableMouseWheelZoom) return .off;
+    return _wheelPaging && _pagerAxis != null ? .crossAxisOnly : .anyAxis;
+  }
 
   @override
   void initState() {
@@ -173,7 +196,7 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     super.didChangeDependencies();
     final scope = PagerScope.maybeOf(context);
     _pagerAxis = scope?.axis;
-    _wheelPagingAxis = (scope?.wheelPaging ?? false) ? scope?.axis : null;
+    _wheelPaging = scope?.wheelPaging ?? false;
   }
 
   @override
@@ -273,7 +296,11 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     final dx = (clamped.storage[12] - current.storage[12]).abs();
     final dy = (clamped.storage[13] - current.storage[13]).abs();
     if (dx < 0.5 && dy < 0.5) return;
-    if (_reduceMotion) {
+    final scale = xyScale(current);
+    if (_reduceMotion || !scale.isFinite || scale <= 0) {
+      // Reduced motion jumps by request; a degenerate matrix (possible
+      // via jumpToTransform) jumps by necessity — Matrix4Tween
+      // decomposes its endpoints, and a singular one decomposes to NaN.
       _setTransform(clamped);
       return;
     }
@@ -323,14 +350,17 @@ class _ZoomableViewportState extends State<ZoomableViewport>
         );
     }
 
-    var next = buildDelta(scale).multiplied(_startMatrix);
-
-    // Clamp scale.
-    final actualScale = xyScale(next);
-    if (actualScale < widget.minScale || actualScale > widget.maxScale) {
-      final target = actualScale.clamp(widget.minScale, widget.maxScale);
-      next = buildDelta(scale * target / actualScale).multiplied(_startMatrix);
-    }
+    // xyScale(delta · start) == effectiveScale × xyScale(start):
+    // rotation preserves column norms and the focal translations leave
+    // the linear block untouched — so the scale clamp can run on the
+    // factor before the matrix is built.
+    final startScale = xyScale(_startMatrix);
+    // A degenerate start matrix (zero or non-finite scale, possible
+    // via jumpToTransform, which bypasses validation) has no sane
+    // gesture response; bail rather than divide into a NaN matrix.
+    if (!startScale.isFinite || startScale <= 0) return;
+    final target = (scale * startScale).clamp(widget.minScale, widget.maxScale);
+    final next = buildDelta(target / startScale).multiplied(_startMatrix);
 
     _setTransform(
       _clampMatrix(next, reportEdge: true, elastic: widget.rubberBandPan),
@@ -346,8 +376,14 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     final currentScale = xyScale(m);
 
     // Pan fling only meaningful when the content actually overflows the
-    // viewport — at content == viewport size there is no over-pan room.
-    final hasPanFling = v.distance >= kMinFlingVelocity && currentScale > 1.01;
+    // viewport — when it fits there is no pan room. Checked on the bbox
+    // (not a scale threshold) so initial-scale factors above 1 and
+    // rotated content gate correctly too.
+    final bbox = contentBbox(m, _viewport);
+    final overflows =
+        bbox.maxX - bbox.minX > _viewport.width + 0.5 ||
+        bbox.maxY - bbox.minY > _viewport.height + 0.5;
+    final hasPanFling = v.distance >= kMinFlingVelocity && overflows;
     // Scale fling: any time the user released with meaningful pinch
     // velocity, regardless of current scale (including when starting
     // exactly at minScale).
@@ -390,6 +426,29 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       ..animateWith(FlingTimeDriver(runner.simX, runner.simY, runner.simScale));
   }
 
+  /// Matrix for zooming [start] by [factor] around [focal], with the
+  /// resulting scale clamped to the widget bounds and the translation
+  /// clamp applied. Returns null when the change is negligible or
+  /// [start] is degenerate (zero or non-finite scale).
+  Matrix4? _focalZoom({
+    required Matrix4 start,
+    required Offset focal,
+    required double factor,
+  }) {
+    final currentScale = xyScale(start);
+    if (!currentScale.isFinite || currentScale <= 0) return null;
+    final targetScale = (currentScale * factor).clamp(
+      widget.minScale,
+      widget.maxScale,
+    );
+    if ((targetScale - currentScale).abs() < 1e-6) return null;
+    final delta = scaleAroundFocal(
+      focal: focal,
+      scale: targetScale / currentScale,
+    );
+    return _clampMatrix(delta.multiplied(start));
+  }
+
   // ---------------- double-tap-drag ---------------- //
 
   void _onDoubleTapDragStart(Offset localPosition) {
@@ -406,14 +465,8 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     final dy = localPosition.dy - _dtdStartDragPoint.dy;
     // Up = zoom in, down = zoom out (iOS Photos convention).
     final factor = math.pow(2.0, -dy / _kDoubleTapDragPixelsPerUnit).toDouble();
-    final currentScaleAtStart = xyScale(start);
-    final targetScale = (currentScaleAtStart * factor).clamp(
-      widget.minScale,
-      widget.maxScale,
-    );
-    final effective = targetScale / currentScaleAtStart;
-    final delta = scaleAroundFocal(focal: _dtdFocal, scale: effective);
-    _setTransform(_clampMatrix(delta.multiplied(start)));
+    final next = _focalZoom(start: start, focal: _dtdFocal, factor: factor);
+    if (next != null) _setTransform(next);
   }
 
   void _onDoubleTapDragEnd() {
@@ -436,10 +489,10 @@ class _ZoomableViewportState extends State<ZoomableViewport>
       case PointerScaleEvent(:final scale):
         factor = scale;
       case PointerScrollEvent(:final scrollDelta)
-          when widget.enableMouseWheelZoom:
+          when _scrollZoomPolicy != .off:
         final double zoomDelta;
-        if (_wheelPagingAxis case final axis?) {
-          final (:along, :cross) = splitScrollDelta(scrollDelta, axis);
+        if (_scrollZoomPolicy == .crossAxisOnly) {
+          final (:along, :cross) = splitScrollDelta(scrollDelta, _pagerAxis!);
           // Pager-axis-dominant scroll belongs to the pager.
           if (along.abs() > cross.abs()) return;
           zoomDelta = cross;
@@ -455,17 +508,13 @@ class _ZoomableViewportState extends State<ZoomableViewport>
 
     _stopFling();
     _stopSnapBack();
-    final focal = event.localPosition;
-    final start = widget.transformationController.value;
-    final currentScale = xyScale(start);
-    final targetScale = (currentScale * factor).clamp(
-      widget.minScale,
-      widget.maxScale,
+    final next = _focalZoom(
+      start: widget.transformationController.value,
+      focal: event.localPosition,
+      factor: factor,
     );
-    if ((targetScale - currentScale).abs() < 1e-6) return;
-    final effective = targetScale / currentScale;
-    final delta = scaleAroundFocal(focal: focal, scale: effective);
-    _setTransform(_clampMatrix(delta.multiplied(start)));
+    if (next == null) return;
+    _setTransform(next);
     // Consume so scrollables above us don't also handle it.
     GestureBinding.instance.pointerSignalResolver.register(event, (event) {});
   }
@@ -502,7 +551,16 @@ class _ZoomableViewportState extends State<ZoomableViewport>
     final extent = max - min;
     if (extent <= viewportDim) {
       // Content smaller than viewport on this axis → center it.
-      return (viewportDim - extent) / 2 - min;
+      final toCenter = (viewportDim - extent) / 2 - min;
+      if (!elastic) return toCenter;
+      // Elastic: rubber-band around the centered position. Hard-
+      // centering here while the overflow branch below gives
+      // elastically would make the displayed position discontinuous at
+      // extent == viewportDim — a two-finger drag at the initial scale
+      // jitters d.scale across 1.0, so the content would flicker
+      // between centered and dragged on alternating frames.
+      return toCenter -
+          toCenter.sign * _rubberBand(toCenter.abs(), viewportDim);
     }
     // Allow the bbox to span the full viewport; nudge back when
     // off-edge.
@@ -590,10 +648,11 @@ class _ZoomableViewportState extends State<ZoomableViewport>
             ),
             (r) {
               r
-                // Trackpad two-finger scroll zooms only when wheel
-                // scroll does — both are scroll-style input. Pinch
-                // zooms regardless.
-                ..trackpadScrollCausesScale = widget.enableMouseWheelZoom
+                // Trackpad two-finger scroll zooms only under the
+                // any-axis policy: it is scroll-style input, and the
+                // recognizer's flag cannot split by axis the way the
+                // wheel path does. Pinch zooms regardless.
+                ..trackpadScrollCausesScale = _scrollZoomPolicy == .anyAxis
                 ..onStart = _onScaleStart
                 ..onUpdate = _onScaleUpdate
                 ..onEnd = _onScaleEnd;

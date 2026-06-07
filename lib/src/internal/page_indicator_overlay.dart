@@ -20,8 +20,11 @@ class ViewfinderPageIndicatorOverlay extends StatelessWidget {
   final int itemCount;
   final int currentIndex;
 
-  /// Mirrors the dot order to match a `reverse: true` pager (ambient
-  /// `Directionality` already mirrors the underlying [Row] for RTL).
+  /// Mirrors the dot order to match a `reverse: true` pager. Pass the
+  /// raw flag, not the reverse×RTL combination: ambient
+  /// `Directionality` already mirrors the underlying [Row] for RTL,
+  /// exactly as it mirrors the `PageView` — combining would mirror
+  /// twice.
   final bool reverse;
 
   @override

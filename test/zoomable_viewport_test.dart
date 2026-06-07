@@ -1383,4 +1383,51 @@ void main() {
       expect(during, equals(before));
     });
   });
+
+  group('elastic clamp continuity at the fit scale', () {
+    testWidgets('a two-finger parallel drag at the fit scale follows the '
+        'fingers elastically instead of snapping to center', (tester) async {
+      // Regression: the fits branch of the translation clamp used to
+      // hard-center while the overflow branch rubber-banded. Real
+      // fingers jitter d.scale across 1.0, so a two-finger drag
+      // flickered between centered and dragged on alternating frames.
+      final controller = TransformationController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomableViewport(
+              transformationController: controller,
+              child: Container(color: Colors.blue),
+            ),
+          ),
+        ),
+      );
+
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+      // Two fingers move 100 px right with their spacing slightly
+      // shrunk (80 → 76 px): the pinch scale clamps back to 1.0 — the
+      // case that used to snap the content back to center.
+      final p1 = await tester.startGesture(
+        center - const Offset(40, 0),
+        pointer: 1,
+      );
+      final p2 = await tester.startGesture(
+        center + const Offset(40, 0),
+        pointer: 2,
+      );
+      await tester.pump();
+      await p1.moveTo(center + const Offset(62, 0));
+      await p2.moveTo(center + const Offset(138, 0));
+      await tester.pump();
+
+      // Mid-gesture the content follows the fingers with elastic give.
+      expect(controller.value.storage[12], greaterThan(20.0));
+
+      await p1.up();
+      await p2.up();
+      await tester.pumpAndSettle();
+      // And springs back to the centered position on release.
+      expect(controller.value.storage[12], closeTo(0.0, 0.5));
+    });
+  });
 }

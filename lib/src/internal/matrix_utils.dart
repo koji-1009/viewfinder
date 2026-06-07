@@ -50,23 +50,23 @@ Offset applyMatrix2D(Matrix4 m, Offset p) {
   Matrix4 m,
   Size viewport,
 ) {
-  final corners = <Offset>[
-    applyMatrix2D(m, Offset.zero),
-    applyMatrix2D(m, Offset(viewport.width, 0)),
-    applyMatrix2D(m, Offset(0, viewport.height)),
-    applyMatrix2D(m, Offset(viewport.width, viewport.height)),
-  ];
-  var minX = corners.first.dx;
-  var maxX = corners.first.dx;
-  var minY = corners.first.dy;
-  var maxY = corners.first.dy;
-  for (final p in corners.skip(1)) {
-    if (p.dx < minX) minX = p.dx;
-    if (p.dx > maxX) maxX = p.dx;
-    if (p.dy < minY) minY = p.dy;
-    if (p.dy > maxY) maxY = p.dy;
-  }
-  return (minX: minX, maxX: maxX, minY: minY, maxY: maxY);
+  // Unrolled into locals: this runs per frame during gestures and
+  // animations (translation clamp + swipe-gate derivation), so no
+  // per-call allocation.
+  final v = m.storage;
+  final w = viewport.width;
+  final h = viewport.height;
+  final x0 = v[12], y0 = v[13]; // (0, 0)
+  final x1 = v[0] * w + v[12], y1 = v[1] * w + v[13]; // (w, 0)
+  final x2 = v[4] * h + v[12], y2 = v[5] * h + v[13]; // (0, h)
+  final x3 = v[0] * w + v[4] * h + v[12]; // (w, h)
+  final y3 = v[1] * w + v[5] * h + v[13];
+  return (
+    minX: math.min(math.min(x0, x1), math.min(x2, x3)),
+    maxX: math.max(math.max(x0, x1), math.max(x2, x3)),
+    minY: math.min(math.min(y0, y1), math.min(y2, y3)),
+    maxY: math.max(math.max(y0, y1), math.max(y2, y3)),
+  );
 }
 
 /// 2D scale factor of [m], derived from the X column length.

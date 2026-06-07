@@ -26,7 +26,7 @@ class SinglePhotoPage extends StatelessWidget {
                 'card below to open it with a Hero flight.',
           ),
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: .fromLTRB(16, 16, 16, 0),
             child: InputHints(
               hints: [
                 (icon: Icons.mouse_outlined, label: 'Wheel to zoom'),
@@ -38,23 +38,20 @@ class SinglePhotoPage extends StatelessWidget {
           Expanded(
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const .all(24),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+                  constraints: const .new(maxWidth: 480),
                   child: AspectRatio(
                     aspectRatio: 3 / 4,
                     child: Material(
                       elevation: 2,
-                      clipBehavior: Clip.antiAlias,
-                      borderRadius: BorderRadius.circular(16),
+                      clipBehavior: .antiAlias,
+                      borderRadius: .circular(16),
                       child: InkWell(
                         onTap: () => _open(context),
                         child: Hero(
                           tag: _heroTag,
-                          child: Image(
-                            image: DemoPhotos.portrait,
-                            fit: BoxFit.cover,
-                          ),
+                          child: Image(image: DemoPhotos.portrait, fit: .cover),
                         ),
                       ),
                     ),
@@ -87,7 +84,7 @@ class _SinglePhotoViewer extends StatelessWidget {
         backgroundColor: scheme.surface,
         hero: const ViewfinderHero(
           SinglePhotoPage._heroTag,
-          thumbnailFit: BoxFit.cover,
+          thumbnailFit: .cover,
         ),
         semanticLabel: 'Single demo photo',
         maxScale: 10,
