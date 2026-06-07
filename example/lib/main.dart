@@ -91,100 +91,13 @@ class _HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverToBoxAdapter(child: _Header()),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            sliver: SliverLayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.crossAxisExtent;
-                final columns = width >= 1100
-                    ? 3
-                    : width >= 680
-                    ? 2
-                    : 1;
-                return SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    mainAxisExtent: 132,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => _ScenarioCard(scenario: _scenarios[i]),
-                    childCount: _scenarios.length,
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    return ColoredBox(
-      color: scheme.surfaceContainerHigh,
-      child: SafeArea(
-        bottom: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1100),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.camera_outlined,
-                        size: 36,
-                        color: scheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'viewfinder',
-                        style: text.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'A photo viewer for Flutter — pinch / double-tap / rotation '
-                    'zoom, an arena-aware gesture layer that hands edge pans to '
-                    'a parent PageView, drag-to-dismiss, a synchronized '
-                    'thumbnail strip, a page indicator, and keyboard shortcuts.',
-                    style: text.bodyLarge?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Pick a scenario',
-                    style: text.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      appBar: AppBar(title: Text('viewfinder')),
+      body: ListView.separated(
+        padding: const .symmetric(horizontal: 16),
+        separatorBuilder: (context, index) => const SizedBox(height: 16),
+        itemBuilder: (context, index) =>
+            _ScenarioCard(scenario: _scenarios[index]),
+        itemCount: _scenarios.length,
       ),
     );
   }
@@ -198,56 +111,24 @@ class _ScenarioCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      margin: EdgeInsets.zero,
-      child: InkWell(
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: scenario.builder)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Material(
-                color: scheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox.square(
-                  dimension: 44,
-                  child: Icon(scenario.icon, color: scheme.onPrimaryContainer),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      scenario.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Expanded(
-                      child: Text(
-                        scenario.subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          height: 1.3,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
-            ],
-          ),
+    return Card.filled(
+      margin: .zero,
+      clipBehavior: .antiAlias,
+      child: ListTile(
+        onTap: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: scenario.builder));
+        },
+        title: Text(scenario.title),
+        subtitle: Text(scenario.subtitle, maxLines: 3, overflow: .ellipsis),
+        leading: Material(
+          color: scheme.primaryContainer,
+          borderRadius: .circular(12),
+          clipBehavior: .antiAlias,
+          child: SizedBox.square(dimension: 44, child: Icon(scenario.icon)),
         ),
+        trailing: Icon(Icons.chevron_right),
       ),
     );
   }

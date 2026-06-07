@@ -64,26 +64,23 @@ class DemoHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final fg = scheme.onSurfaceVariant;
-    return SafeArea(
-      bottom: false,
-      child: ColoredBox(
-        color: scheme.surfaceContainerHighest,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: fg),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  message,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: fg, height: 1.35),
-                ),
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const .symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: fg),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: fg, height: 1.35),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

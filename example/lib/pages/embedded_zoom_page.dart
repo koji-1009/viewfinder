@@ -16,26 +16,28 @@ class EmbeddedZoomPage extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     // Cap the article width with the ListView's own padding — an outer
     // ConstrainedBox would leave the side margins outside the scrollable.
-    final inset = ((MediaQuery.sizeOf(context).width - 720) / 2).clamp(
+    final inset = ((MediaQuery.widthOf(context) - 720) / 2).clamp(
       16.0,
       double.infinity,
     );
     return Scaffold(
       appBar: AppBar(title: const Text('Embedded zoom')),
-      body: Column(
-        children: [
-          const DemoHint(
-            icon: Icons.article_outlined,
-            message:
-                'ViewfinderImage works inline, not just full-screen. '
-                'Scrolling always scrolls the article — zoom the figures '
-                'with pinch or double-tap (enableMouseWheelZoom: false). '
-                'The second figure uses ViewfinderImage.child to zoom a '
-                'non-image widget.',
+      body: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(
+            child: DemoHint(
+              icon: Icons.article_outlined,
+              message:
+                  'ViewfinderImage works inline, not just full-screen. '
+                  'Scrolling always scrolls the article — zoom the figures '
+                  'with pinch or double-tap (enableMouseWheelZoom: false). '
+                  'The second figure uses ViewfinderImage.child to zoom a '
+                  'non-image widget.',
+            ),
           ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: inset, vertical: 16),
+          SliverPadding(
+            padding: .symmetric(horizontal: inset, vertical: 16),
+            sliver: SliverList.list(
               children: [
                 Text('A scrollable article', style: text.headlineSmall),
                 const SizedBox(height: 8),
