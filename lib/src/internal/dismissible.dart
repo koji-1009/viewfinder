@@ -1,6 +1,43 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../dismiss.dart';
+
+/// Vertical drag that yields to a pinch: a second pointer arriving
+/// before acceptance rejects the gesture, handing both pointers to
+/// the scale recognizer. The stock recognizer tracks every pointer
+/// and would win the arena off the first finger's drift (its
+/// touch-slop is half the scale recognizer's pan-slop), making
+/// pinches land as dismiss drags.
+class _SingleTouchVerticalDragRecognizer extends VerticalDragGestureRecognizer {
+  _SingleTouchVerticalDragRecognizer({super.debugOwner});
+
+  int _pointers = 0;
+  bool _accepted = false;
+
+  @override
+  void acceptGesture(int pointer) {
+    _accepted = true;
+    super.acceptGesture(pointer);
+  }
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    _pointers++;
+    if (_pointers > 1 && !_accepted) {
+      resolve(GestureDisposition.rejected);
+      return;
+    }
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    _pointers = 0;
+    _accepted = false;
+    super.didStopTrackingLastPointer(pointer);
+  }
+}
 
 /// Wraps [child] with a drag-to-dismiss gesture. [enabled] should be false
 /// while the child is zoomed so pans belong to the viewer, not the wrapper.
@@ -128,10 +165,21 @@ class _ViewfinderDismissibleState extends State<ViewfinderDismissible>
 
     return ColoredBox(
       color: bg,
-      child: GestureDetector(
+      child: RawGestureDetector(
         behavior: .opaque,
-        onVerticalDragUpdate: widget.enabled ? _handleDragUpdate : null,
-        onVerticalDragEnd: widget.enabled ? _handleDragEnd : null,
+        gestures: <Type, GestureRecognizerFactory>{
+          if (widget.enabled)
+            _SingleTouchVerticalDragRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                  _SingleTouchVerticalDragRecognizer
+                >(() => _SingleTouchVerticalDragRecognizer(debugOwner: this), (
+                  r,
+                ) {
+                  r
+                    ..onUpdate = _handleDragUpdate
+                    ..onEnd = _handleDragEnd;
+                }),
+        },
         child: Transform.translate(
           offset: Offset(0, _dragOffset),
           child: Opacity(

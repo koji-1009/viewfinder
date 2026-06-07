@@ -1525,6 +1525,56 @@ void main() {
     expect(controller.scale, closeTo(1.0, 1e-3));
   });
 
+  testWidgets('a pinch with a slight first-finger drift zooms instead of '
+      'dragging the dismissible', (tester) async {
+    final events = <ViewfinderScaleState>[];
+    var dismissed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 2,
+              dismiss: ViewfinderDismiss(onDismiss: () => dismissed++),
+              onScaleStateChanged: (_, s) => events.add(s),
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // Android-style pinch: the first finger lands and drifts a little
+    // before the second finger arrives, then both spread. The dismiss
+    // recognizer must not claim the drift.
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final p1 = await tester.startGesture(center - const Offset(20, 0));
+    await p1.moveBy(const Offset(0, 12)); // below touch slop
+    await tester.pump(const Duration(milliseconds: 30));
+    final p2 = await tester.startGesture(center + const Offset(20, 0));
+    await tester.pump();
+    await p1.moveBy(const Offset(-50, -10));
+    await p2.moveBy(const Offset(50, 10));
+    await tester.pump();
+    await p1.up();
+    await p2.up();
+    await tester.pumpAndSettle();
+
+    expect(events, contains(ViewfinderScaleState.zoomed));
+    expect(dismissed, 0);
+    // The page was not left translated by a stolen drag.
+    final dismissible = tester.widget<Transform>(
+      find.descendant(
+        of: find.byType(ViewfinderDismissible),
+        matching: find.byType(Transform).first,
+      ),
+    );
+    expect(dismissible.transform.getTranslation().y, closeTo(0, 0.5));
+  });
+
   testWidgets('dismiss drag springs back when disabled mid-drag', (
     tester,
   ) async {
