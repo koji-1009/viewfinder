@@ -46,6 +46,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.5));
+      // Anchored on the focal point (here the viewport centre): the
+      // content under the focal must not drift as it scales.
+      final mapped = MatrixUtils.transformPoint(controller.value, center);
+      expect(mapped.dx, closeTo(center.dx, 1.0));
+      expect(mapped.dy, closeTo(center.dy, 1.0));
     });
 
     testWidgets('release with velocity starts a fling that moves '
@@ -558,8 +563,10 @@ void main() {
       await secondFinger.up();
       await tester.pumpAndSettle();
 
-      // No crash, controller still sane.
-      expect(controller.value.getMaxScaleOnAxis(), isNonZero);
+      // DTD yielded and the scale recognizer claimed both pointers,
+      // carrying the pinch through to a real zoom — not collapsing back to
+      // the identity transform (which getMaxScaleOnAxis would mask as 1.0).
+      expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.0));
     });
 
     testWidgets('second tap released without drag still allows plain '
@@ -722,8 +729,8 @@ void main() {
       expect(controller.value.storage[12], 0.0);
     });
 
-    testWidgets('DTD: second tap beyond double-tap window starts a '
-        'fresh tap1', (tester) async {
+    testWidgets('DTD: a tap beyond the double-tap window does not trigger '
+        'double-tap-drag zoom', (tester) async {
       final controller = TransformationController();
       await tester.pumpWidget(
         MaterialApp(
@@ -972,7 +979,8 @@ void main() {
       }
       await p.up();
       await tester.pumpAndSettle();
-      expect(verticalEdgeHits, isNotEmpty);
+      // Downward drag exhausts the bottom edge → sign −1.
+      expect(verticalEdgeHits, contains(-1));
     });
 
     testWidgets('aggressive pan right of a zoomed image clamps to edge '
@@ -1006,9 +1014,9 @@ void main() {
       await p.up();
       await tester.pumpAndSettle();
       expect(
-        edgeHits.any((e) => e.$1 == Axis.horizontal),
-        isTrue,
-        reason: 'edge hit should have fired during clamp',
+        edgeHits,
+        contains((Axis.horizontal, -1)),
+        reason: 'rightward drag should clamp the left edge → sign −1',
       );
     });
 

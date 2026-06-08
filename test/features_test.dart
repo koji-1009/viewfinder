@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viewfinder/src/internal/dismissible.dart';
 import 'package:viewfinder/src/internal/hero_shuttle.dart';
+import 'package:viewfinder/src/internal/matrix_utils.dart';
 import 'package:viewfinder/src/internal/zoomable_viewport.dart';
 import 'package:viewfinder/viewfinder.dart';
 
@@ -1047,28 +1048,13 @@ void main() {
       return tester.getRect(find.bySemanticsLabel('Page 1 of 3'));
     }
 
-    // 600 viewport − 48 inset − 16 indicator padding.
+    // 600 viewport − 48 inset − 16 indicator padding. Pin both bounds so
+    // an indicator floating too high also fails, not just one too low.
     final inset = await pump(safeArea: true);
-    expect(inset.bottom, lessThanOrEqualTo(600 - 48 - 16 + 0.01));
+    expect(inset.bottom, closeTo(600 - 48 - 16, 1.0));
 
     final flush = await pump(safeArea: false);
     expect(flush.bottom, greaterThan(600.0 - 48));
-  });
-
-  testWidgets('dots indicator exposes a position label', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Viewfinder(
-            itemCount: 3,
-            indicator: const ViewfinderPageIndicatorDots(),
-            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
-          ),
-        ),
-      ),
-    );
-    await settleImages(tester);
-    expect(find.bySemanticsLabel('Page 1 of 3'), findsOneWidget);
   });
 
   // -------------------------------------------------------------------
@@ -2200,18 +2186,526 @@ void main() {
     tester,
   ) async {
     final pressed = <int>[];
+    final controller = ViewfinderController(initialIndex: 1);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Viewfinder.images([
-            memoryImage(),
-          ], onLongPressStart: (i, details) => pressed.add(i)),
+          body: Viewfinder.images(
+            [memoryImage('a'), memoryImage('b'), memoryImage('c')],
+            controller: controller,
+            onLongPressStart: (i, details) => pressed.add(i),
+          ),
         ),
       ),
     );
     await settleImages(tester);
-    await tester.longPress(find.byWidgetPredicate((w) => w is ViewfinderImage));
+    await tester.longPressAt(
+      tester.getCenter(find.byType(ZoomableViewport).first),
+    );
     await tester.pumpAndSettle();
-    expect(pressed, [0]);
+    // The current page is index 1, so that — not a hard-coded 0 — is what
+    // the gallery must forward.
+    expect(pressed, [1]);
+  });
+
+  testWidgets('Viewfinder.images: onSecondaryTapUp receives the page index', (
+    tester,
+  ) async {
+    final tapped = <int>[];
+    final controller = ViewfinderController(initialIndex: 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder.images(
+            [memoryImage('a'), memoryImage('b'), memoryImage('c')],
+            controller: controller,
+            onSecondaryTapUp: (i, _) => tapped.add(i),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final gesture = await tester.startGesture(
+      center,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tapped, [1]);
+  });
+
+  // -------------------------------------------------------------------
+  // Matrix helpers
+  // -------------------------------------------------------------------
+
+  test('splitScrollDelta splits along/cross per axis', () {
+    expect(splitScrollDelta(const Offset(3, 5), Axis.horizontal), (
+      along: 3.0,
+      cross: 5.0,
+    ));
+    expect(splitScrollDelta(const Offset(3, 5), Axis.vertical), (
+      along: 5.0,
+      cross: 3.0,
+    ));
+  });
+
+  // -------------------------------------------------------------------
+  // Hero cross-fit shuttle: per-fit painted rect
+  // -------------------------------------------------------------------
+
+  Widget wrapShuttle(Widget child) => Directionality(
+    textDirection: TextDirection.ltr,
+    child: MediaQuery(
+      data: const MediaQueryData(),
+      child: Center(child: SizedBox(width: 200, height: 100, child: child)),
+    ),
+  );
+
+  testWidgets('cross-fit shuttle computes a painted rect for every BoxFit', (
+    tester,
+  ) async {
+    Future<void> pumpFits(BoxFit thumbnailFit, BoxFit viewerFit) async {
+      await tester.pumpWidget(
+        wrapShuttle(
+          HeroCrossFitShuttle(
+            image: memoryImage('rectfor'),
+            viewerFit: viewerFit,
+            thumbnailFit: thumbnailFit,
+            animation: const AlwaysStoppedAnimation<double>(0.5),
+            direction: HeroFlightDirection.push,
+            filterQuality: FilterQuality.low,
+          ),
+        ),
+      );
+      // The sync provider reports its size on the first listener tick, so a
+      // single pump reflects it — no real-async settle needed.
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // Each fit must yield a well-formed painted rect — no NaN/∞ leaking
+      // from a degenerate fit scale into the lerped flight rect.
+      final rect = tester.getRect(find.byType(Image));
+      expect(rect.isFinite, isTrue);
+      expect(rect.isEmpty, isFalse);
+    }
+
+    // A push flight reads `thumbnailFit` and `viewerFit`, so two fits land
+    // per pump — cover the cases the contain/cover flights miss.
+    await pumpFits(BoxFit.fitWidth, BoxFit.fitHeight);
+    await pumpFits(BoxFit.none, BoxFit.scaleDown);
+    await pumpFits(BoxFit.fill, BoxFit.contain);
+  });
+
+  testWidgets('cross-fit shuttle paints the viewer fit until the image '
+      'resolves its size', (tester) async {
+    final image = DeferredImageProvider();
+    await tester.pumpWidget(
+      wrapShuttle(
+        HeroCrossFitShuttle(
+          image: image,
+          viewerFit: BoxFit.fitWidth,
+          thumbnailFit: BoxFit.cover,
+          animation: const AlwaysStoppedAnimation<double>(0),
+          direction: HeroFlightDirection.push,
+          filterQuality: FilterQuality.low,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Pre-resolution: no intrinsic size yet, so the lerped rect can't be
+    // built — fall back to the viewer's own fit.
+    expect(tester.widget<Image>(find.byType(Image)).fit, BoxFit.fitWidth);
+
+    await tester.runAsync(() async {
+      image.resolveNow();
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pumpAndSettle();
+
+    // Resolved: the lerped rect carries the fit scale, painted with `fill`.
+    expect(tester.widget<Image>(find.byType(Image)).fit, BoxFit.fill);
+  });
+
+  // -------------------------------------------------------------------
+  // Vertical thumbnail strip auto-scroll
+  // -------------------------------------------------------------------
+
+  for (final reverse in [false, true]) {
+    testWidgets('vertical thumbnail strip scrolls the selected tile into '
+        'view on first render (reverse: $reverse)', (tester) async {
+      final controller = ViewfinderController(initialIndex: 29);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 400,
+              child: Viewfinder(
+                itemCount: 30,
+                controller: controller,
+                reverse: reverse,
+                thumbnails: ViewfinderThumbnails.custom(
+                  position: ViewfinderThumbnailPosition.left,
+                  size: 40,
+                  itemBuilder: (_, i, _) => Text('t$i'),
+                ),
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+              ),
+            ),
+          ),
+        ),
+      );
+      await settleImages(tester);
+
+      // The selected tile scrolled into view; tile 0 sits off the far end.
+      expect(find.text('t29'), findsOneWidget);
+      expect(find.text('t0'), findsNothing);
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Chrome overlays clear a top / left / right thumbnail strip
+  // -------------------------------------------------------------------
+
+  for (final position in [
+    ViewfinderThumbnailPosition.top,
+    ViewfinderThumbnailPosition.left,
+    ViewfinderThumbnailPosition.right,
+  ]) {
+    testWidgets('chrome overlays clear a ${position.name} thumbnail strip', (
+      tester,
+    ) async {
+      const overlayKey = Key('chrome-overlay');
+      final thumbs = ViewfinderThumbnails(position: position, safeArea: false);
+      final overlay = switch (position) {
+        ViewfinderThumbnailPosition.top => const Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SizedBox(key: overlayKey, height: 40),
+        ),
+        ViewfinderThumbnailPosition.left => const Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: SizedBox(key: overlayKey, width: 40),
+        ),
+        _ => const Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: SizedBox(key: overlayKey, width: 40),
+        ),
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(800, 600)),
+            child: Viewfinder(
+              itemCount: 2,
+              thumbnails: thumbs,
+              chromeOverlays: [overlay],
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await settleImages(tester);
+
+      final rect = tester.getRect(find.byKey(overlayKey));
+      switch (position) {
+        case ViewfinderThumbnailPosition.top:
+          expect(rect.top, closeTo(thumbs.crossExtent, 0.1));
+        case ViewfinderThumbnailPosition.left:
+          expect(rect.left, closeTo(thumbs.crossExtent, 0.1));
+        default:
+          expect(rect.right, closeTo(800 - thumbs.crossExtent, 0.1));
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // System UI re-sync on a runtime immersiveSystemUi toggle
+  // -------------------------------------------------------------------
+
+  testWidgets('toggling immersiveSystemUi at runtime re-attaches the system '
+      'UI sync', (tester) async {
+    final modes = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemChrome.setEnabledSystemUIMode') {
+          modes.add(call.arguments as String);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    var immersive = false;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return Viewfinder(
+                itemCount: 1,
+                immersiveSystemUi: immersive,
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+    modes.clear();
+
+    rebuild(() => immersive = true);
+    await tester.pumpAndSettle();
+    // Re-attaching drives exactly one fresh system-UI call; with no chrome
+    // visible the gallery goes immersive — and takes no detour through
+    // edge-to-edge on the way.
+    expect(modes, ['SystemUiMode.immersiveSticky']);
+  });
+
+  // -------------------------------------------------------------------
+  // Navigation issued before layout, gallery unmounted before it runs
+  // -------------------------------------------------------------------
+
+  testWidgets('a navigation issued before layout is dropped when the gallery '
+      'unmounts first', (tester) async {
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 4,
+            controller: controller,
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+      phase: EnginePhase.build,
+    );
+    // No PageView clients yet: the navigation defers to a post-frame.
+    controller.jumpTo(2);
+    // Unmount before that frame ends — the deferred callback finds the
+    // state gone and completes without navigating.
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  // -------------------------------------------------------------------
+  // Wheel paging: direction reversal and inertia-cancel
+  // -------------------------------------------------------------------
+
+  testWidgets('mouseWheelBehavior.paging: a sub-threshold reversal resets the '
+      'accumulator', (tester) async {
+    final controller = ViewfinderController(initialIndex: 2);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 5,
+              controller: controller,
+              mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(ZoomableViewport).first);
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(center);
+    // 24 px one way then 24 px back: each is below the 60-px page
+    // threshold, and the reversal zeroes the accumulator between them, so
+    // the page holds.
+    await tester.sendEventToBinding(pointer.scroll(const Offset(24, 0)));
+    await tester.pump();
+    await tester.sendEventToBinding(pointer.scroll(const Offset(-24, 0)));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 2);
+  });
+
+  testWidgets('mouseWheelBehavior.paging: wheel paging survives a '
+      'scroll-inertia-cancel', (tester) async {
+    final controller = ViewfinderController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 5,
+              controller: controller,
+              mouseWheelBehavior: ViewfinderMouseWheelBehavior.paging,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final center = tester.getCenter(find.byType(Viewfinder));
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(center);
+    await tester.sendEventToBinding(pointer.scroll(const Offset(120, 0)));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 1);
+
+    // The platform reports the momentum gesture ended (the user re-touched
+    // the trackpad). The handler resets its wheel bookkeeping; a corrupt
+    // reset would wedge later paging — so the next notch must still turn.
+    await tester.sendEventToBinding(
+      PointerScrollInertiaCancelEvent(position: center),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(pointer.scroll(const Offset(120, 0)));
+    await tester.pumpAndSettle();
+    expect(controller.currentIndex, 2);
+  });
+
+  // -------------------------------------------------------------------
+  // ViewfinderImage: external write, empty viewport, pre-layout scale
+  // -------------------------------------------------------------------
+
+  testWidgets('an external pinch cancels an in-flight programmatic zoom', (
+    tester,
+  ) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+              maxScale: 8,
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    controller.animateToScale(4.0);
+    await tester.pump(); // ticker registers at the start value
+    await tester.pump(const Duration(milliseconds: 50)); // mid-flight, zoomed
+    final midScale = controller.scale;
+    expect(midScale, greaterThan(1.0));
+    expect(midScale, lessThan(4.0));
+
+    // A live pinch writes the transform from outside the animation; the
+    // in-flight tween must yield rather than fight it every frame.
+    final center = tester.getCenter(find.byType(ZoomableViewport));
+    final a = await tester.startGesture(
+      center - const Offset(60, 0),
+      pointer: 1,
+    );
+    final b = await tester.startGesture(
+      center + const Offset(60, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await a.moveBy(const Offset(30, 0)); // pinch inward → shrink
+    await b.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+
+    // The tween toward 4.0 was abandoned the instant the pinch wrote: had
+    // it kept running it would have climbed past midScale toward 4.0, but
+    // the shrinking pinch took over, so the settled scale sits below it.
+    expect(controller.scale, lessThan(midScale));
+  });
+
+  testWidgets('controller reads report all-free while the viewport is empty', (
+    tester,
+  ) async {
+    final controller = ViewfinderImageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 0,
+              height: 0,
+              child: ViewfinderImage(
+                image: memoryImage(),
+                controller: controller,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // No laid-out viewport yet: every direction reads as free to swipe.
+    expect(controller.contentFits, isTrue);
+    expect(controller.canSwipeToward(AxisDirection.left), isTrue);
+    expect(controller.canSwipeToward(AxisDirection.up), isTrue);
+  });
+
+  testWidgets('scale requested before the first layout applies once laid out', (
+    tester,
+  ) async {
+    final controller = ViewfinderImageController();
+    var collapsed = true;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return SizedBox(
+                width: collapsed ? 0 : 400,
+                height: collapsed ? 0 : 400,
+                child: ViewfinderImage(
+                  image: memoryImage(),
+                  controller: controller,
+                  maxScale: 5,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Zero-sized viewport: no center to scale around, so the call defers.
+    controller.jumpToScale(2.0);
+    await tester.pump();
+
+    rebuild(() => collapsed = false);
+    await settleImages(tester);
+    expect(controller.scale, closeTo(2.0, 0.01));
   });
 }

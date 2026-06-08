@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -47,6 +48,27 @@ class _SyncImageProvider extends ImageProvider<_SyncImageProvider> {
 
 /// Codec-free provider; equal tags compare equal (provider identity).
 ImageProvider memoryImage([Object tag = 'default']) => _SyncImageProvider(tag);
+
+/// Codec-free provider whose stream stays pending until [resolveNow] is
+/// called — lets a test observe the pre-resolution build (e.g. a Hero
+/// shuttle's fallback fit before the intrinsic size is known).
+class DeferredImageProvider extends ImageProvider<DeferredImageProvider> {
+  final _completer = Completer<ImageInfo>();
+
+  /// Completes the pending stream with the shared 1×1 test image.
+  void resolveNow() =>
+      _completer.complete(ImageInfo(image: _testImage.clone()));
+
+  @override
+  Future<DeferredImageProvider> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    DeferredImageProvider key,
+    ImageDecoderCallback decode,
+  ) => OneFrameImageStreamCompleter(_completer.future);
+}
 
 Future<void> settleImages(WidgetTester tester) async {
   await tester.runAsync(() async {

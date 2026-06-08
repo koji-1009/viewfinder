@@ -34,15 +34,6 @@ Matrix4 rotateAroundFocal({
     ? (along: delta.dx, cross: delta.dy)
     : (along: delta.dy, cross: delta.dx);
 
-/// Applies the 2D portion of [m] to point [p].
-Offset applyMatrix2D(Matrix4 m, Offset p) {
-  final v = m.storage;
-  return Offset(
-    v[0] * p.dx + v[4] * p.dy + v[12],
-    v[1] * p.dx + v[5] * p.dy + v[13],
-  );
-}
-
 /// Axis-aligned bounding box on screen for a 0..[viewport].width by
 /// 0..[viewport].height rect transformed by [m]. Correct under
 /// rotation, since the bbox is computed from all four projected corners.
