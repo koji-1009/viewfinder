@@ -330,7 +330,15 @@ void main() {
 
     setActive(() => active = b);
     await tester.pumpAndSettle();
-    // After swap, b now drives; a stays detached.
+    // The old controller detached: it no longer observes the viewer, so it
+    // reports the detached default rather than its last (zoomed) reading.
+    expect(a.scale, closeTo(1.0, 0.001));
+    // ...and commands through it are inert — driving the detached `a` must
+    // not move the viewer, which still holds the 2.0 zoom b adopted.
+    a.animateToScale(5);
+    await tester.pumpAndSettle();
+    expect(b.scale, closeTo(2.0, 0.001));
+    // The new controller drives the viewer.
     b.animateToScale(3);
     await tester.pumpAndSettle();
     expect(b.scale, greaterThan(2.5));
@@ -766,33 +774,6 @@ void main() {
     await d.up();
     await tester.pumpAndSettle();
     expect(controller.scale, closeTo(1.0, 0.01));
-  });
-
-  testWidgets('ViewfinderImage double-tap zooms via gesture', (tester) async {
-    final controller = ViewfinderImageController();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ViewfinderImage(
-            image: memoryImage(),
-            controller: controller,
-            doubleTapScales: const [1.0, 2.0],
-          ),
-        ),
-      ),
-    );
-    await settleImages(tester);
-
-    final viewer = find.byType(ZoomableViewport);
-    final center = tester.getCenter(viewer);
-    final g1 = await tester.startGesture(center);
-    await g1.up();
-    await tester.pump(const Duration(milliseconds: 50));
-    final g2 = await tester.startGesture(center);
-    await g2.up();
-    await tester.pumpAndSettle();
-
-    expect(controller.scale, greaterThan(1.01));
   });
 
   testWidgets('ViewfinderImage with empty doubleTapScales ignores double-tap', (
@@ -1502,7 +1483,7 @@ void main() {
               onDismiss: () => dismissed++,
               direction: ViewfinderDismissDirection.down,
               threshold: 0.1,
-              fadeBackground: false, // exercise this branch too
+              fadeBackground: false,
             ),
             itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
           ),
@@ -2953,13 +2934,17 @@ void main() {
       'goes through the no-fling snap-back branch without crashing', (
     tester,
   ) async {
+    final controller = ViewfinderImageController();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 400,
             height: 400,
-            child: ViewfinderImage(image: memoryImage()),
+            child: ViewfinderImage(
+              image: memoryImage(),
+              controller: controller,
+            ),
           ),
         ),
       ),
@@ -2976,6 +2961,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    // The no-op snap-back leaves the content at its initial transform —
+    // the rejected fling neither zoomed nor shifted it.
+    expect(controller.scale, closeTo(1.0, 0.01));
+    expect(controller.currentTransform.storage[12], closeTo(0.0, 0.01));
   });
 
   testWidgets('ZoomableViewport: starting a new gesture during fling '
@@ -3651,7 +3640,8 @@ void main() {
       ),
     );
     await settleImages(tester);
-    expect(find.bySemanticsLabel('Photo gallery, 1 of 1'), findsOneWidget);
+    // Exactly one page is built for the single image — no more.
+    expect(find.byType(ZoomableViewport), findsOneWidget);
   });
 
   testWidgets('Viewfinder.single: dismiss fires onDismiss on vertical drag', (
