@@ -879,6 +879,64 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Viewfinder: the page left behind keeps its zoom through the slide and '
+    'only resets once the pager settles',
+    (tester) async {
+      final ctrl = ViewfinderController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Viewfinder(
+              itemCount: 3,
+              controller: ctrl,
+              itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+            ),
+          ),
+        ),
+      );
+      await settleImages(tester);
+
+      // True while any page renders a zoomed (>1.5×) transform — the
+      // outgoing page's own transform stays in the tree as it slides off.
+      bool anyZoomed() => tester
+          .widgetList<Transform>(find.byType(Transform))
+          .any((t) => t.transform.getMaxScaleOnAxis() > 1.5);
+
+      // Zoom page 0 via double-tap.
+      final center = tester.getCenter(find.byType(ZoomableViewport));
+      final g1 = await tester.startGesture(center);
+      await g1.up();
+      await tester.pump(const Duration(milliseconds: 50));
+      final g2 = await tester.startGesture(center);
+      await g2.up();
+      await tester.pumpAndSettle();
+      expect(anyZoomed(), isTrue);
+
+      // Turn the page but stop partway: onPageChanged has fired (the index
+      // is past the 400ms transition's midpoint) yet the pager is still
+      // moving, so the outgoing page must still carry its zoom.
+      ctrl.animateTo(1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(ctrl.currentIndex, 1);
+      expect(
+        anyZoomed(),
+        isTrue,
+        reason: 'the left page keeps its zoom while it slides off screen',
+      );
+
+      // Let the pager come to rest → scroll-end → the off-screen page
+      // resets, with no on-screen scale jump.
+      await tester.pumpAndSettle();
+      expect(
+        anyZoomed(),
+        isFalse,
+        reason: 'the reset runs once the pager settles',
+      );
+    },
+  );
+
   testWidgets('Viewfinder: reverse forwards to PageView.reverse', (
     tester,
   ) async {
