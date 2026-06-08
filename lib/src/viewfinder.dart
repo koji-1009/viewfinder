@@ -588,6 +588,9 @@ class _ViewfinderState extends State<Viewfinder> {
   // mode, where the pager runs on an unbounded index that maps to
   // logical pages modulo itemCount.
   int _currentRawIndex = 0;
+  // Raw indices of pages left behind by [_onPageChanged] whose zoom
+  // reset waits until the pager settles — see [_resetSettledPages].
+  final Set<int> _pendingPageReset = {};
   // Raw-index-keyed: each PageView slot owns a distinct controller, so
   // the single-state-attached invariant of `ViewfinderImageController`
   // is preserved even when two slots happen to render the same content
@@ -716,6 +719,18 @@ class _ViewfinderState extends State<Viewfinder> {
     for (final c in _imageControllers.values) {
       c.jumpToInitial();
     }
+  }
+
+  /// Snaps every page queued by [_onPageChanged] back to its initial
+  /// transform, skipping the one now on screen. Run at scroll-end so the
+  /// zoom unwinds off screen instead of flashing while the page slides
+  /// away.
+  void _resetSettledPages() {
+    if (_pendingPageReset.isEmpty) return;
+    for (final raw in _pendingPageReset) {
+      if (raw != _currentRawIndex) _imageControllers[raw]?.jumpToInitial();
+    }
+    _pendingPageReset.clear();
   }
 
   int _clampIndex(int index) {
@@ -952,11 +967,15 @@ class _ViewfinderState extends State<Viewfinder> {
     });
     // The page we just left keeps its own TransformationController
     // alive (PageView retains adjacent pages). If the user had zoomed
-    // it, a later swipe back would reveal the stale zoom. Snap it
-    // back instantly — matches photo-viewer convention of presenting
-    // every page at its initial scale.
+    // it, a later swipe back would reveal the stale zoom, so restore its
+    // initial scale — matching the photo-viewer convention of presenting
+    // every page at its initial scale. Defer the reset to scroll-end
+    // (see [_resetSettledPages]): onPageChanged fires while the outgoing
+    // page is still sliding off screen, so resetting it in place flashes
+    // a visible scale jump mid-slide. By the time the pager settles the
+    // page has slid off screen, so the zoom unwinds unseen.
     if (previousRaw != rawIndex) {
-      _imageControllers[previousRaw]?.jumpToInitial();
+      _pendingPageReset.add(previousRaw);
     }
     _controller._setIndex(logical);
     if (logicalChanged) {
@@ -1369,6 +1388,19 @@ class _ViewfinderState extends State<Viewfinder> {
         child: pageView,
       );
     }
+
+    // Reset pages left behind by a completed transition here, once the
+    // pager comes to rest, rather than in [_onPageChanged] — by scroll-end
+    // the outgoing page has slid off screen, so the zoom unwinds unseen
+    // instead of flashing mid-slide. `depth == 0` keeps it to the pager's
+    // own Scrollable, ignoring any nested scroll (e.g. a page's content).
+    pageView = NotificationListener<ScrollEndNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0) _resetSettledPages();
+        return false;
+      },
+      child: pageView,
+    );
 
     // Observation only (never registers with the signal resolver):
     // while the page transition animates, the Scrollable's children

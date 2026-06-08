@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+* A zoomed page no longer flashes back to its initial scale while it slides away: the reset now waits until the pager settles, off screen.
+
 ## 1.0.1
 
 * Trim the package description to pub.dev's 180-character limit.
