@@ -34,7 +34,7 @@ jobs:
       - uses: koji-1009/setup-flutter@9204099837f17eb9ae05760a52360f85640de02d # v1.1.6
       - run: flutter pub get
       - run: flutter test --coverage
-      - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+      - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
