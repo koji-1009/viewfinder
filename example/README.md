@@ -7,7 +7,7 @@ A multi-scenario demo app for the `viewfinder` package.
 [https://koji-1009.github.io/viewfinder/](https://koji-1009.github.io/viewfinder/)
 
 The hosted build is deployed automatically from `main` to GitHub Pages by
-`.github/workflows/deploy.yaml` (`flutter build web --base-href "/viewfinder/"`).
+`.github/workflows/deploy.yml` (`flutter build web --base-href "/viewfinder/"`).
 
 ## Scenarios
 
