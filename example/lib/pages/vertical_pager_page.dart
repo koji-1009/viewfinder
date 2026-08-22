@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:viewfinder/viewfinder.dart';
 
 import '../shared.dart';
+
+final RouteBase verticalPagerRoute = GoRoute(
+  path: 'vertical',
+  builder: (_, _) => const VerticalPagerPage(),
+  routes: [GoRoute(path: 'viewer', builder: (_, _) => const _VerticalViewer())],
+);
 
 /// Scenario 3 — a vertically scrolling gallery.
 ///
@@ -11,6 +18,9 @@ import '../shared.dart';
 /// dismiss and pops via the chrome back button / Esc instead.
 class VerticalPagerPage extends StatelessWidget {
   const VerticalPagerPage({super.key});
+
+  static const routePath = '/vertical';
+  static const viewerPath = '$routePath/viewer';
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +43,7 @@ class VerticalPagerPage extends StatelessWidget {
               child: FilledButton.icon(
                 icon: const Icon(Icons.open_in_full),
                 label: const Text('Open vertical gallery'),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const _VerticalViewer(),
-                  ),
-                ),
+                onPressed: () => context.go(VerticalPagerPage.viewerPath),
               ),
             ),
           ),
@@ -106,7 +112,7 @@ class _VerticalViewerState extends State<_VerticalViewer> {
                 ),
                 onPressed: () {
                   if (_controller.resetCurrentImage()) return;
-                  Navigator.of(context).maybePop();
+                  context.pop();
                 },
               ),
             ),
