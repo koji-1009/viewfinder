@@ -950,6 +950,13 @@ class _ImageBody extends StatelessWidget {
       );
     }
 
+    // An empty ladder means double-tap zoom is off. Leave the
+    // recognizer unregistered rather than registering a no-op handler:
+    // a double-tap recognizer in the arena holds every single tap for
+    // the double-tap window, so `onTap` (and the gallery's own
+    // tap-to-toggle-chrome) would answer ~300 ms late for nothing.
+    final doubleTapEnabled = spec.doubleTapScales.isNotEmpty;
+
     return ColoredBox(
       color: spec.backgroundColor,
       child: GestureDetector(
@@ -960,8 +967,8 @@ class _ImageBody extends StatelessWidget {
         onLongPress: spec.onLongPress,
         onLongPressStart: spec.onLongPressStart,
         onSecondaryTapUp: spec.onSecondaryTapUp,
-        onDoubleTapDown: onDoubleTapDown,
-        onDoubleTap: onDoubleTap,
+        onDoubleTapDown: doubleTapEnabled ? onDoubleTapDown : null,
+        onDoubleTap: doubleTapEnabled ? onDoubleTap : null,
         child: ZoomableViewport(
           transformationController: transformation,
           // The public knobs are relative to the initial baseline; the

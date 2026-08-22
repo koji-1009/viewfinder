@@ -805,6 +805,32 @@ void main() {
     expect(controller.scale, closeTo(1.0, 0.001));
   });
 
+  testWidgets('ViewfinderImage: an empty doubleTapScales ladder answers a '
+      'tap without the double-tap delay', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: memoryImage(),
+            doubleTapScales: const [],
+            onTap: () => taps++,
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final g = await tester.startGesture(
+      tester.getCenter(find.byType(ZoomableViewport)),
+    );
+    await g.up();
+    // One frame only — no waiting out the double-tap window. With the
+    // ladder empty there is no double-tap recognizer to hold the arena.
+    await tester.pump();
+    expect(taps, 1);
+  });
+
   testWidgets('Viewfinder paginates and syncs controller', (tester) async {
     final controller = ViewfinderController();
     final pageChanges = <int>[];
@@ -2885,6 +2911,57 @@ void main() {
     expect(controller.currentIndex, 1);
     expect(find.bySemanticsLabel('Photo gallery, 2 of 2'), findsOneWidget);
   });
+
+  testWidgets(
+    'Viewfinder: a shrinking itemCount notifies the controller outside the '
+    'build phase',
+    (tester) async {
+      final controller = ViewfinderController(initialIndex: 4);
+      var count = 5;
+      var notifications = 0;
+      late StateSetter setOuter;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                setOuter = setState;
+                return Column(
+                  children: [
+                    Text('page ${controller.currentIndex}'),
+                    Expanded(
+                      child: Viewfinder(
+                        itemCount: count,
+                        controller: controller,
+                        itemBuilder: (_, _) =>
+                            ViewfinderItem(image: memoryImage()),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      // The ordinary app pattern: the controller listener rebuilds an
+      // ancestor to show the current index. The re-clamp runs inside
+      // `didUpdateWidget`, so notifying inline would mark that ancestor
+      // dirty mid-build.
+      controller.addListener(() {
+        notifications++;
+        setOuter(() {});
+      });
+      await settleImages(tester);
+
+      setOuter(() => count = 2);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(controller.currentIndex, 1);
+      expect(notifications, 1);
+      expect(find.text('page 1'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'Viewfinder: itemCount=0 reports an empty-gallery semantic label',

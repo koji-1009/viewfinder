@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -1188,8 +1189,14 @@ class _ViewfinderState extends State<Viewfinder> {
   /// dismiss callback once past [_kOverscrollDismissExtent]. Handles
   /// both clamping physics (OverscrollNotification) and bouncing
   /// physics (pixels beyond the extents).
+  ///
+  /// `depth == 0` keeps this to the pager's own [Scrollable]: a
+  /// scrollable inside a page (a `.child` page's list) running out of
+  /// content on the same axis is not the gallery running out of pages,
+  /// and its start/end notifications would also reset the accumulator
+  /// mid-gesture.
   bool _handlePagerNotification(ScrollNotification n) {
-    if (n.metrics.axis != widget.pagerAxis) return false;
+    if (n.depth != 0 || n.metrics.axis != widget.pagerAxis) return false;
     switch (n) {
       case ScrollStartNotification() || ScrollEndNotification():
         _overscrollAccum = 0;
@@ -1569,9 +1576,16 @@ class ViewfinderController extends ChangeNotifier {
 
   _ViewfinderState? _state;
   int _currentIndex;
+  bool _disposed = false;
 
   /// Index of the page currently shown by the attached [Viewfinder].
   int get currentIndex => _currentIndex;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   void _attach(_ViewfinderState s) => _state = s;
   void _detach(_ViewfinderState s) {
@@ -1581,6 +1595,18 @@ class ViewfinderController extends ChangeNotifier {
   void _setIndex(int i) {
     if (_currentIndex == i) return;
     _currentIndex = i;
+    // A shrinking [Viewfinder.itemCount] re-clamps the index from
+    // `didUpdateWidget` — inside the build phase, where a listener
+    // calling `setState` would throw. Defer past the frame; page
+    // changes, the ordinary caller, already run outside it and notify
+    // inline.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) notifyListeners();
+      });
+      return;
+    }
     notifyListeners();
   }
 

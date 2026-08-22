@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3
+
+* `dismissOnOverscroll` no longer fires when a scrollable _inside_ a page runs out of content on the pager's axis — only the gallery's own pager can trigger it.
+* Shrinking `itemCount` past the current page notifies `ViewfinderController` listeners after the frame instead of during it, so a listener that calls `setState` no longer throws.
+* An empty `doubleTapScales` ladder no longer registers a double-tap recognizer, so taps — including the gallery's tap-to-toggle chrome — answer on release instead of after the double-tap window.
+
 ## 1.0.2
 
 * A zoomed page no longer flashes back to its initial scale while it slides away: the reset now waits until the pager settles, off screen.
