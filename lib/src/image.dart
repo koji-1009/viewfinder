@@ -173,6 +173,10 @@ sealed class ViewfinderImage extends StatefulWidget {
   /// three or more cycle.
   final List<double> doubleTapScales;
 
+  /// Whether double-tap zoom is on at all. An empty [doubleTapScales]
+  /// disables both flavors — the tap and the drag.
+  bool get doubleTapEnabled => doubleTapScales.isNotEmpty;
+
   /// Smallest allowed scale, relative to the initial scale (`1.0` =
   /// the [ViewfinderInitialScale] baseline). Must be `<= 1.0` so the
   /// initial state itself stays within bounds.
@@ -639,7 +643,6 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       : scaleAroundFocal(focal: focal, scale: clamped);
 
   void _handleDoubleTap() {
-    if (widget.doubleTapScales.isEmpty) return;
     final base = _baseScale;
     // The ladder is expressed relative to the initial baseline; walk it
     // in absolute terms so `1.0` always lands back on the initial state.
@@ -745,8 +748,8 @@ class _ViewfinderImageState extends State<ViewfinderImage>
       return _ImageBody(
         spec: widget,
         transformation: _transformation,
-        onDoubleTapDown: _handleDoubleTapDown,
-        onDoubleTap: _handleDoubleTap,
+        onDoubleTapDown: widget.doubleTapEnabled ? _handleDoubleTapDown : null,
+        onDoubleTap: widget.doubleTapEnabled ? _handleDoubleTap : null,
       );
     },
   );
@@ -871,8 +874,11 @@ class _ImageBody extends StatelessWidget {
 
   final ViewfinderImage spec;
   final TransformationController transformation;
-  final GestureTapDownCallback onDoubleTapDown;
-  final GestureTapCallback onDoubleTap;
+
+  /// Null with double-tap zoom off: registering a double-tap
+  /// recognizer would hold every single tap for the double-tap window.
+  final GestureTapDownCallback? onDoubleTapDown;
+  final GestureTapCallback? onDoubleTap;
 
   /// Default flight shuttle for provider-backed viewers. Flutter's own
   /// default flies the destination hero's child, so a pop flight
@@ -950,13 +956,6 @@ class _ImageBody extends StatelessWidget {
       );
     }
 
-    // An empty ladder means double-tap zoom is off. Leave the
-    // recognizer unregistered rather than registering a no-op handler:
-    // a double-tap recognizer in the arena holds every single tap for
-    // the double-tap window, so `onTap` (and the gallery's own
-    // tap-to-toggle-chrome) would answer ~300 ms late for nothing.
-    final doubleTapEnabled = spec.doubleTapScales.isNotEmpty;
-
     return ColoredBox(
       color: spec.backgroundColor,
       child: GestureDetector(
@@ -967,8 +966,8 @@ class _ImageBody extends StatelessWidget {
         onLongPress: spec.onLongPress,
         onLongPressStart: spec.onLongPressStart,
         onSecondaryTapUp: spec.onSecondaryTapUp,
-        onDoubleTapDown: doubleTapEnabled ? onDoubleTapDown : null,
-        onDoubleTap: doubleTapEnabled ? onDoubleTap : null,
+        onDoubleTapDown: onDoubleTapDown,
+        onDoubleTap: onDoubleTap,
         child: ZoomableViewport(
           transformationController: transformation,
           // The public knobs are relative to the initial baseline; the
@@ -983,10 +982,7 @@ class _ImageBody extends StatelessWidget {
               spec.interactionEndFrictionCoefficient,
           panGate: spec.panGate,
           rubberBandPan: spec.rubberBandPan,
-          // An empty double-tap ladder means "double-tap zoom is off" —
-          // including the double-tap-drag flavor.
-          doubleTapDragZoom:
-              spec.doubleTapDragZoom && spec.doubleTapScales.isNotEmpty,
+          doubleTapDragZoom: spec.doubleTapDragZoom && spec.doubleTapEnabled,
           enableMouseWheelZoom: spec.enableMouseWheelZoom,
           onScaleStart: spec.onScaleStart,
           onScaleEnd: spec.onScaleEnd,

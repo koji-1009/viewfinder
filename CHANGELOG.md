@@ -1,9 +1,15 @@
 # Changelog
 
-## 1.0.3
+## 1.1.0
+
+### API additions
+
+* `ViewfinderPageIndicatorDots.dotsBuilder` — renders the indicator row yourself, the escape hatch `ViewfinderPageIndicatorLabel.labelBuilder` already gave the label variant.
+
+### Bug fixes
 
 * `dismissOnOverscroll` no longer fires when a scrollable _inside_ a page runs out of content on the pager's axis — only the gallery's own pager can trigger it.
-* Shrinking `itemCount` past the current page notifies `ViewfinderController` listeners after the frame instead of during it, so a listener that calls `setState` no longer throws.
+* Shrinking `itemCount` past the current page no longer notifies `ViewfinderController` listeners from inside `didUpdateWidget`, where a listener calling `setState` throws; the re-clamped index is written in place instead.
 * An empty `doubleTapScales` ladder no longer registers a double-tap recognizer, so taps — including the gallery's tap-to-toggle chrome — answer on release instead of after the double-tap window.
 
 ## 1.0.2

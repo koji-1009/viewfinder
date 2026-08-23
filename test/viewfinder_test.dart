@@ -2701,6 +2701,37 @@ void main() {
     );
   });
 
+  testWidgets('PageIndicator Dots: dotsBuilder replaces the rendered row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 30,
+            indicator: ViewfinderPageIndicatorDots(
+              dotsBuilder: (context, currentIndex, itemCount, reverse) =>
+                  Text('$currentIndex/$itemCount/$reverse'),
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    expect(find.text('0/30/false'), findsOneWidget);
+    // The default dots are gone entirely — the builder owns the row.
+    final overlay = find.byType(ViewfinderPageIndicatorOverlay);
+    expect(
+      find.descendant(of: overlay, matching: find.byType(AnimatedContainer)),
+      findsNothing,
+    );
+    // The semantics wrapper still describes the position (the custom
+    // row's own text merges into the same node).
+    expect(find.bySemanticsLabel(RegExp('Page 1 of 30')), findsOneWidget);
+  });
+
   testWidgets('PageIndicator Label: renders default "i / N" pill', (
     tester,
   ) async {
@@ -2912,56 +2943,55 @@ void main() {
     expect(find.bySemanticsLabel('Photo gallery, 2 of 2'), findsOneWidget);
   });
 
-  testWidgets(
-    'Viewfinder: a shrinking itemCount notifies the controller outside the '
-    'build phase',
-    (tester) async {
-      final controller = ViewfinderController(initialIndex: 4);
-      var count = 5;
-      var notifications = 0;
-      late StateSetter setOuter;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: StatefulBuilder(
-              builder: (context, setState) {
-                setOuter = setState;
-                return Column(
-                  children: [
-                    Text('page ${controller.currentIndex}'),
-                    Expanded(
-                      child: Viewfinder(
-                        itemCount: count,
-                        controller: controller,
-                        itemBuilder: (_, _) =>
-                            ViewfinderItem(image: memoryImage()),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+  testWidgets('Viewfinder: a shrinking itemCount re-clamps in place instead of '
+      'notifying from the build phase', (tester) async {
+    final controller = ViewfinderController(initialIndex: 4);
+    var count = 5;
+    var notifications = 0;
+    int? readByDescendant;
+    late StateSetter setOuter;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              setOuter = setState;
+              return Viewfinder(
+                itemCount: count,
+                controller: controller,
+                // Built in the same frame, after `didUpdateWidget`:
+                // it must never see an index past the new range.
+                chromeOverlays: [
+                  Builder(
+                    builder: (context) {
+                      readByDescendant = controller.currentIndex;
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+              );
+            },
           ),
         ),
-      );
-      // The ordinary app pattern: the controller listener rebuilds an
-      // ancestor to show the current index. The re-clamp runs inside
-      // `didUpdateWidget`, so notifying inline would mark that ancestor
-      // dirty mid-build.
-      controller.addListener(() {
-        notifications++;
-        setOuter(() {});
-      });
-      await settleImages(tester);
+      ),
+    );
+    // The ordinary app pattern: a controller listener rebuilding an
+    // ancestor. Notifying from `didUpdateWidget` would mark it dirty
+    // mid-build.
+    controller.addListener(() {
+      notifications++;
+      setOuter(() {});
+    });
+    await settleImages(tester);
 
-      setOuter(() => count = 2);
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(controller.currentIndex, 1);
-      expect(notifications, 1);
-      expect(find.text('page 1'), findsOneWidget);
-    },
-  );
+    setOuter(() => count = 2);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(controller.currentIndex, 1);
+    expect(readByDescendant, 1);
+    expect(notifications, 0);
+  });
 
   testWidgets(
     'Viewfinder: itemCount=0 reports an empty-gallery semantic label',

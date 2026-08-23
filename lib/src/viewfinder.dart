@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -753,11 +752,10 @@ class _ViewfinderState extends State<Viewfinder> {
     _controller = widget.controller ?? ViewfinderController();
     _ownsController = widget.controller == null;
     _currentIndex = _clampIndex(_controller.currentIndex);
-    // Write the clamped index back silently (no notify — we're inside
-    // the build phase): PageView.onPageChanged does not fire for the
-    // initial page, so an out-of-range initialIndex would otherwise
-    // keep reading back unclamped through `controller.currentIndex`.
-    _controller._currentIndex = _currentIndex;
+    // PageView.onPageChanged does not fire for the initial page, so an
+    // out-of-range initialIndex would otherwise keep reading back
+    // unclamped through `controller.currentIndex`.
+    _controller._adoptIndex(_currentIndex);
     _currentRawIndex = _rawBaseFor(_currentIndex);
     _pageController = PageController(initialPage: _currentRawIndex);
     _controller._attach(this);
@@ -795,12 +793,10 @@ class _ViewfinderState extends State<Viewfinder> {
     _controller = widget.controller ?? ViewfinderController();
     _ownsController = widget.controller == null;
     _controller._attach(this);
-    // Adopt the gallery's current page into the incoming controller
-    // (silently — we're inside the build phase). A swap is not a
-    // navigation request: without this, the new controller would
-    // keep reporting its construction-time index until the next
-    // user-driven page change.
-    _controller._currentIndex = _currentIndex;
+    // A swap is not a navigation request: without this, the new
+    // controller would keep reporting its construction-time index
+    // until the next user-driven page change.
+    _controller._adoptIndex(_currentIndex);
   }
 
   /// Reconciles state after [Viewfinder.itemCount] or [Viewfinder.loop]
@@ -832,7 +828,10 @@ class _ViewfinderState extends State<Viewfinder> {
     if (clamped != _currentIndex) {
       _currentIndex = clamped;
       _currentRawIndex = clamped;
-      _controller._setIndex(clamped);
+      // Before the jump: it fires `onPageChanged` synchronously, and
+      // with every index already clamped that callback finds nothing
+      // to report, so no application code runs from this build.
+      _controller._adoptIndex(clamped);
       if (_pageController.hasClients) {
         _pageController.jumpToPage(clamped);
       }
@@ -856,7 +855,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // space would mis-base the next relative page turn.
     _navTargetRaw = null;
     _currentIndex = _clampIndex(_currentIndex);
-    _controller._currentIndex = _currentIndex;
+    _controller._adoptIndex(_currentIndex);
     _currentRawIndex = _rawBaseFor(_currentIndex);
     // Jump after the PageView has rebuilt with the new (un)bounded
     // extents — jumping now would clamp the raw base against the old
@@ -1576,16 +1575,9 @@ class ViewfinderController extends ChangeNotifier {
 
   _ViewfinderState? _state;
   int _currentIndex;
-  bool _disposed = false;
 
   /// Index of the page currently shown by the attached [Viewfinder].
   int get currentIndex => _currentIndex;
-
-  @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
-  }
 
   void _attach(_ViewfinderState s) => _state = s;
   void _detach(_ViewfinderState s) {
@@ -1595,20 +1587,15 @@ class ViewfinderController extends ChangeNotifier {
   void _setIndex(int i) {
     if (_currentIndex == i) return;
     _currentIndex = i;
-    // A shrinking [Viewfinder.itemCount] re-clamps the index from
-    // `didUpdateWidget` — inside the build phase, where a listener
-    // calling `setState` would throw. Defer past the frame; page
-    // changes, the ordinary caller, already run outside it and notify
-    // inline.
-    if (SchedulerBinding.instance.schedulerPhase ==
-        SchedulerPhase.persistentCallbacks) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_disposed) notifyListeners();
-      });
-      return;
-    }
     notifyListeners();
   }
+
+  /// Takes [i] without notifying. For writes made from the gallery's
+  /// build phase (mount, controller swap, item-space reconcile), where
+  /// a listener calling `setState` would throw — the value is what
+  /// callers read, and no page change happened that they asked to hear
+  /// about.
+  void _adoptIndex(int i) => _currentIndex = i;
 
   /// Jump to [index] without animation. No-op if not attached; issued
   /// before the pager's first layout, it applies right after it.
