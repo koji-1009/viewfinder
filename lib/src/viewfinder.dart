@@ -752,11 +752,10 @@ class _ViewfinderState extends State<Viewfinder> {
     _controller = widget.controller ?? ViewfinderController();
     _ownsController = widget.controller == null;
     _currentIndex = _clampIndex(_controller.currentIndex);
-    // Write the clamped index back silently (no notify — we're inside
-    // the build phase): PageView.onPageChanged does not fire for the
-    // initial page, so an out-of-range initialIndex would otherwise
-    // keep reading back unclamped through `controller.currentIndex`.
-    _controller._currentIndex = _currentIndex;
+    // PageView.onPageChanged does not fire for the initial page, so an
+    // out-of-range initialIndex would otherwise keep reading back
+    // unclamped through `controller.currentIndex`.
+    _controller._adoptIndex(_currentIndex);
     _currentRawIndex = _rawBaseFor(_currentIndex);
     _pageController = PageController(initialPage: _currentRawIndex);
     _controller._attach(this);
@@ -794,12 +793,10 @@ class _ViewfinderState extends State<Viewfinder> {
     _controller = widget.controller ?? ViewfinderController();
     _ownsController = widget.controller == null;
     _controller._attach(this);
-    // Adopt the gallery's current page into the incoming controller
-    // (silently — we're inside the build phase). A swap is not a
-    // navigation request: without this, the new controller would
-    // keep reporting its construction-time index until the next
-    // user-driven page change.
-    _controller._currentIndex = _currentIndex;
+    // A swap is not a navigation request: without this, the new
+    // controller would keep reporting its construction-time index
+    // until the next user-driven page change.
+    _controller._adoptIndex(_currentIndex);
   }
 
   /// Reconciles state after [Viewfinder.itemCount] or [Viewfinder.loop]
@@ -831,7 +828,10 @@ class _ViewfinderState extends State<Viewfinder> {
     if (clamped != _currentIndex) {
       _currentIndex = clamped;
       _currentRawIndex = clamped;
-      _controller._setIndex(clamped);
+      // Before the jump: it fires `onPageChanged` synchronously, and
+      // with every index already clamped that callback finds nothing
+      // to report, so no application code runs from this build.
+      _controller._adoptIndex(clamped);
       if (_pageController.hasClients) {
         _pageController.jumpToPage(clamped);
       }
@@ -855,7 +855,7 @@ class _ViewfinderState extends State<Viewfinder> {
     // space would mis-base the next relative page turn.
     _navTargetRaw = null;
     _currentIndex = _clampIndex(_currentIndex);
-    _controller._currentIndex = _currentIndex;
+    _controller._adoptIndex(_currentIndex);
     _currentRawIndex = _rawBaseFor(_currentIndex);
     // Jump after the PageView has rebuilt with the new (un)bounded
     // extents — jumping now would clamp the raw base against the old
@@ -1188,8 +1188,14 @@ class _ViewfinderState extends State<Viewfinder> {
   /// dismiss callback once past [_kOverscrollDismissExtent]. Handles
   /// both clamping physics (OverscrollNotification) and bouncing
   /// physics (pixels beyond the extents).
+  ///
+  /// `depth == 0` keeps this to the pager's own [Scrollable]: a
+  /// scrollable inside a page (a `.child` page's list) running out of
+  /// content on the same axis is not the gallery running out of pages,
+  /// and its start/end notifications would also reset the accumulator
+  /// mid-gesture.
   bool _handlePagerNotification(ScrollNotification n) {
-    if (n.metrics.axis != widget.pagerAxis) return false;
+    if (n.depth != 0 || n.metrics.axis != widget.pagerAxis) return false;
     switch (n) {
       case ScrollStartNotification() || ScrollEndNotification():
         _overscrollAccum = 0;
@@ -1583,6 +1589,13 @@ class ViewfinderController extends ChangeNotifier {
     _currentIndex = i;
     notifyListeners();
   }
+
+  /// Takes [i] without notifying. For writes made from the gallery's
+  /// build phase (mount, controller swap, item-space reconcile), where
+  /// a listener calling `setState` would throw — the value is what
+  /// callers read, and no page change happened that they asked to hear
+  /// about.
+  void _adoptIndex(int i) => _currentIndex = i;
 
   /// Jump to [index] without animation. No-op if not attached; issued
   /// before the pager's first layout, it applies right after it.

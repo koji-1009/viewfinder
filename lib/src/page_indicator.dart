@@ -35,9 +35,22 @@ sealed class ViewfinderPageIndicator {
 typedef ViewfinderPageIndicatorSemanticLabelBuilder =
     String Function(int currentIndex, int itemCount);
 
+/// Signature for [ViewfinderPageIndicatorDots.dotsBuilder]. `reverse`
+/// is [Viewfinder.reverse] — mirror the row's order by it, the way the
+/// default dots do. RTL needs no handling: the ambient
+/// [Directionality] already mirrors layout widgets.
+typedef ViewfinderPageIndicatorDotsBuilder =
+    Widget Function(
+      BuildContext context,
+      int currentIndex,
+      int itemCount,
+      bool reverse,
+    );
+
 /// Renders one dot per item, highlighting the current page.
 final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
-  /// Creates a dots indicator.
+  /// Creates a dots indicator. Default styling is one circular dot per
+  /// item; [dotsBuilder] renders the row instead.
   const ViewfinderPageIndicatorDots({
     super.alignment,
     super.padding,
@@ -48,28 +61,42 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     this.color = colors.white54,
     this.activeColor = colors.white,
     this.semanticLabelBuilder,
+    this.dotsBuilder,
   });
 
-  /// Diameter of inactive dots.
+  /// Diameter of inactive dots. Applied to the default row only —
+  /// ignored when [dotsBuilder] is provided.
   final double dotSize;
 
-  /// Diameter of the active dot.
+  /// Diameter of the active dot. See [dotSize].
   final double activeDotSize;
 
-  /// Spacing between dots.
+  /// Spacing between dots. See [dotSize].
   final double spacing;
 
-  /// Color of inactive dots.
+  /// Color of inactive dots. See [dotSize].
   final Color color;
 
-  /// Color of the dot for the current page.
+  /// Color of the dot for the current page. See [dotSize].
   final Color activeColor;
 
   /// Builds the screen-reader label for the dot row, which is
   /// otherwise purely visual. Defaults to
   /// `'Page ${currentIndex + 1} of $itemCount'` — supply your own for
-  /// localization.
+  /// localization. Applies to [dotsBuilder] output too.
   final ViewfinderPageIndicatorSemanticLabelBuilder? semanticLabelBuilder;
+
+  /// Builds the rendered row, replacing the default dots — and with
+  /// them [dotSize], [activeDotSize], [spacing], [color], [activeColor]
+  /// and the mirroring of `reverse`, which the builder owns instead.
+  ///
+  /// Layout comes with it: the default row grows with
+  /// [Viewfinder.itemCount] and keeps its dot size rather than
+  /// shrinking to fit, so a gallery large enough to outrun the
+  /// available width renders a compact indicator here (a scrollable
+  /// strip, a window around the current page, …) or uses
+  /// [ViewfinderPageIndicatorAdaptive] to switch to the label.
+  final ViewfinderPageIndicatorDotsBuilder? dotsBuilder;
 
   /// Identity tuple backing [==] and [hashCode] — one field list
   /// instead of two parallel ones (records compare and hash
@@ -84,6 +111,7 @@ final class ViewfinderPageIndicatorDots extends ViewfinderPageIndicator {
     color,
     activeColor,
     semanticLabelBuilder,
+    dotsBuilder,
   );
 
   @override

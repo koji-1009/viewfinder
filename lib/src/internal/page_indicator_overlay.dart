@@ -102,26 +102,51 @@ class _DotsView extends StatelessWidget {
     label:
         dots.semanticLabelBuilder?.call(currentIndex, itemCount) ??
         'Page ${currentIndex + 1} of $itemCount',
-    child: Row(
-      mainAxisSize: .min,
-      children: [
-        for (final i in [
-          for (var k = 0; k < itemCount; k++) reverse ? itemCount - 1 - k : k,
-        ])
-          Padding(
-            padding: .symmetric(horizontal: dots.spacing / 2),
-            child: AnimatedContainer(
-              duration: const .new(milliseconds: 180),
-              width: i == currentIndex ? dots.activeDotSize : dots.dotSize,
-              height: i == currentIndex ? dots.activeDotSize : dots.dotSize,
-              decoration: BoxDecoration(
-                shape: .circle,
-                color: i == currentIndex ? dots.activeColor : dots.color,
-              ),
+    child:
+        dots.dotsBuilder?.call(context, currentIndex, itemCount, reverse) ??
+        _DefaultDots(
+          dots: dots,
+          itemCount: itemCount,
+          currentIndex: currentIndex,
+          reverse: reverse,
+        ),
+  );
+}
+
+/// One circular dot per item, mirrored for a `reverse: true` pager.
+class _DefaultDots extends StatelessWidget {
+  const _DefaultDots({
+    required this.dots,
+    required this.itemCount,
+    required this.currentIndex,
+    required this.reverse,
+  });
+
+  final ViewfinderPageIndicatorDots dots;
+  final int itemCount;
+  final int currentIndex;
+  final bool reverse;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: .min,
+    children: [
+      for (final i in [
+        for (var k = 0; k < itemCount; k++) reverse ? itemCount - 1 - k : k,
+      ])
+        Padding(
+          padding: .symmetric(horizontal: dots.spacing / 2),
+          child: AnimatedContainer(
+            duration: const .new(milliseconds: 180),
+            width: i == currentIndex ? dots.activeDotSize : dots.dotSize,
+            height: i == currentIndex ? dots.activeDotSize : dots.dotSize,
+            decoration: BoxDecoration(
+              shape: .circle,
+              color: i == currentIndex ? dots.activeColor : dots.color,
             ),
           ),
-      ],
-    ),
+        ),
+    ],
   );
 }
 

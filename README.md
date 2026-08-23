@@ -175,11 +175,13 @@ For the complementary "swipe past the last page to leave" gesture, see `dismissO
 
 Sealed `ViewfinderPageIndicator`, three variants:
 
-* `ViewfinderPageIndicatorDots` — one dot per page. Exposes a "Page i of N" label to screen readers (`semanticLabelBuilder` to localize).
+* `ViewfinderPageIndicatorDots` — one dot per page. Exposes a "Page i of N" label to screen readers (`semanticLabelBuilder` to localize). Pass `dotsBuilder` to render the row yourself.
 * `ViewfinderPageIndicatorLabel` — single text label, default `"i / N"`. Pass `labelBuilder` for full control.
 * `ViewfinderPageIndicatorAdaptive` — dots up to `maxDots`, then falls back to the label. The most common pick.
 
 All variants take `alignment`, `padding`, and `safeArea` (default `true` — a bottom-aligned indicator stays above the home indicator / browser chrome).
+
+The default dot row grows with the page count and does not shrink to fit — dots stay legible instead. For a gallery large enough to outrun the available width, either use `ViewfinderPageIndicatorAdaptive` (label past `maxDots`) or render a compact indicator of your own through `dotsBuilder`.
 
 ## Inputs
 

@@ -726,6 +726,54 @@ void main() {
     expect(dismissed, 1);
   });
 
+  testWidgets('dismissOnOverscroll ignores a nested scrollable running out '
+      'of content', (tester) async {
+    var dismissed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: Viewfinder(
+              itemCount: 3,
+              dismissOnOverscroll: true,
+              dismiss: ViewfinderDismiss(onDismiss: () => dismissed++),
+              // A page whose child scrolls on the pager's own axis: its
+              // overscroll bubbles through the gallery, but it is the
+              // list running out of content, not the gallery running
+              // out of pages.
+              itemBuilder: (_, i) => ViewfinderItem.child(
+                contentKey: 'page-$i',
+                child: ListView(
+                  scrollDirection: .horizontal,
+                  children: const [
+                    SizedBox(width: 300, height: 100),
+                    SizedBox(width: 300, height: 100),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    // Drag well past the inner list's last item — far enough that the
+    // blocked distance would clear the 100-px dismiss trigger.
+    final p = await tester.startGesture(
+      tester.getCenter(find.byType(ListView).first),
+    );
+    for (var i = 0; i < 12; i++) {
+      await p.moveBy(const Offset(-40, 0));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await p.up();
+    await tester.pumpAndSettle();
+    expect(dismissed, 0);
+  });
+
   // -------------------------------------------------------------------
   // onThresholdCrossed
   // -------------------------------------------------------------------

@@ -805,6 +805,32 @@ void main() {
     expect(controller.scale, closeTo(1.0, 0.001));
   });
 
+  testWidgets('ViewfinderImage: an empty doubleTapScales ladder answers a '
+      'tap without the double-tap delay', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ViewfinderImage(
+            image: memoryImage(),
+            doubleTapScales: const [],
+            onTap: () => taps++,
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    final g = await tester.startGesture(
+      tester.getCenter(find.byType(ZoomableViewport)),
+    );
+    await g.up();
+    // One frame only — no waiting out the double-tap window. With the
+    // ladder empty there is no double-tap recognizer to hold the arena.
+    await tester.pump();
+    expect(taps, 1);
+  });
+
   testWidgets('Viewfinder paginates and syncs controller', (tester) async {
     final controller = ViewfinderController();
     final pageChanges = <int>[];
@@ -2675,6 +2701,37 @@ void main() {
     );
   });
 
+  testWidgets('PageIndicator Dots: dotsBuilder replaces the rendered row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Viewfinder(
+            itemCount: 30,
+            indicator: ViewfinderPageIndicatorDots(
+              dotsBuilder: (context, currentIndex, itemCount, reverse) =>
+                  Text('$currentIndex/$itemCount/$reverse'),
+            ),
+            itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+
+    expect(find.text('0/30/false'), findsOneWidget);
+    // The default dots are gone entirely — the builder owns the row.
+    final overlay = find.byType(ViewfinderPageIndicatorOverlay);
+    expect(
+      find.descendant(of: overlay, matching: find.byType(AnimatedContainer)),
+      findsNothing,
+    );
+    // The semantics wrapper still describes the position (the custom
+    // row's own text merges into the same node).
+    expect(find.bySemanticsLabel(RegExp('Page 1 of 30')), findsOneWidget);
+  });
+
   testWidgets('PageIndicator Label: renders default "i / N" pill', (
     tester,
   ) async {
@@ -2884,6 +2941,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.currentIndex, 1);
     expect(find.bySemanticsLabel('Photo gallery, 2 of 2'), findsOneWidget);
+  });
+
+  testWidgets('Viewfinder: a shrinking itemCount re-clamps in place instead of '
+      'notifying from the build phase', (tester) async {
+    final controller = ViewfinderController(initialIndex: 4);
+    var count = 5;
+    var notifications = 0;
+    int? readByDescendant;
+    late StateSetter setOuter;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              setOuter = setState;
+              return Viewfinder(
+                itemCount: count,
+                controller: controller,
+                // Built in the same frame, after `didUpdateWidget`:
+                // it must never see an index past the new range.
+                chromeOverlays: [
+                  Builder(
+                    builder: (context) {
+                      readByDescendant = controller.currentIndex;
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+                itemBuilder: (_, _) => ViewfinderItem(image: memoryImage()),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    // The ordinary app pattern: a controller listener rebuilding an
+    // ancestor. Notifying from `didUpdateWidget` would mark it dirty
+    // mid-build.
+    controller.addListener(() {
+      notifications++;
+      setOuter(() {});
+    });
+    await settleImages(tester);
+
+    setOuter(() => count = 2);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(controller.currentIndex, 1);
+    expect(readByDescendant, 1);
+    expect(notifications, 0);
   });
 
   testWidgets(
