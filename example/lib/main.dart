@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import 'pages/embedded_zoom_page.dart';
 import 'pages/gallery_page.dart';
@@ -8,14 +9,55 @@ import 'pages/vertical_pager_page.dart';
 
 void main() => runApp(const ViewfinderDemoApp());
 
-class ViewfinderDemoApp extends StatelessWidget {
+class ViewfinderDemoApp extends StatefulWidget {
   const ViewfinderDemoApp({super.key});
 
   @override
+  State<ViewfinderDemoApp> createState() => _ViewfinderDemoAppState();
+}
+
+class _ViewfinderDemoAppState extends State<ViewfinderDemoApp> {
+  /// Scenarios are sub-routes of `/`, so a `go` builds home → scenario →
+  /// viewer and every back — AppBar, platform gesture, browser — pops one
+  /// step of it.
+  ///
+  /// Hash URLs (`#/gallery/photo/3`) are deliberate: the demo is hosted on
+  /// GitHub Pages, which serves static files only and cannot rewrite a
+  /// deep link onto index.html.
+  late final GoRouter _router = GoRouter(
+    // A stale or mistyped demo link lands on the home screen instead of
+    // go_router's exception page.
+    onException: (_, _, router) => router.go('/'),
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) => const _HomePage(),
+        routes: [
+          galleryRoute,
+          singlePhotoRoute,
+          verticalPagerRoute,
+          embeddedZoomRoute,
+          rotationRoute,
+        ],
+      ),
+    ],
+  );
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'viewfinder demo',
       debugShowCheckedModeBanner: false,
+      routerConfig: _router,
+      // The grid and the viewer are separate locations, so the settings
+      // they share sit above the router.
+      builder: (context, child) => GallerySettingsHost(child: child!),
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF3B6EA5),
         brightness: .light,
@@ -24,7 +66,6 @@ class ViewfinderDemoApp extends StatelessWidget {
         colorSchemeSeed: const Color(0xFF3B6EA5),
         brightness: .dark,
       ),
-      home: const _HomePage(),
     );
   }
 }
@@ -35,29 +76,29 @@ class _Scenario {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.builder,
+    required this.path,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
-  final WidgetBuilder builder;
+  final String path;
 }
 
-final List<_Scenario> _scenarios = [
+const List<_Scenario> _scenarios = [
   _Scenario(
     title: 'Gallery',
     subtitle:
         'Grid → full-screen pager with thumbnails, indicator, '
         'drag-to-dismiss, chrome overlay, Hero, and a live settings sheet.',
     icon: Icons.photo_library_outlined,
-    builder: (_) => const GalleryPage(),
+    path: GalleryPage.routePath,
   ),
   _Scenario(
     title: 'Single photo',
     subtitle: 'Viewfinder.single — one zoomable photo with drag-to-dismiss.',
     icon: Icons.image_outlined,
-    builder: (_) => const SinglePhotoPage(),
+    path: SinglePhotoPage.routePath,
   ),
   _Scenario(
     title: 'Vertical pager',
@@ -65,7 +106,7 @@ final List<_Scenario> _scenarios = [
         'pagerAxis: Axis.vertical — swipe up / down. Dismiss is off (it '
         'would clash with the vertical pager).',
     icon: Icons.swap_vert_outlined,
-    builder: (_) => const VerticalPagerPage(),
+    path: VerticalPagerPage.routePath,
   ),
   _Scenario(
     title: 'Embedded zoom',
@@ -73,7 +114,7 @@ final List<_Scenario> _scenarios = [
         'ViewfinderImage inline in an article, plus ViewfinderImage.child '
         'zooming a non-image widget.',
     icon: Icons.article_outlined,
-    builder: (_) => const EmbeddedZoomPage(),
+    path: EmbeddedZoomPage.routePath,
   ),
   _Scenario(
     title: 'Rotation playground',
@@ -81,7 +122,7 @@ final List<_Scenario> _scenarios = [
         'rotateEnabled: true — two-finger rotation, plus a slider for '
         'mouse / trackpad.',
     icon: Icons.rotate_right_outlined,
-    builder: (_) => const RotationPage(),
+    path: RotationPage.routePath,
   ),
 ];
 
@@ -115,11 +156,7 @@ class _ScenarioCard extends StatelessWidget {
       margin: .zero,
       clipBehavior: .antiAlias,
       child: ListTile(
-        onTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute<void>(builder: scenario.builder));
-        },
+        onTap: () => context.go(scenario.path),
         title: Text(scenario.title),
         subtitle: Text(scenario.subtitle, maxLines: 3, overflow: .ellipsis),
         leading: Material(

@@ -1,9 +1,15 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:viewfinder/viewfinder.dart';
 
 import '../shared.dart';
+
+final RouteBase rotationRoute = GoRoute(
+  path: 'rotation',
+  builder: (_, _) => const RotationPage(),
+);
 
 /// Scenario 5 — the rotation playground.
 ///
@@ -14,6 +20,8 @@ import '../shared.dart';
 /// snaps the photo back to upright.
 class RotationPage extends StatefulWidget {
   const RotationPage({super.key});
+
+  static const routePath = '/rotation';
 
   @override
   State<RotationPage> createState() => _RotationPageState();

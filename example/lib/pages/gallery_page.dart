@@ -1,23 +1,39 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:viewfinder/viewfinder.dart';
 
 import '../shared.dart';
 
-/// Scenario 1 — the full gallery demo.
-///
-/// A responsive thumbnail grid opens into a full-screen [Viewfinder] with
-/// a thumbnail strip, page indicator, drag-to-dismiss, a tap-to-toggle
-/// chrome overlay, Hero flight, and a live settings sheet (tune icon)
-/// that flips every knob without restarting.
-class GalleryPage extends StatefulWidget {
-  const GalleryPage({super.key});
+final RouteBase galleryRoute = GoRoute(
+  path: 'gallery',
+  builder: (_, _) => const GalleryPage(),
+  routes: [
+    GoRoute(
+      path: 'photo/:index',
+      builder: (context, state) {
+        // A deep link can carry any index, including none.
+        final index = int.tryParse(state.pathParameters['index'] ?? '') ?? 0;
+        return _GalleryViewer(
+          initialIndex: index.clamp(0, DemoPhotos.images.length - 1),
+        );
+      },
+    ),
+  ],
+);
+
+/// Owns the gallery's live settings above the router: the viewer is not
+/// built inside the grid's subtree, so neither page can hold them.
+class GallerySettingsHost extends StatefulWidget {
+  const GallerySettingsHost({super.key, required this.child});
+
+  final Widget child;
 
   @override
-  State<GalleryPage> createState() => _GalleryPageState();
+  State<GallerySettingsHost> createState() => _GallerySettingsHostState();
 }
 
-class _GalleryPageState extends State<GalleryPage> {
+class _GallerySettingsHostState extends State<GallerySettingsHost> {
   final _settings = _Settings();
 
   @override
@@ -28,8 +44,25 @@ class _GalleryPageState extends State<GalleryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return _SettingsScope(settings: _settings, child: const _GalleryGrid());
+    return _SettingsScope(settings: _settings, child: widget.child);
   }
+}
+
+/// Scenario 1 — the full gallery demo.
+///
+/// A responsive thumbnail grid opens into a full-screen [Viewfinder] with
+/// a thumbnail strip, page indicator, drag-to-dismiss, a tap-to-toggle
+/// chrome overlay, Hero flight, and a live settings sheet (tune icon)
+/// that flips every knob without restarting.
+class GalleryPage extends StatelessWidget {
+  const GalleryPage({super.key});
+
+  static const routePath = '/gallery';
+
+  static String photoPath(int index) => '$routePath/photo/$index';
+
+  @override
+  Widget build(BuildContext context) => const _GalleryGrid();
 }
 
 class _GalleryGrid extends StatelessWidget {
@@ -37,8 +70,7 @@ class _GalleryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = _Settings.of(context);
-    final heroEnabled = settings.heroEnabled;
+    final heroEnabled = _Settings.of(context).heroEnabled;
     final images = DemoPhotos.images;
     final width = MediaQuery.widthOf(context);
     final columns = (width / 180).floor().clamp(2, 6);
@@ -49,7 +81,7 @@ class _GalleryGrid extends StatelessWidget {
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.tune),
-            onPressed: () => _openSettings(context, settings),
+            onPressed: () => _openSettings(context),
           ),
         ],
       ),
@@ -81,17 +113,7 @@ class _GalleryGrid extends StatelessWidget {
                 );
                 return InkWell(
                   borderRadius: .circular(8),
-                  // Pushed routes live outside this page's
-                  // _SettingsScope subtree; re-provide the same
-                  // settings instance.
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => _SettingsScope(
-                        settings: settings,
-                        child: _GalleryViewer(initialIndex: i),
-                      ),
-                    ),
-                  ),
+                  onTap: () => context.go(GalleryPage.photoPath(i)),
                   child: heroEnabled
                       ? Hero(tag: 'gallery-photo-$i', child: thumb)
                       : thumb,
@@ -104,13 +126,14 @@ class _GalleryGrid extends StatelessWidget {
     );
   }
 
-  void _openSettings(BuildContext context, _Settings settings) {
+  void _openSettings(BuildContext context) {
+    // The sheet builds inside this Navigator's overlay, which is below
+    // the app-wide _SettingsScope, so it inherits the same instance.
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (_) =>
-          _SettingsScope(settings: settings, child: const _SettingsSheet()),
+      builder: (_) => const _SettingsSheet(),
     );
   }
 }
@@ -200,7 +223,7 @@ class _GalleryViewerState extends State<_GalleryViewer> {
   ViewfinderDismiss? _buildDismiss(_Settings s) {
     if (!s.dismissEnabled) return null;
     return ViewfinderDismiss(
-      onDismiss: () => Navigator.of(context).maybePop(),
+      onDismiss: () => context.pop(),
       slideType: s.dismissSlide,
       backgroundColor: Theme.of(context).colorScheme.surface,
     );
@@ -215,6 +238,13 @@ class _GalleryViewerState extends State<_GalleryViewer> {
         itemCount: images.length,
         backgroundColor: Theme.of(context).colorScheme.surface,
         controller: _controller,
+        // Keep the URL on the photo being viewed, but neglected: a swipe
+        // must not leave a history entry, or Back would replay every
+        // photo instead of leaving the gallery.
+        onPageChanged: (index) => Router.neglect(
+          context,
+          () => context.go(GalleryPage.photoPath(index)),
+        ),
         defaultInitialScale: s.initialScale,
         precacheAdjacent: s.precacheAdjacent,
         pagerAxis: s.pagerAxis,
@@ -278,7 +308,7 @@ class _ChromeBar extends StatelessWidget {
                 onPressed: () {
                   // Two-stage back: reset zoom first, then pop.
                   if (controller.resetCurrentImage()) return;
-                  Navigator.of(context).maybePop();
+                  context.pop();
                 },
               ),
               Expanded(

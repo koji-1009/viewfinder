@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:viewfinder/viewfinder.dart';
 
 import '../shared.dart';
+
+final RouteBase singlePhotoRoute = GoRoute(
+  path: 'single',
+  builder: (_, _) => const SinglePhotoPage(),
+  routes: [
+    GoRoute(path: 'viewer', builder: (_, _) => const _SinglePhotoViewer()),
+  ],
+);
 
 /// Scenario 2 — a single full-screen photo via [Viewfinder.single].
 ///
@@ -9,6 +18,9 @@ import '../shared.dart';
 /// drag-to-dismiss and a Hero flight from the launch card.
 class SinglePhotoPage extends StatelessWidget {
   const SinglePhotoPage({super.key});
+
+  static const routePath = '/single';
+  static const viewerPath = '$routePath/viewer';
 
   static const _heroTag = 'single-photo';
 
@@ -48,7 +60,7 @@ class SinglePhotoPage extends StatelessWidget {
                       clipBehavior: .antiAlias,
                       borderRadius: .circular(16),
                       child: InkWell(
-                        onTap: () => _open(context),
+                        onTap: () => context.go(SinglePhotoPage.viewerPath),
                         child: Hero(
                           tag: _heroTag,
                           child: Image(image: DemoPhotos.portrait, fit: .cover),
@@ -63,12 +75,6 @@ class SinglePhotoPage extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  void _open(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const _SinglePhotoViewer()));
   }
 }
 
@@ -89,7 +95,7 @@ class _SinglePhotoViewer extends StatelessWidget {
         semanticLabel: 'Single demo photo',
         maxScale: 10,
         dismiss: ViewfinderDismiss(
-          onDismiss: () => Navigator.of(context).maybePop(),
+          onDismiss: () => context.pop(),
           backgroundColor: scheme.surface,
         ),
         errorBuilder: (_, _, _) => const DemoBrokenImage(),

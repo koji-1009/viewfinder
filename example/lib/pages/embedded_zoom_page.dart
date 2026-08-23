@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:viewfinder/viewfinder.dart';
 
 import '../shared.dart';
+
+final RouteBase embeddedZoomRoute = GoRoute(
+  path: 'embedded',
+  builder: (_, _) => const EmbeddedZoomPage(),
+);
 
 /// Scenario 4 — embedded zoom inside ordinary scrollable content.
 ///
@@ -10,6 +16,8 @@ import '../shared.dart';
 /// a non-image widget via the required `contentKey`.
 class EmbeddedZoomPage extends StatelessWidget {
   const EmbeddedZoomPage({super.key});
+
+  static const routePath = '/embedded';
 
   @override
   Widget build(BuildContext context) {
